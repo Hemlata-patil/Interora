@@ -35,3 +35,26 @@ export interface AdminDashboardData {
   departments: DepartmentSummary[];
   recentActivities: RecentActivity[];
 }
+
+import type { InternshipListing, ApplicationRecord } from '@/types';
+
+export interface AdminInternshipListing extends InternshipListing {
+  applicationCount: number;
+}
+
+export interface AdminOversightStats {
+  totalInternships: number;
+  activeInternships: number;
+  pendingInternships: number;
+  completedInternships: number;
+  totalApplications: number;
+  pendingApplications: number;
+  approvedApplications: number;
+  rejectedApplications: number;
+}
+
+export interface AdminOversightData {
+  stats: AdminOversightStats;
+  internships: AdminInternshipListing[];
+  applications: ApplicationRecord[];
+}

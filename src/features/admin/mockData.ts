@@ -140,3 +140,70 @@ export const fetchAdminUsers = async (shouldFail = false, isEmpty = false): Prom
     }, 800);
   });
 };
+
+export const fetchAdminOversight = async (shouldFail = false, isEmpty = false): Promise<import('./types').AdminOversightData | null> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (shouldFail) {
+        reject(new Error('Failed to fetch oversight data'));
+      } else if (isEmpty) {
+        resolve(null);
+      } else {
+        resolve({
+          stats: {
+            totalInternships: 48,
+            activeInternships: 32,
+            pendingInternships: 10,
+            completedInternships: 6,
+            totalApplications: 450,
+            pendingApplications: 120,
+            approvedApplications: 250,
+            rejectedApplications: 80,
+          },
+          internships: [
+            {
+              id: 'int-1',
+              title: 'Software Engineering Intern',
+              companyName: 'TechFlow Systems',
+              location: 'Remote',
+              stipend: '$3000/mo',
+              duration: '3 Months',
+              requiredSkills: ['React', 'TypeScript'],
+              status: 'open',
+              createdAt: '2026-08-01',
+              applicationCount: 45,
+            },
+            {
+              id: 'int-2',
+              title: 'Data Science Intern',
+              companyName: 'Analytics Corp',
+              location: 'New York, NY',
+              stipend: '$4000/mo',
+              duration: '6 Months',
+              requiredSkills: ['Python', 'SQL'],
+              status: 'closed',
+              createdAt: '2026-07-15',
+              applicationCount: 120,
+            }
+          ],
+          applications: [
+            {
+              id: 'app-1',
+              internshipTitle: 'Software Engineering Intern',
+              companyName: 'TechFlow Systems',
+              appliedDate: '2026-08-10',
+              status: 'under_review',
+            },
+            {
+              id: 'app-2',
+              internshipTitle: 'Data Science Intern',
+              companyName: 'Analytics Corp',
+              appliedDate: '2026-08-05',
+              status: 'faculty_approved',
+            }
+          ]
+        });
+      }
+    }, 800);
+  });
+};
