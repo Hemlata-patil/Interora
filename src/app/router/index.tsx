@@ -14,6 +14,7 @@ import { AdminUserManagement } from '@/features/admin/AdminUserManagement';
 import { AdminInternshipOversight } from '@/features/admin/AdminInternshipOversight';
 import { AdminOrganizationsOversight } from '@/features/admin/AdminOrganizationsOversight';
 import { AdminCertificateManagement } from '@/features/admin/AdminCertificateManagement';
+import { AdminAnalytics } from '@/features/admin/AdminAnalytics';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
@@ -119,7 +120,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/admin/analytics',
-    element: <AdminLayout><FeaturePlaceholder title="Analytics & AI Services" category="System Oversight" /></AdminLayout>,
+    element: <AdminLayout><AdminAnalytics /></AdminLayout>,
   },
 
   // Fallback Route

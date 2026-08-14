@@ -111,3 +111,37 @@ export interface AdminCertificateData {
   stats: AdminCertificateStats;
   certificates: AdminCertificateRecord[];
 }
+
+export interface SystemHealthMetrics {
+  activeUsers: number;
+  storageUsedGB: number;
+  computeLoadPercent: number;
+}
+
+export interface AiServiceMetrics {
+  recommendationsGenerated: number;
+  profileAnalyses: number;
+  apiCreditsUsed: number;
+  apiCreditsTotal: number;
+}
+
+export interface RecentAiActivity {
+  id: string;
+  action: string;
+  targetUser: string;
+  timestamp: string;
+  status: 'Success' | 'Processing' | 'Failed';
+}
+
+export interface PlatformGrowthMetrics {
+  studentGrowthPercent: number;
+  facultyGrowthPercent: number;
+  companyGrowthPercent: number;
+}
+
+export interface AdminAnalyticsData {
+  systemHealth: SystemHealthMetrics;
+  aiMetrics: AiServiceMetrics;
+  recentAiActivity: RecentAiActivity[];
+  platformGrowth: PlatformGrowthMetrics;
+}

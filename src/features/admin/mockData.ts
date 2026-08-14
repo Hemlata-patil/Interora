@@ -330,3 +330,57 @@ export const fetchAdminCertificates = async (shouldFail = false, isEmpty = false
     }, 800);
   });
 };
+
+export const fetchAdminAnalytics = async (shouldFail = false, isEmpty = false): Promise<import('./types').AdminAnalyticsData | null> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (shouldFail) {
+        reject(new Error('Failed to fetch analytics data'));
+      } else if (isEmpty) {
+        resolve(null);
+      } else {
+        resolve({
+          systemHealth: {
+            activeUsers: 12450,
+            storageUsedGB: 850.5,
+            computeLoadPercent: 62,
+          },
+          aiMetrics: {
+            recommendationsGenerated: 8540,
+            profileAnalyses: 3210,
+            apiCreditsUsed: 42500,
+            apiCreditsTotal: 100000,
+          },
+          platformGrowth: {
+            studentGrowthPercent: 12.5,
+            facultyGrowthPercent: 4.2,
+            companyGrowthPercent: 8.7,
+          },
+          recentAiActivity: [
+            {
+              id: 'ai-act-1',
+              action: 'Skill Gap Analysis',
+              targetUser: 'Alice Johnson',
+              timestamp: '2 mins ago',
+              status: 'Success'
+            },
+            {
+              id: 'ai-act-2',
+              action: 'Resume Parsing',
+              targetUser: 'Bob Smith',
+              timestamp: '15 mins ago',
+              status: 'Processing'
+            },
+            {
+              id: 'ai-act-3',
+              action: 'Internship Matching',
+              targetUser: 'Charlie Davis',
+              timestamp: '1 hour ago',
+              status: 'Success'
+            }
+          ]
+        });
+      }
+    }, 800);
+  });
+};
