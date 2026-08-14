@@ -14,7 +14,8 @@ import {
   TrendingUp,
   X,
   Sparkles,
-  BarChart3
+  BarChart3,
+  Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, isOpen, onClose }) => {
         return [
           { label: 'Dashboard', path: '/admin', icon: LayoutDashboard, group: 'Home' },
           { label: 'User Management', path: '/admin/users', icon: Users, group: 'Management' },
+          { label: 'Organizations', path: '/admin/organizations', icon: Building2, group: 'Management' },
           { label: 'Internships', path: '/admin/internships', icon: Briefcase, group: 'Management' },
           { label: 'Certificates', path: '/admin/certificates', icon: Award, group: 'Management' },
           { label: 'Analytics & AI', path: '/admin/analytics', icon: BarChart3, group: 'System' },
