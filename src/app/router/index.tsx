@@ -7,6 +7,10 @@ import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout } from '@/app/
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
+import { MarketplacePage } from '@/features/internships/MarketplacePage';
+import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
+import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage';
+
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
@@ -29,7 +33,15 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/internships',
-    element: <StudentLayout><FeaturePlaceholder title="Internship Discovery" category="Student Journey" /></StudentLayout>,
+    element: <StudentLayout><MarketplacePage /></StudentLayout>,
+  },
+  {
+    path: '/student/internships/:id',
+    element: <StudentLayout><InternshipDetailsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/internships/:id/apply',
+    element: <StudentLayout><ApplyInternshipPage /></StudentLayout>,
   },
   {
     path: '/student/applications',
