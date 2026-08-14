@@ -10,6 +10,8 @@ import { StudentProfile } from '@/features/student/StudentProfile';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
 import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
 import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage';
+import { ApplicationsPage } from '@/features/applications/ApplicationsPage';
+import { ApplicationDetailsPage } from '@/features/applications/ApplicationDetailsPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -45,7 +47,11 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/applications',
-    element: <StudentLayout><FeaturePlaceholder title="My Applications" category="Student Journey" /></StudentLayout>,
+    element: <StudentLayout><ApplicationsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/applications/:id',
+    element: <StudentLayout><ApplicationDetailsPage /></StudentLayout>,
   },
   {
     path: '/student/attendance',
