@@ -284,3 +284,49 @@ export const fetchAdminOrganizations = async (shouldFail = false, isEmpty = fals
     }, 800);
   });
 };
+
+export const fetchAdminCertificates = async (shouldFail = false, isEmpty = false): Promise<import('./types').AdminCertificateData | null> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (shouldFail) {
+        reject(new Error('Failed to fetch certificates data'));
+      } else if (isEmpty) {
+        resolve(null);
+      } else {
+        resolve({
+          stats: {
+            totalIssued: 4850,
+            validCertificates: 4845,
+            revokedCertificates: 5,
+          },
+          certificates: [
+            {
+              id: 'CERT-2026-0810-14A',
+              studentName: 'Alice Johnson',
+              internshipTitle: 'Software Engineering Intern',
+              companyName: 'TechFlow Systems',
+              issueDate: '2026-08-10',
+              status: 'Valid',
+            },
+            {
+              id: 'CERT-2026-0805-92B',
+              studentName: 'Bob Smith',
+              internshipTitle: 'Data Science Intern',
+              companyName: 'Analytics Corp',
+              issueDate: '2026-08-05',
+              status: 'Valid',
+            },
+            {
+              id: 'CERT-2026-0720-33C',
+              studentName: 'Charlie Davis',
+              internshipTitle: 'Frontend Developer Intern',
+              companyName: 'Future FinTech',
+              issueDate: '2026-07-20',
+              status: 'Revoked',
+            }
+          ]
+        });
+      }
+    }, 800);
+  });
+};

@@ -91,3 +91,23 @@ export interface AdminOrganizationsData {
   companies: CompanyOversightRecord[];
   departments: DepartmentOversightRecord[];
 }
+
+export interface AdminCertificateRecord {
+  id: string;
+  studentName: string;
+  internshipTitle: string;
+  companyName: string;
+  issueDate: string;
+  status: 'Valid' | 'Revoked';
+}
+
+export interface AdminCertificateStats {
+  totalIssued: number;
+  validCertificates: number;
+  revokedCertificates: number;
+}
+
+export interface AdminCertificateData {
+  stats: AdminCertificateStats;
+  certificates: AdminCertificateRecord[];
+}

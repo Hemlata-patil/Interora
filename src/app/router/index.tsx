@@ -13,6 +13,7 @@ import { AdminDashboard } from '@/features/admin/AdminDashboard';
 import { AdminUserManagement } from '@/features/admin/AdminUserManagement';
 import { AdminInternshipOversight } from '@/features/admin/AdminInternshipOversight';
 import { AdminOrganizationsOversight } from '@/features/admin/AdminOrganizationsOversight';
+import { AdminCertificateManagement } from '@/features/admin/AdminCertificateManagement';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
@@ -114,7 +115,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/admin/certificates',
-    element: <AdminLayout><FeaturePlaceholder title="Certificates Oversight" category="Admin Operations" /></AdminLayout>,
+    element: <AdminLayout><AdminCertificateManagement /></AdminLayout>,
   },
   {
     path: '/admin/analytics',
