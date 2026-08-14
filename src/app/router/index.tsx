@@ -10,6 +10,7 @@ import { StudentProfile } from '@/features/student/StudentProfile';
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
+import { AdminUserManagement } from '@/features/admin/AdminUserManagement';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
@@ -99,7 +100,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/admin/users',
-    element: <AdminLayout><FeaturePlaceholder title="User Management" category="Admin Operations" /></AdminLayout>,
+    element: <AdminLayout><AdminUserManagement /></AdminLayout>,
   },
   {
     path: '/admin/internships',

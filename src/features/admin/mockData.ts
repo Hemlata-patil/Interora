@@ -89,3 +89,54 @@ export const fetchAdminDashboardData = async (shouldFail = false, isEmpty = fals
     }, 800); // simulate network delay
   });
 };
+
+export const mockUsers: import('@/types').UserProfile[] = [
+  {
+    id: 'u1',
+    email: 'john.doe@student.edu',
+    fullName: 'John Doe',
+    role: 'student',
+    department: 'Computer Science',
+  },
+  {
+    id: 'u2',
+    email: 'jane.smith@student.edu',
+    fullName: 'Jane Smith',
+    role: 'student',
+    department: 'Mechanical Engineering',
+  },
+  {
+    id: 'u3',
+    email: 'dr.brown@university.edu',
+    fullName: 'Dr. Robert Brown',
+    role: 'faculty',
+    department: 'Information Technology',
+  },
+  {
+    id: 'u4',
+    email: 'hr@techflow.com',
+    fullName: 'TechFlow HR',
+    role: 'company',
+    organization: 'TechFlow Systems',
+  },
+  {
+    id: 'u5',
+    email: 'admin@interora.edu',
+    fullName: 'System Administrator',
+    role: 'admin',
+  },
+];
+
+export const fetchAdminUsers = async (shouldFail = false, isEmpty = false): Promise<import('@/types').UserProfile[]> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (shouldFail) {
+        reject(new Error('Failed to fetch users'));
+      } else if (isEmpty) {
+        resolve([]);
+      } else {
+        resolve(mockUsers);
+      }
+    }, 800);
+  });
+};
