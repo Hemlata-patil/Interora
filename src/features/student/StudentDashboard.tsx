@@ -48,10 +48,14 @@ export const StudentDashboard: React.FC = () => {
 
       {/* Quick Key Metrics Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Active Internship" value={activeInternship.title.split(' ')[0] + ' Intern'} icon={Compass} description={activeInternship.companyName} />
+        <Link to="/student/internship" className="block transition-transform hover:-translate-y-0.5">
+          <StatCard title="Active Internship" value={activeInternship.title.split(' ')[0] + ' Intern'} icon={Compass} description={activeInternship.companyName} />
+        </Link>
         <StatCard title="Attendance Rate" value={`${activeInternship.attendancePercentage}%`} icon={CheckSquare} trend={{ value: 'Optimal (Above 90%)', isPositive: true }} />
         <StatCard title="Placement Readiness" value="78 / 100" icon={Sparkles} description="Good alignment" />
-        <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected â€¢ ${appSummary.underReview + appSummary.facultyApproved} Active`} />
+        <Link to="/student/applications" className="block transition-transform hover:-translate-y-0.5">
+          <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected â€¢ ${appSummary.underReview + appSummary.facultyApproved} Active`} />
+        </Link>
       </div>
 
       {/* 2. Primary Workspace Grid */}
@@ -64,7 +68,9 @@ export const StudentDashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h3 className="text-base font-bold text-slate-900">{activeInternship.title}</h3>
+                    <h3 className="text-base font-bold text-slate-900 hover:text-indigo-600 transition-colors">
+                      <Link to="/student/internship">{activeInternship.title}</Link>
+                    </h3>
                     <Badge variant="emerald">Active</Badge>
                   </div>
                   <p className="text-xs font-medium text-indigo-600 mt-0.5">{activeInternship.companyName}</p>
@@ -98,6 +104,14 @@ export const StudentDashboard: React.FC = () => {
                   <span className="text-slate-500 block text-[11px]">Health Score Signal</span>
                   <span className="text-sm font-bold text-emerald-600">{`${activeInternship.healthScore} / 100 (Optimal Status)`}</span>
                 </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Link to="/student/internship">
+                  <Button variant="outline" size="sm">
+                    View Full Active Internship <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                  </Button>
+                </Link>
               </div>
             </div>
           </Card>
@@ -134,6 +148,14 @@ export const StudentDashboard: React.FC = () => {
                     {getStatusBadge(app.status)}
                   </div>
                 ))}
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <Link to="/student/applications">
+                  <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700">
+                    View All Applications <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </Link>
               </div>
             </div>
           </Card>
@@ -183,7 +205,7 @@ export const StudentDashboard: React.FC = () => {
               </div>
 
               <p className="text-[10px] text-slate-400 text-center italic pt-1">
-                Full AI module edge functions will connect in Phase 2.
+                Full AI module edge functions will connect in Phase 5+.
               </p>
             </div>
           </Card>

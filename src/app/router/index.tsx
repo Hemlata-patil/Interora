@@ -9,6 +9,7 @@ import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
 import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
+import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPage';
 import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage';
 import { ApplicationsPage } from '@/features/applications/ApplicationsPage';
 import { ApplicationDetailsPage } from '@/features/applications/ApplicationDetailsPage';
@@ -44,6 +45,10 @@ const router = createBrowserRouter([
   {
     path: '/student/internships/:id/apply',
     element: <StudentLayout><ApplyInternshipPage /></StudentLayout>,
+  },
+  {
+    path: '/student/internship',
+    element: <StudentLayout><ActiveInternshipPage /></StudentLayout>,
   },
   {
     path: '/student/applications',
