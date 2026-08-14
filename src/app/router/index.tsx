@@ -6,6 +6,7 @@ import { VerifyCertificatePage } from '@/pages/VerifyCertificatePage';
 import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout } from '@/app/layouts/RoleLayouts';
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
+import { StudentProfile } from '@/features/student/StudentProfile';
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
@@ -20,6 +21,10 @@ const router = createBrowserRouter([
   // Student Routes Group
   {
     path: '/student',
+    element: <StudentLayout><StudentDashboard /></StudentLayout>,
+  },
+  {
+    path: '/student/dashboard',
     element: <StudentLayout><StudentDashboard /></StudentLayout>,
   },
   {
@@ -44,7 +49,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/profile',
-    element: <StudentLayout><FeaturePlaceholder title="Student Profile & Resume" category="Account" /></StudentLayout>,
+    element: <StudentLayout><StudentProfile /></StudentLayout>,
   },
 
   // Faculty Routes Group
