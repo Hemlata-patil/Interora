@@ -58,3 +58,36 @@ export interface AdminOversightData {
   internships: AdminInternshipListing[];
   applications: ApplicationRecord[];
 }
+
+export interface CompanyOversightRecord {
+  id: string;
+  name: string;
+  industry: string;
+  verified: boolean;
+  activeInternshipsCount: number;
+  totalInternsHired: number;
+  status: 'Active' | 'Pending' | 'Suspended';
+}
+
+export interface DepartmentOversightRecord {
+  id: string;
+  name: string;
+  headOfDepartment: string;
+  totalStudents: number;
+  totalFaculty: number;
+  status: 'Active' | 'Inactive';
+}
+
+export interface AdminOrganizationsStats {
+  totalCompanies: number;
+  activeCompanies: number;
+  pendingVerifications: number;
+  totalDepartments: number;
+  activeDepartments: number;
+}
+
+export interface AdminOrganizationsData {
+  stats: AdminOrganizationsStats;
+  companies: CompanyOversightRecord[];
+  departments: DepartmentOversightRecord[];
+}

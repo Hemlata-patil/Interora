@@ -12,6 +12,7 @@ import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
 import { AdminUserManagement } from '@/features/admin/AdminUserManagement';
 import { AdminInternshipOversight } from '@/features/admin/AdminInternshipOversight';
+import { AdminOrganizationsOversight } from '@/features/admin/AdminOrganizationsOversight';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
@@ -106,6 +107,10 @@ const router = createBrowserRouter([
   {
     path: '/admin/internships',
     element: <AdminLayout><AdminInternshipOversight /></AdminLayout>,
+  },
+  {
+    path: '/admin/organizations',
+    element: <AdminLayout><AdminOrganizationsOversight /></AdminLayout>,
   },
   {
     path: '/admin/certificates',

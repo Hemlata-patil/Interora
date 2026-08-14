@@ -207,3 +207,80 @@ export const fetchAdminOversight = async (shouldFail = false, isEmpty = false): 
     }, 800);
   });
 };
+
+export const fetchAdminOrganizations = async (shouldFail = false, isEmpty = false): Promise<import('./types').AdminOrganizationsData | null> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (shouldFail) {
+        reject(new Error('Failed to fetch organizations data'));
+      } else if (isEmpty) {
+        resolve(null);
+      } else {
+        resolve({
+          stats: {
+            totalCompanies: 156,
+            activeCompanies: 142,
+            pendingVerifications: 12,
+            totalDepartments: 8,
+            activeDepartments: 8,
+          },
+          companies: [
+            {
+              id: 'comp-1',
+              name: 'TechFlow Systems',
+              industry: 'Software Development',
+              verified: true,
+              activeInternshipsCount: 5,
+              totalInternsHired: 12,
+              status: 'Active',
+            },
+            {
+              id: 'comp-2',
+              name: 'Analytics Corp',
+              industry: 'Data Science',
+              verified: true,
+              activeInternshipsCount: 2,
+              totalInternsHired: 8,
+              status: 'Active',
+            },
+            {
+              id: 'comp-3',
+              name: 'Future FinTech',
+              industry: 'Financial Services',
+              verified: false,
+              activeInternshipsCount: 0,
+              totalInternsHired: 0,
+              status: 'Pending',
+            }
+          ],
+          departments: [
+            {
+              id: 'd1',
+              name: 'Computer Science & Engineering',
+              headOfDepartment: 'Dr. Alan Turing',
+              totalStudents: 3200,
+              totalFaculty: 85,
+              status: 'Active',
+            },
+            {
+              id: 'd2',
+              name: 'Electrical Engineering',
+              headOfDepartment: 'Dr. Nikola Tesla',
+              totalStudents: 1500,
+              totalFaculty: 45,
+              status: 'Active',
+            },
+            {
+              id: 'd3',
+              name: 'Mechanical Engineering',
+              headOfDepartment: 'Dr. James Watt',
+              totalStudents: 2100,
+              totalFaculty: 60,
+              status: 'Active',
+            }
+          ]
+        });
+      }
+    }, 800);
+  });
+};
