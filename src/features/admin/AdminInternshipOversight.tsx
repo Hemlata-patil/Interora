@@ -10,16 +10,19 @@ import {
   EmptyState, 
   Alert,
   StatCard,
-  Tabs
+  Tabs,
+  Button,
+  Modal
 } from '@/components';
 import type { Column } from '@/components';
-import { Search, Briefcase, FileText, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { Search, Briefcase, FileText, CheckCircle2, Clock, XCircle, AlertCircle, Edit2, Trash2, Plus } from 'lucide-react';
 import { fetchAdminOversight } from './mockData';
 import type { AdminOversightData, AdminInternshipListing } from './types';
 import type { ApplicationRecord, ApplicationStatus } from '@/types';
 
 export const AdminInternshipOversight: React.FC = () => {
   const [data, setData] = useState<AdminOversightData | null>(null);
+  const [internships, setInternships] = useState<AdminInternshipListing[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,12 +30,31 @@ export const AdminInternshipOversight: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  // Modal states for CRUD
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingInternship, setEditingInternship] = useState<AdminInternshipListing | null>(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    companyName: '',
+    location: '',
+    stipend: '',
+    duration: '',
+    requiredSkills: '',
+    status: 'open' as 'open' | 'closed'
+  });
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [internshipToDelete, setInternshipToDelete] = useState<AdminInternshipListing | null>(null);
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
         const result = await fetchAdminOversight();
         setData(result);
+        if (result) {
+          setInternships(result.internships);
+        }
       } catch (err) {
         setError('Failed to fetch oversight data.');
       } finally {
@@ -43,13 +65,12 @@ export const AdminInternshipOversight: React.FC = () => {
   }, []);
 
   const filteredInternships = useMemo(() => {
-    if (!data) return [];
-    return data.internships.filter((item) => {
+    return internships.filter((item) => {
       const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) || item.companyName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [data, searchTerm, statusFilter]);
+  }, [internships, searchTerm, statusFilter]);
 
   const filteredApplications = useMemo(() => {
     if (!data) return [];
@@ -59,6 +80,70 @@ export const AdminInternshipOversight: React.FC = () => {
       return matchesSearch && matchesStatus;
     });
   }, [data, searchTerm, statusFilter]);
+
+  // CRUD Handlers
+  const handleOpenAddModal = () => {
+    setEditingInternship(null);
+    setFormData({
+      title: '',
+      companyName: '',
+      location: '',
+      stipend: '',
+      duration: '',
+      requiredSkills: '',
+      status: 'open'
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (internship: AdminInternshipListing) => {
+    setEditingInternship(internship);
+    setFormData({
+      title: internship.title,
+      companyName: internship.companyName,
+      location: internship.location,
+      stipend: internship.stipend,
+      duration: internship.duration,
+      requiredSkills: internship.requiredSkills.join(', '),
+      status: internship.status
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSaveInternship = () => {
+    const skillsArray = formData.requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+    
+    if (editingInternship) {
+      setInternships(internships.map(i => i.id === editingInternship.id ? { 
+        ...i, 
+        ...formData,
+        requiredSkills: skillsArray
+      } : i));
+    } else {
+      const newInternship: AdminInternshipListing = {
+        id: `mock-int-${Date.now()}`,
+        createdAt: new Date().toISOString().split('T')[0],
+        applicationCount: 0,
+        ...formData,
+        requiredSkills: skillsArray
+      };
+      setInternships([newInternship, ...internships]);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteClick = (internship: AdminInternshipListing) => {
+    setInternshipToDelete(internship);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (internshipToDelete) {
+      setInternships(internships.filter(i => i.id !== internshipToDelete.id));
+    }
+    setIsDeleteModalOpen(false);
+    setInternshipToDelete(null);
+  };
 
   if (loading) {
     return (
@@ -105,6 +190,19 @@ export const AdminInternshipOversight: React.FC = () => {
       header: 'Applications',
       accessorKey: 'applicationCount',
       className: 'text-center'
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-2 pr-4">
+          <Button variant="ghost" size="sm" onClick={() => handleOpenEditModal(row)}>
+            <Edit2 className="w-4 h-4 text-slate-500" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(row)}>
+            <Trash2 className="w-4 h-4 text-rose-500" />
+          </Button>
+        </div>
+      ),
     }
   ];
 
@@ -137,8 +235,8 @@ export const AdminInternshipOversight: React.FC = () => {
   ];
 
   const tabs = [
-    { id: 'internships', label: 'Internships', count: data.stats.totalInternships },
-    { id: 'applications', label: 'Applications', count: data.stats.totalApplications }
+    { id: 'internships', label: 'Internships', count: internships.length },
+    { id: 'applications', label: 'Applications', count: data.applications.length }
   ];
 
   return (
@@ -147,10 +245,10 @@ export const AdminInternshipOversight: React.FC = () => {
       
       {activeTab === 'internships' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Internships" value={data.stats.totalInternships} icon={Briefcase} />
-          <StatCard title="Active Internships" value={data.stats.activeInternships} icon={CheckCircle2} />
-          <StatCard title="Pending / Upcoming" value={data.stats.pendingInternships} icon={Clock} />
-          <StatCard title="Closed / Completed" value={data.stats.completedInternships} icon={XCircle} />
+          <StatCard title="Total Internships" value={internships.length} icon={Briefcase} />
+          <StatCard title="Active Internships" value={internships.filter(i => i.status === 'open').length} icon={CheckCircle2} />
+          <StatCard title="Closed Internships" value={internships.filter(i => i.status === 'closed').length} icon={XCircle} />
+          <StatCard title="Total Applications" value={data.stats.totalApplications} icon={FileText} />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -194,6 +292,11 @@ export const AdminInternshipOversight: React.FC = () => {
               />
             </div>
           </div>
+          {activeTab === 'internships' && (
+            <Button onClick={handleOpenAddModal}>
+              <Plus className="w-4 h-4 mr-2" /> Add Internship
+            </Button>
+          )}
         </div>
 
         <div className="w-full overflow-hidden">
@@ -212,6 +315,63 @@ export const AdminInternshipOversight: React.FC = () => {
           )}
         </div>
       </Card>
+
+      {/* CRUD Modals for Internships */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingInternship ? 'Edit Internship' : 'Add New Internship'}
+        description="Enter the internship details below."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveInternship}>{editingInternship ? 'Save Changes' : 'Create Internship'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Internship Title" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+          <Input label="Company Name" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} />
+          <Input label="Location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Stipend" value={formData.stipend} onChange={e => setFormData({...formData, stipend: e.target.value})} />
+            <Input label="Duration" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} />
+          </div>
+          <Input 
+            label="Required Skills (comma separated)" 
+            value={formData.requiredSkills} 
+            onChange={e => setFormData({...formData, requiredSkills: e.target.value})} 
+            placeholder="e.g. React, TypeScript, Node.js"
+          />
+          <Select 
+            label="Status" 
+            value={formData.status} 
+            onChange={e => setFormData({...formData, status: e.target.value as 'open' | 'closed'})}
+            options={[
+              { label: 'Open', value: 'open' },
+              { label: 'Closed', value: 'closed' },
+            ]}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Confirm Deletion"
+        description={`Are you sure you want to delete "${internshipToDelete?.title}" at ${internshipToDelete?.companyName}? This action cannot be undone.`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDelete}>Delete Internship</Button>
+          </>
+        }
+      >
+        <div className="py-2 text-sm text-slate-600">
+          Deleting this internship will remove it from the platform. Alternatively, you can edit it and set its status to Closed.
+        </div>
+      </Modal>
+
     </div>
   );
 };

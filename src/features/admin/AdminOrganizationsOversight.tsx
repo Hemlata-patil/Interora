@@ -10,15 +10,20 @@ import {
   EmptyState, 
   Alert,
   StatCard,
-  Tabs
+  Tabs,
+  Button,
+  Modal
 } from '@/components';
 import type { Column } from '@/components';
-import { Search, Building2, Users, CheckCircle2, Clock, XCircle, AlertCircle, Briefcase } from 'lucide-react';
+import { Search, Building2, Users, CheckCircle2, Clock, XCircle, AlertCircle, Briefcase, Edit2, Trash2, Plus } from 'lucide-react';
 import { fetchAdminOrganizations } from './mockData';
 import type { AdminOrganizationsData, CompanyOversightRecord, DepartmentOversightRecord } from './types';
 
 export const AdminOrganizationsOversight: React.FC = () => {
   const [data, setData] = useState<AdminOrganizationsData | null>(null);
+  const [departments, setDepartments] = useState<DepartmentOversightRecord[]>([]);
+  const [companies, setCompanies] = useState<CompanyOversightRecord[]>([]);
+  
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +31,28 @@ export const AdminOrganizationsOversight: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  // Modal states
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState<DepartmentOversightRecord | null>(null);
+  const [deptForm, setDeptForm] = useState({ name: '', headOfDepartment: '', status: 'Active' as 'Active' | 'Inactive' });
+
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<CompanyOversightRecord | null>(null);
+  const [companyForm, setCompanyForm] = useState({ name: '', industry: '', verified: 'false', status: 'Active' as 'Active' | 'Pending' | 'Suspended' });
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'dept' | 'company', id: string, name: string } | null>(null);
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
         const result = await fetchAdminOrganizations();
         setData(result);
+        if (result) {
+          setDepartments(result.departments);
+          setCompanies(result.companies);
+        }
       } catch (err) {
         setError('Failed to fetch organizations data.');
       } finally {
@@ -42,22 +63,95 @@ export const AdminOrganizationsOversight: React.FC = () => {
   }, []);
 
   const filteredDepartments = useMemo(() => {
-    if (!data) return [];
-    return data.departments.filter((item) => {
+    return departments.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.headOfDepartment.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || item.status.toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesStatus;
     });
-  }, [data, searchTerm, statusFilter]);
+  }, [departments, searchTerm, statusFilter]);
 
   const filteredCompanies = useMemo(() => {
-    if (!data) return [];
-    return data.companies.filter((item) => {
+    return companies.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.industry.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || item.status.toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesStatus;
     });
-  }, [data, searchTerm, statusFilter]);
+  }, [companies, searchTerm, statusFilter]);
+
+  // Derived Stats
+  const activeDepartments = departments.filter(d => d.status === 'Active').length;
+  const activeCompanies = companies.filter(c => c.status === 'Active').length;
+  const pendingVerifications = companies.filter(c => c.status === 'Pending').length;
+
+  // Department Handlers
+  const openAddDept = () => {
+    setEditingDept(null);
+    setDeptForm({ name: '', headOfDepartment: '', status: 'Active' });
+    setIsDeptModalOpen(true);
+  };
+
+  const openEditDept = (dept: DepartmentOversightRecord) => {
+    setEditingDept(dept);
+    setDeptForm({ name: dept.name, headOfDepartment: dept.headOfDepartment, status: dept.status });
+    setIsDeptModalOpen(true);
+  };
+
+  const saveDept = () => {
+    if (editingDept) {
+      setDepartments(departments.map(d => d.id === editingDept.id ? { ...d, ...deptForm } : d));
+    } else {
+      setDepartments([{
+        id: `mock-dept-${Date.now()}`,
+        totalStudents: 0,
+        totalFaculty: 0,
+        ...deptForm
+      }, ...departments]);
+    }
+    setIsDeptModalOpen(false);
+  };
+
+  // Company Handlers
+  const openAddCompany = () => {
+    setEditingCompany(null);
+    setCompanyForm({ name: '', industry: '', verified: 'false', status: 'Pending' });
+    setIsCompanyModalOpen(true);
+  };
+
+  const openEditCompany = (comp: CompanyOversightRecord) => {
+    setEditingCompany(comp);
+    setCompanyForm({ name: comp.name, industry: comp.industry, verified: comp.verified ? 'true' : 'false', status: comp.status });
+    setIsCompanyModalOpen(true);
+  };
+
+  const saveCompany = () => {
+    if (editingCompany) {
+      setCompanies(companies.map(c => c.id === editingCompany.id ? { 
+        ...c, 
+        ...companyForm, 
+        verified: companyForm.verified === 'true' 
+      } : c));
+    } else {
+      setCompanies([{
+        id: `mock-comp-${Date.now()}`,
+        activeInternshipsCount: 0,
+        totalInternsHired: 0,
+        ...companyForm,
+        verified: companyForm.verified === 'true'
+      }, ...companies]);
+    }
+    setIsCompanyModalOpen(false);
+  };
+
+  // Delete Handlers
+  const confirmDelete = () => {
+    if (itemToDelete?.type === 'dept') {
+      setDepartments(departments.filter(d => d.id !== itemToDelete.id));
+    } else if (itemToDelete?.type === 'company') {
+      setCompanies(companies.filter(c => c.id !== itemToDelete.id));
+    }
+    setIsDeleteModalOpen(false);
+    setItemToDelete(null);
+  };
 
   if (loading) {
     return (
@@ -112,6 +206,19 @@ export const AdminOrganizationsOversight: React.FC = () => {
         </div>
       ),
       className: 'text-right'
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-2 pr-4">
+          <Button variant="ghost" size="sm" onClick={() => openEditDept(row)}>
+            <Edit2 className="w-4 h-4 text-slate-500" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setItemToDelete({ type: 'dept', id: row.id, name: row.name }); setIsDeleteModalOpen(true); }}>
+            <Trash2 className="w-4 h-4 text-rose-500" />
+          </Button>
+        </div>
+      ),
     }
   ];
 
@@ -154,12 +261,25 @@ export const AdminOrganizationsOversight: React.FC = () => {
         );
       },
       className: 'text-right'
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-2 pr-4">
+          <Button variant="ghost" size="sm" onClick={() => openEditCompany(row)}>
+            <Edit2 className="w-4 h-4 text-slate-500" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setItemToDelete({ type: 'company', id: row.id, name: row.name }); setIsDeleteModalOpen(true); }}>
+            <Trash2 className="w-4 h-4 text-rose-500" />
+          </Button>
+        </div>
+      ),
     }
   ];
 
   const tabs = [
-    { id: 'departments', label: 'Departments', count: data.stats.totalDepartments },
-    { id: 'companies', label: 'Companies', count: data.stats.totalCompanies }
+    { id: 'departments', label: 'Departments', count: departments.length },
+    { id: 'companies', label: 'Companies', count: companies.length }
   ];
 
   return (
@@ -168,14 +288,14 @@ export const AdminOrganizationsOversight: React.FC = () => {
       
       {activeTab === 'departments' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Departments" value={data.stats.totalDepartments} icon={Building2} />
-          <StatCard title="Active Departments" value={data.stats.activeDepartments} icon={CheckCircle2} />
+          <StatCard title="Total Departments" value={departments.length} icon={Building2} />
+          <StatCard title="Active Departments" value={activeDepartments} icon={CheckCircle2} />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Companies" value={data.stats.totalCompanies} icon={Briefcase} />
-          <StatCard title="Active Companies" value={data.stats.activeCompanies} icon={CheckCircle2} />
-          <StatCard title="Pending Verifications" value={data.stats.pendingVerifications} icon={Clock} />
+          <StatCard title="Total Companies" value={companies.length} icon={Briefcase} />
+          <StatCard title="Active Companies" value={activeCompanies} icon={CheckCircle2} />
+          <StatCard title="Pending Verifications" value={pendingVerifications} icon={Clock} />
         </div>
       )}
 
@@ -210,6 +330,9 @@ export const AdminOrganizationsOversight: React.FC = () => {
               />
             </div>
           </div>
+          <Button onClick={activeTab === 'departments' ? openAddDept : openAddCompany}>
+            <Plus className="w-4 h-4 mr-2" /> Add {activeTab === 'departments' ? 'Department' : 'Company'}
+          </Button>
         </div>
 
         <div className="w-full overflow-hidden">
@@ -228,6 +351,90 @@ export const AdminOrganizationsOversight: React.FC = () => {
           )}
         </div>
       </Card>
+
+      {/* CRUD Modals */}
+      <Modal
+        isOpen={isDeptModalOpen}
+        onClose={() => setIsDeptModalOpen(false)}
+        title={editingDept ? 'Edit Department' : 'Add New Department'}
+        description="Enter the department details below."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsDeptModalOpen(false)}>Cancel</Button>
+            <Button onClick={saveDept}>{editingDept ? 'Save Changes' : 'Create Department'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Department Name" value={deptForm.name} onChange={e => setDeptForm({...deptForm, name: e.target.value})} />
+          <Input label="Head of Department" value={deptForm.headOfDepartment} onChange={e => setDeptForm({...deptForm, headOfDepartment: e.target.value})} />
+          <Select 
+            label="Status" 
+            value={deptForm.status} 
+            onChange={e => setDeptForm({...deptForm, status: e.target.value as 'Active' | 'Inactive'})}
+            options={[
+              { label: 'Active', value: 'Active' },
+              { label: 'Inactive', value: 'Inactive' },
+            ]}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isCompanyModalOpen}
+        onClose={() => setIsCompanyModalOpen(false)}
+        title={editingCompany ? 'Edit Company' : 'Add New Company'}
+        description="Enter the company details below."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsCompanyModalOpen(false)}>Cancel</Button>
+            <Button onClick={saveCompany}>{editingCompany ? 'Save Changes' : 'Add Company'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Company Name" value={companyForm.name} onChange={e => setCompanyForm({...companyForm, name: e.target.value})} />
+          <Input label="Industry" value={companyForm.industry} onChange={e => setCompanyForm({...companyForm, industry: e.target.value})} />
+          <Select 
+            label="Verified" 
+            value={companyForm.verified} 
+            onChange={e => setCompanyForm({...companyForm, verified: e.target.value})}
+            options={[
+              { label: 'Yes', value: 'true' },
+              { label: 'No', value: 'false' },
+            ]}
+          />
+          <Select 
+            label="Status" 
+            value={companyForm.status} 
+            onChange={e => setCompanyForm({...companyForm, status: e.target.value as 'Active' | 'Pending' | 'Suspended'})}
+            options={[
+              { label: 'Active', value: 'Active' },
+              { label: 'Pending', value: 'Pending' },
+              { label: 'Suspended', value: 'Suspended' },
+            ]}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Confirm Deletion"
+        description={`Are you sure you want to delete "${itemToDelete?.name}"? This action cannot be undone.`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+          </>
+        }
+      >
+        <div className="py-2 text-sm text-slate-600">
+          Deleting this record will completely remove it from the oversight list. Consider changing its status to Inactive/Suspended instead if you want to keep the historical record.
+        </div>
+      </Modal>
+
     </div>
   );
 };
+
