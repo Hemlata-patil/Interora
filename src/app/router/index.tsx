@@ -13,6 +13,7 @@ import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPag
 import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage';
 import { ApplicationsPage } from '@/features/applications/ApplicationsPage';
 import { ApplicationDetailsPage } from '@/features/applications/ApplicationDetailsPage';
+import { AttendancePage } from '@/features/attendance/AttendancePage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -60,7 +61,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/attendance',
-    element: <StudentLayout><FeaturePlaceholder title="Attendance & Work Logs" category="My Work" /></StudentLayout>,
+    element: <StudentLayout><AttendancePage /></StudentLayout>,
   },
   {
     path: '/student/ai-career',
