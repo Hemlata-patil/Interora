@@ -8,10 +8,12 @@ import {
   Select, 
   LoadingState, 
   EmptyState, 
-  Alert 
+  Alert,
+  Button,
+  Modal
 } from '@/components';
 import type { Column } from '@/components';
-import { Search, UserCog, ShieldAlert } from 'lucide-react';
+import { Search, UserCog, ShieldAlert, Edit2, Trash2, Plus } from 'lucide-react';
 import type { UserProfile, UserRole } from '@/types';
 import { fetchAdminUsers } from './mockData';
 
@@ -23,6 +25,20 @@ export const AdminUserManagement: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    role: 'student' as UserRole,
+    department: '',
+    organization: ''
+  });
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -50,6 +66,50 @@ export const AdminUserManagement: React.FC = () => {
       return matchesSearch && matchesRole;
     });
   }, [users, searchTerm, roleFilter]);
+
+  const handleOpenAddModal = () => {
+    setEditingUser(null);
+    setFormData({ fullName: '', email: '', role: 'student', department: '', organization: '' });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (user: UserProfile) => {
+    setEditingUser(user);
+    setFormData({
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      department: user.department || '',
+      organization: user.organization || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = () => {
+    if (editingUser) {
+      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } : u));
+    } else {
+      const newUser: UserProfile = {
+        id: `mock-id-${Date.now()}`,
+        ...formData
+      };
+      setUsers([...users, newUser]);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteClick = (user: UserProfile) => {
+    setUserToDelete(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (userToDelete) {
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+    }
+    setIsDeleteModalOpen(false);
+    setUserToDelete(null);
+  };
 
   const columns: Column<UserProfile>[] = [
     {
@@ -90,6 +150,19 @@ export const AdminUserManagement: React.FC = () => {
       header: 'Status',
       cell: () => (
         <Badge variant="emerald">Active</Badge>
+      ),
+    },
+    {
+      header: 'Actions',
+      cell: (user) => (
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => handleOpenEditModal(user)}>
+            <Edit2 className="w-4 h-4 text-slate-500" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(user)}>
+            <Trash2 className="w-4 h-4 text-rose-500" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -158,6 +231,9 @@ export const AdminUserManagement: React.FC = () => {
               />
             </div>
           </div>
+          <Button onClick={handleOpenAddModal}>
+            <Plus className="w-4 h-4 mr-2" /> Add User
+          </Button>
         </div>
 
         <div className="w-full overflow-hidden">
@@ -178,6 +254,54 @@ export const AdminUserManagement: React.FC = () => {
           )}
         </div>
       </Card>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingUser ? 'Edit User' : 'Add New User'}
+        description="Enter the user details below."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveUser}>{editingUser ? 'Save Changes' : 'Create User'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Full Name" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} />
+          <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+          <Select 
+            label="Role" 
+            value={formData.role} 
+            onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
+            options={[
+              { label: 'Student', value: 'student' },
+              { label: 'Faculty', value: 'faculty' },
+              { label: 'Company', value: 'company' },
+              { label: 'Admin', value: 'admin' },
+            ]}
+          />
+          <Input label="Department" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} />
+          <Input label="Organization" value={formData.organization} onChange={e => setFormData({...formData, organization: e.target.value})} />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Confirm Deletion"
+        description={`Are you sure you want to delete ${userToDelete?.fullName}? This action cannot be undone.`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDelete}>Delete User</Button>
+          </>
+        }
+      >
+        <div className="py-2 text-sm text-slate-600">
+          Deleting this user will remove their access to the Interora platform.
+        </div>
+      </Modal>
     </div>
   );
 };
