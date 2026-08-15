@@ -10,6 +10,13 @@ import { StudentProfile } from '@/features/student/StudentProfile';
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
+import { ApplicationApprovals } from '@/features/faculty/ApplicationApprovals';
+import { AssignedStudents } from '@/features/faculty/AssignedStudents';
+import { AttendanceMonitoring } from '@/features/faculty/AttendanceMonitoring';
+import { InternshipInsights } from '@/features/faculty/InternshipInsights';
+import { CrossVerification } from '@/features/faculty/CrossVerification';
+import { StudentEvaluations } from '@/features/faculty/StudentEvaluations';
+import { PlacementAnalytics } from '@/features/faculty/PlacementAnalytics';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
@@ -59,15 +66,31 @@ const router = createBrowserRouter([
   },
   {
     path: '/faculty/approvals',
-    element: <FacultyLayout><FeaturePlaceholder title="Application Approvals" category="Faculty Workflows" /></FacultyLayout>,
+    element: <FacultyLayout><ApplicationApprovals /></FacultyLayout>,
   },
   {
     path: '/faculty/students',
-    element: <FacultyLayout><FeaturePlaceholder title="Assigned Students" category="Monitoring" /></FacultyLayout>,
+    element: <FacultyLayout><AssignedStudents /></FacultyLayout>,
   },
   {
     path: '/faculty/insights',
-    element: <FacultyLayout><FeaturePlaceholder title="Risk Alerts & AI Insights" category="Analytics" /></FacultyLayout>,
+    element: <FacultyLayout><InternshipInsights /></FacultyLayout>,
+  },
+  {
+    path: '/faculty/attendance',
+    element: <FacultyLayout><AttendanceMonitoring /></FacultyLayout>,
+  },
+  {
+    path: '/faculty/cross-verification',
+    element: <FacultyLayout><CrossVerification /></FacultyLayout>,
+  },
+  {
+    path: '/faculty/evaluations',
+    element: <FacultyLayout><StudentEvaluations /></FacultyLayout>,
+  },
+  {
+    path: '/faculty/placement-analytics',
+    element: <FacultyLayout><PlacementAnalytics /></FacultyLayout>,
   },
 
   // Company Routes Group

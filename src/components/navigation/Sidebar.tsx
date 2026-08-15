@@ -49,7 +49,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, isOpen, onClose }) => {
           { label: 'Dashboard', path: '/faculty', icon: LayoutDashboard, group: 'Home' },
           { label: 'Approvals', path: '/faculty/approvals', icon: FileCheck, group: 'Workflows' },
           { label: 'Students', path: '/faculty/students', icon: Users, group: 'Monitoring' },
+          { label: 'Attendance', path: '/faculty/attendance', icon: CheckSquare, group: 'Monitoring' },
+          { label: 'Cross-Verification', path: '/faculty/cross-verification', icon: FileCheck, group: 'Monitoring' },
+          { label: 'Evaluations', path: '/faculty/evaluations', icon: FileCheck, group: 'Workflows' },
           { label: 'Insights & Risk', path: '/faculty/insights', icon: TrendingUp, group: 'Analytics' },
+          { label: 'Placement Analytics', path: '/faculty/placement-analytics', icon: TrendingUp, group: 'Analytics' },
         ];
       case 'company':
         return [
