@@ -18,6 +18,7 @@ import { TasksPage } from '@/features/tasks/TasksPage';
 import { TaskDetailsPage } from '@/features/tasks/TaskDetailsPage';
 import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
 import { MilestonesPage } from '@/features/milestones/MilestonesPage';
+import { CertificatesPage } from '@/features/certificates/CertificatesPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -84,12 +85,16 @@ const router = createBrowserRouter([
     element: <StudentLayout><MilestonesPage /></StudentLayout>,
   },
   {
+    path: '/student/certificates',
+    element: <StudentLayout><CertificatesPage /></StudentLayout>,
+  },
+  {
     path: '/student/ai-career',
     element: <StudentLayout><FeaturePlaceholder title="AI Recommendations & Career Readiness" category="AI & Career" /></StudentLayout>,
   },
   {
     path: '/student/certificate',
-    element: <StudentLayout><FeaturePlaceholder title="Certificate & Graduation" category="Completion" /></StudentLayout>,
+    element: <StudentLayout><CertificatesPage /></StudentLayout>,
   },
   {
     path: '/student/profile',

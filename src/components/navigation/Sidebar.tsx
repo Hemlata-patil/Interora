@@ -54,8 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { label: 'My Applications', path: '/student/applications', icon: FileText, group: 'Student Journey' },
           { label: 'Productivity', path: '/student/attendance', icon: CheckSquare, group: 'My Work' },
           { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'My Work' },
+          { label: 'Certificates', path: '/student/certificates', icon: Award, group: 'Completion' },
           { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'AI & Career' },
-          { label: 'Certificates', path: '/student/certificate', icon: Award, group: 'Completion' },
           { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
         ];
 
