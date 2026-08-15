@@ -14,6 +14,9 @@ import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage
 import { ApplicationsPage } from '@/features/applications/ApplicationsPage';
 import { ApplicationDetailsPage } from '@/features/applications/ApplicationDetailsPage';
 import { AttendancePage } from '@/features/attendance/AttendancePage';
+import { TasksPage } from '@/features/tasks/TasksPage';
+import { TaskDetailsPage } from '@/features/tasks/TaskDetailsPage';
+import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -62,6 +65,18 @@ const router = createBrowserRouter([
   {
     path: '/student/attendance',
     element: <StudentLayout><AttendancePage /></StudentLayout>,
+  },
+  {
+    path: '/student/tasks',
+    element: <StudentLayout><TasksPage /></StudentLayout>,
+  },
+  {
+    path: '/student/tasks/:id',
+    element: <StudentLayout><TaskDetailsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/work-logs',
+    element: <StudentLayout><WorkLogsPage /></StudentLayout>,
   },
   {
     path: '/student/ai-career',

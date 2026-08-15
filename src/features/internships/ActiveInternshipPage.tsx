@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { PageHeader, Card, Badge, ProgressBar, Button, EmptyState } from '@/components';
 import { mockActiveInternshipData, type ActiveInternshipDetails } from './data/mockActiveInternship';
-import { Compass, Calendar, Clock, MapPin, UserCheck, Mail, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { initialMockTasks, initialMockWorkLogs } from '@/features/tasks/data/mockTasks';
+import { mockAttendanceHistory, calculateAttendanceMetrics } from '@/features/attendance/data/mockAttendance';
+import { Compass, Calendar, Clock, MapPin, UserCheck, Mail, ArrowRight, CheckCircle2, AlertCircle, CheckSquare, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const ActiveInternshipPage: React.FC = () => {
@@ -29,6 +31,16 @@ export const ActiveInternshipPage: React.FC = () => {
       </div>
     );
   }
+
+  // Calculate summary metrics from existing Phase 5 and Phase 6 data
+  const totalTasks = initialMockTasks.length;
+  const inProgressTasks = initialMockTasks.filter((t) => t.status === 'In Progress').length;
+  const completedTasks = initialMockTasks.filter((t) => t.status === 'Completed').length;
+
+  const totalHoursLogged = initialMockWorkLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
+  const currentWeekHours = initialMockWorkLogs.slice(0, 5).reduce((acc, curr) => acc + curr.hoursWorked, 0);
+
+  const attendanceMetrics = calculateAttendanceMetrics(mockAttendanceHistory);
 
   return (
     <div className="space-y-6">
@@ -80,32 +92,137 @@ export const ActiveInternshipPage: React.FC = () => {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (Progress & Journey) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Progress Section */}
-          <Card title="Internship Completion Progress">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-slate-700">Overall Progress</span>
-                <span className="font-bold text-indigo-600 text-sm">{activeData.progressPercentage}%</span>
-              </div>
-              <ProgressBar progress={activeData.progressPercentage} label="Milestone Progression" color="indigo" />
+      {/* 3. Progress Section */}
+      <Card title="Internship Completion Progress">
+        <div className="space-y-4">
+          <div className="flex justify-between items-center text-xs">
+            <span className="font-semibold text-slate-700">Overall Progress</span>
+            <span className="font-bold text-indigo-600 text-sm">{activeData.progressPercentage}%</span>
+          </div>
+          <ProgressBar progress={activeData.progressPercentage} label="Milestone Progression" color="indigo" />
 
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-400 block text-[11px]">Current Phase</span>
-                  <span className="font-bold text-slate-800 leading-tight block mt-0.5">{activeData.currentPhase}</span>
+          <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
+              <span className="text-slate-400 block text-[11px]">Current Phase</span>
+              <span className="font-bold text-slate-800 leading-tight block mt-0.5">{activeData.currentPhase}</span>
+            </div>
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
+              <span className="text-slate-400 block text-[11px]">Completed Milestones</span>
+              <span className="font-bold text-slate-800 text-sm block mt-0.5">{`${activeData.completedMilestones} / ${activeData.totalMilestones} Milestones`}</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* 4. NEW SECTION: Internship Productivity Cards */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Internship Productivity</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Card 1: Daily Tasks */}
+          <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Daily Tasks</h4>
                 </div>
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-400 block text-[11px]">Completed Milestones</span>
-                  <span className="font-bold text-slate-800 text-sm block mt-0.5">{`${activeData.completedMilestones} / ${activeData.totalMilestones} Milestones`}</span>
+                <Badge variant="indigo">{totalTasks} Total</Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
+                  <span className="text-slate-400 block text-[10px]">IN PROGRESS</span>
+                  <span className="text-base font-bold text-indigo-600">{inProgressTasks}</span>
+                </div>
+                <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg">
+                  <span className="text-emerald-600 block text-[10px]">COMPLETED</span>
+                  <span className="text-base font-bold text-emerald-700">{completedTasks}</span>
                 </div>
               </div>
             </div>
+
+            <div className="pt-3 border-t border-slate-100 mt-3">
+              <Link to="/student/tasks" className="w-full block">
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span>View Tasks</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
           </Card>
 
-          {/* Journey Section */}
+          {/* Card 2: Work Logs */}
+          <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Work Logs</h4>
+                </div>
+                <Badge variant="indigo">{totalHoursLogged}h Total</Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
+                  <span className="text-slate-400 block text-[10px]">TOTAL HOURS</span>
+                  <span className="text-base font-bold text-slate-800">{totalHoursLogged} hrs</span>
+                </div>
+                <div className="p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg">
+                  <span className="text-indigo-600 block text-[10px]">THIS WEEK</span>
+                  <span className="text-base font-bold text-indigo-700">{currentWeekHours} hrs</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 mt-3">
+              <Link to="/student/work-logs" className="w-full block">
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span>View Work Logs</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Card 3: Attendance */}
+          <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Attendance</h4>
+                </div>
+                <Badge variant="emerald">{attendanceMetrics.attendancePercentage}%</Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
+                  <span className="text-slate-400 block text-[10px]">ATTENDANCE %</span>
+                  <span className="text-base font-bold text-emerald-600">{attendanceMetrics.attendancePercentage}%</span>
+                </div>
+                <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg">
+                  <span className="text-emerald-600 block text-[10px]">HEALTH</span>
+                  <span className="text-xs font-bold text-emerald-700 truncate block mt-0.5">{attendanceMetrics.healthStatus}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 mt-3">
+              <Link to="/student/attendance" className="w-full block">
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span>View Attendance</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* 5. Main Content Grid (Journey & Focus/Mentor) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Columns: Journey */}
+        <div className="lg:col-span-2 space-y-6">
           <Card title="Internship Journey & Phases" subtitle="Structured phases for host internship program">
             <div className="space-y-5 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
               {activeData.journeyPhases.map((phase, idx) => {
@@ -142,9 +259,8 @@ export const ActiveInternshipPage: React.FC = () => {
           </Card>
         </div>
 
-        {/* Right Column (Current Focus & Mentor Contact) */}
+        {/* Right 1 Column: Current Focus & Mentor Contact */}
         <div className="space-y-6">
-          {/* Current Focus Card */}
           <Card title="Current Focus">
             <div className="space-y-3 text-xs">
               <div>
@@ -156,16 +272,9 @@ export const ActiveInternshipPage: React.FC = () => {
                 <span className="text-[11px] font-medium">Target Due Date</span>
                 <span className="font-bold text-xs">{activeData.nextMilestoneDate}</span>
               </div>
-
-              <div className="pt-2">
-                <Button variant="outline" className="w-full text-slate-400 border-slate-200 cursor-not-allowed" disabled>
-                  View Milestones <span className="text-[10px] font-normal ml-1">(Coming in Phase 5)</span>
-                </Button>
-              </div>
             </div>
           </Card>
 
-          {/* Mentor Information Card */}
           <Card title="Host Mentor Details">
             <div className="space-y-3 text-xs">
               <div className="flex items-start space-x-3">

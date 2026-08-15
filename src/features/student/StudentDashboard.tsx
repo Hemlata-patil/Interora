@@ -1,20 +1,17 @@
 import React, { useState } from 'react';
 import { PageHeader, StatCard, Card, Badge, ProgressBar, Button } from '@/components';
-import { Sparkles, Compass, CheckSquare, Award, Clock, ArrowRight, UserCheck, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Compass, CheckSquare, Award, Clock, ArrowRight, UserCheck, CheckCircle2, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   initialActiveInternshipData,
   initialApplicationSummaryData,
-  initialUpcomingActionsData,
   type ActiveInternshipData,
   type ApplicationSummaryData,
-  type UpcomingActionItem,
 } from './data/mockStudentData';
 
 export const StudentDashboard: React.FC = () => {
   const [activeInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
   const [appSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
-  const [actions] = useState<UpcomingActionItem[]>(initialUpcomingActionsData);
 
   const getStatusBadge = (status: ApplicationSummaryData['recentApplications'][0]['status']) => {
     switch (status) {
@@ -30,6 +27,33 @@ export const StudentDashboard: React.FC = () => {
         return <Badge variant="neutral">Applied</Badge>;
     }
   };
+
+  const actions = [
+    {
+      id: 'act_01',
+      title: 'Submit Daily Work Log',
+      description: 'Log progress and hours for component integration sprint',
+      dueDate: 'Today, 6:00 PM',
+      type: 'log',
+      linkPath: '/student/work-logs',
+    },
+    {
+      id: 'act_02',
+      title: 'Complete Assigned Daily Task',
+      description: 'Build Student Daily Tasks & Work Logs module components',
+      dueDate: 'Today, 5:00 PM',
+      type: 'task',
+      linkPath: '/student/tasks',
+    },
+    {
+      id: 'act_03',
+      title: 'Complete Profile Details',
+      description: 'Add GitHub profile and project links to reach 100% completion',
+      dueDate: 'In 2 days',
+      type: 'profile',
+      linkPath: '/student/profile',
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -51,7 +75,9 @@ export const StudentDashboard: React.FC = () => {
         <Link to="/student/internship" className="block transition-transform hover:-translate-y-0.5">
           <StatCard title="Active Internship" value={activeInternship.title.split(' ')[0] + ' Intern'} icon={Compass} description={activeInternship.companyName} />
         </Link>
-        <StatCard title="Attendance Rate" value={`${activeInternship.attendancePercentage}%`} icon={CheckSquare} trend={{ value: 'Optimal (Above 90%)', isPositive: true }} />
+        <Link to="/student/attendance" className="block transition-transform hover:-translate-y-0.5">
+          <StatCard title="Attendance Rate" value={`${activeInternship.attendancePercentage}%`} icon={CheckSquare} trend={{ value: 'Optimal (Above 90%)', isPositive: true }} />
+        </Link>
         <StatCard title="Placement Readiness" value="78 / 100" icon={Sparkles} description="Good alignment" />
         <Link to="/student/applications" className="block transition-transform hover:-translate-y-0.5">
           <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected â€¢ ${appSummary.underReview + appSummary.facultyApproved} Active`} />
@@ -106,10 +132,20 @@ export const StudentDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
-                <Link to="/student/internship">
+              <div className="pt-2 flex flex-wrap justify-end gap-2">
+                <Link to="/student/tasks">
                   <Button variant="outline" size="sm">
-                    View Full Active Internship <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                    <CheckSquare className="w-3.5 h-3.5 mr-1" /> View Tasks
+                  </Button>
+                </Link>
+                <Link to="/student/work-logs">
+                  <Button variant="outline" size="sm">
+                    <FileText className="w-3.5 h-3.5 mr-1" /> Work Logs
+                  </Button>
+                </Link>
+                <Link to="/student/internship">
+                  <Button variant="primary" size="sm">
+                    My Internship <ArrowRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </Link>
               </div>
@@ -205,7 +241,7 @@ export const StudentDashboard: React.FC = () => {
               </div>
 
               <p className="text-[10px] text-slate-400 text-center italic pt-1">
-                Full AI module edge functions will connect in Phase 5+.
+                Full AI module edge functions will connect in future phases.
               </p>
             </div>
           </Card>
