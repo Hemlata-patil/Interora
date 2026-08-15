@@ -16,6 +16,7 @@ import {
   ChevronRight,
   LogOut,
   X,
+  Target,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -52,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { label: 'Internship Discovery', path: '/student/internships', icon: Briefcase, group: 'Student Journey' },
           { label: 'My Applications', path: '/student/applications', icon: FileText, group: 'Student Journey' },
           { label: 'Productivity', path: '/student/attendance', icon: CheckSquare, group: 'My Work' },
+          { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'My Work' },
           { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'AI & Career' },
           { label: 'Certificates', path: '/student/certificate', icon: Award, group: 'Completion' },
           { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },

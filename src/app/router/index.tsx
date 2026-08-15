@@ -17,6 +17,7 @@ import { AttendancePage } from '@/features/attendance/AttendancePage';
 import { TasksPage } from '@/features/tasks/TasksPage';
 import { TaskDetailsPage } from '@/features/tasks/TaskDetailsPage';
 import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
+import { MilestonesPage } from '@/features/milestones/MilestonesPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -77,6 +78,10 @@ const router = createBrowserRouter([
   {
     path: '/student/work-logs',
     element: <StudentLayout><WorkLogsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/milestones',
+    element: <StudentLayout><MilestonesPage /></StudentLayout>,
   },
   {
     path: '/student/ai-career',
