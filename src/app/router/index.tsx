@@ -19,6 +19,7 @@ import { TaskDetailsPage } from '@/features/tasks/TaskDetailsPage';
 import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
 import { MilestonesPage } from '@/features/milestones/MilestonesPage';
 import { CertificatesPage } from '@/features/certificates/CertificatesPage';
+import { AICareerPage } from '@/features/ai/AICareerPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -90,7 +91,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/ai-career',
-    element: <StudentLayout><FeaturePlaceholder title="AI Recommendations & Career Readiness" category="AI & Career" /></StudentLayout>,
+    element: <StudentLayout><AICareerPage /></StudentLayout>,
   },
   {
     path: '/student/certificate',
