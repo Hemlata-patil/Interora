@@ -20,6 +20,7 @@ import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
 import { MilestonesPage } from '@/features/milestones/MilestonesPage';
 import { CertificatesPage } from '@/features/certificates/CertificatesPage';
 import { AICareerPage } from '@/features/ai/AICareerPage';
+import { CareerPrepPage } from '@/features/career-prep/CareerPrepPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -92,6 +93,10 @@ const router = createBrowserRouter([
   {
     path: '/student/ai-career',
     element: <StudentLayout><AICareerPage /></StudentLayout>,
+  },
+  {
+    path: '/student/career-prep',
+    element: <StudentLayout><CareerPrepPage /></StudentLayout>,
   },
   {
     path: '/student/certificate',

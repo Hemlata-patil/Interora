@@ -17,6 +17,7 @@ import {
   LogOut,
   X,
   Target,
+  BookOpen,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -56,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'My Work' },
           { label: 'Certificates', path: '/student/certificates', icon: Award, group: 'Completion' },
           { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'AI & Career' },
+          { label: 'Career Prep', path: '/student/career-prep', icon: BookOpen, group: 'AI & Career' },
           { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
         ];
 
