@@ -21,6 +21,7 @@ import { MilestonesPage } from '@/features/milestones/MilestonesPage';
 import { CertificatesPage } from '@/features/certificates/CertificatesPage';
 import { AICareerPage } from '@/features/ai/AICareerPage';
 import { CareerPrepPage } from '@/features/career-prep/CareerPrepPage';
+import { ChatPage } from '@/features/chat/ChatPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -97,6 +98,10 @@ const router = createBrowserRouter([
   {
     path: '/student/career-prep',
     element: <StudentLayout><CareerPrepPage /></StudentLayout>,
+  },
+  {
+    path: '/student/chat',
+    element: <StudentLayout><ChatPage /></StudentLayout>,
   },
   {
     path: '/student/certificate',
