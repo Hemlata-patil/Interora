@@ -7,6 +7,20 @@ import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout 
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
+import { MarketplacePage } from '@/features/internships/MarketplacePage';
+import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
+import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPage';
+import { ApplyInternshipPage } from '@/features/applications/ApplyInternshipPage';
+import { ApplicationsPage } from '@/features/applications/ApplicationsPage';
+import { ApplicationDetailsPage } from '@/features/applications/ApplicationDetailsPage';
+import { AttendancePage } from '@/features/attendance/AttendancePage';
+import { TasksPage } from '@/features/tasks/TasksPage';
+import { TaskDetailsPage } from '@/features/tasks/TaskDetailsPage';
+import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
+import { MilestonesPage } from '@/features/milestones/MilestonesPage';
+import { CertificatesPage } from '@/features/certificates/CertificatesPage';
+import { AICareerPage } from '@/features/ai/AICareerPage';
+
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
 import { CompanyProfile } from '@/features/company/CompanyProfile';
@@ -55,23 +69,59 @@ const router = createBrowserRouter([
   },
   {
     path: '/student/internships',
-    element: <StudentLayout><FeaturePlaceholder title="Internship Discovery" category="Student Journey" /></StudentLayout>,
+    element: <StudentLayout><MarketplacePage /></StudentLayout>,
+  },
+  {
+    path: '/student/internships/:id',
+    element: <StudentLayout><InternshipDetailsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/internships/:id/apply',
+    element: <StudentLayout><ApplyInternshipPage /></StudentLayout>,
+  },
+  {
+    path: '/student/internship',
+    element: <StudentLayout><ActiveInternshipPage /></StudentLayout>,
   },
   {
     path: '/student/applications',
-    element: <StudentLayout><FeaturePlaceholder title="My Applications" category="Student Journey" /></StudentLayout>,
+    element: <StudentLayout><ApplicationsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/applications/:id',
+    element: <StudentLayout><ApplicationDetailsPage /></StudentLayout>,
   },
   {
     path: '/student/attendance',
-    element: <StudentLayout><FeaturePlaceholder title="Attendance & Work Logs" category="My Work" /></StudentLayout>,
+    element: <StudentLayout><AttendancePage /></StudentLayout>,
+  },
+  {
+    path: '/student/tasks',
+    element: <StudentLayout><TasksPage /></StudentLayout>,
+  },
+  {
+    path: '/student/tasks/:id',
+    element: <StudentLayout><TaskDetailsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/work-logs',
+    element: <StudentLayout><WorkLogsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/milestones',
+    element: <StudentLayout><MilestonesPage /></StudentLayout>,
+  },
+  {
+    path: '/student/certificates',
+    element: <StudentLayout><CertificatesPage /></StudentLayout>,
   },
   {
     path: '/student/ai-career',
-    element: <StudentLayout><FeaturePlaceholder title="AI Recommendations & Career Readiness" category="AI & Career" /></StudentLayout>,
+    element: <StudentLayout><AICareerPage /></StudentLayout>,
   },
   {
     path: '/student/certificate',
-    element: <StudentLayout><FeaturePlaceholder title="Certificate & Graduation" category="Completion" /></StudentLayout>,
+    element: <StudentLayout><CertificatesPage /></StudentLayout>,
   },
   {
     path: '/student/profile',
