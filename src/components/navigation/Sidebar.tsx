@@ -51,16 +51,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     switch (role) {
       case 'student':
         return [
-          { label: 'Dashboard', path: '/student/dashboard', icon: Compass, group: 'Overview' },
-          { label: 'Internship Discovery', path: '/student/internships', icon: Briefcase, group: 'Student Journey' },
+          { label: 'Dashboard', path: '/student/dashboard', icon: Compass, group: 'Student Journey' },
+          { label: 'Discover Internships', path: '/student/internships', icon: Briefcase, group: 'Student Journey' },
           { label: 'My Applications', path: '/student/applications', icon: FileText, group: 'Student Journey' },
-          { label: 'Productivity', path: '/student/attendance', icon: CheckSquare, group: 'My Work' },
-          { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'My Work' },
-          { label: 'Certificates', path: '/student/certificates', icon: Award, group: 'Completion' },
-          { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'AI & Career' },
-          { label: 'Career Prep', path: '/student/career-prep', icon: BookOpen, group: 'AI & Career' },
-          { label: 'Chat', path: '/student/chat', icon: MessageCircle, badge: '1', group: 'AI & Career' },
-          { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
+          { label: 'Attendance', path: '/student/attendance', icon: CheckSquare, group: 'Student Journey' },
+          { label: 'Chat', path: '/student/chat', icon: MessageCircle, badge: '1', group: 'Student Journey' },
+          { label: 'Career Prep', path: '/student/career-prep', icon: BookOpen, group: 'Career & Growth' },
+          { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'Career & Growth' },
+          { label: 'Profile', path: '/student/profile', icon: User, group: 'Career & Growth' },
+          { label: 'Productivity', path: '/student/tasks', icon: CheckSquare, group: 'Internship Progress' },
+          { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'Internship Progress' },
+          { label: 'Certificates & Graduation', path: '/student/certificates', icon: Award, group: 'Internship Progress' },
         ];
 
       case 'faculty':
@@ -139,16 +140,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="p-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'));
+            const currentPath = location.pathname;
+            const itemPath = item.path;
+
+            // Exact match or sub-route match (preventing prefix collision for root /student)
+            const isActive =
+              currentPath === itemPath ||
+              (itemPath !== '/student' && itemPath !== '/' && currentPath.startsWith(itemPath + '/'));
 
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
-                className={({ isActive: linkActive }) =>
+                className={() =>
                   `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    linkActive || isActive
+                    isActive
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`

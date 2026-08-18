@@ -1,252 +1,129 @@
 import React, { useState } from 'react';
-import { PageHeader, StatCard, Card, Badge, ProgressBar, Button } from '@/components';
-import { Sparkles, Compass, CheckSquare, Award, Clock, ArrowRight, UserCheck, CheckCircle2, FileText } from 'lucide-react';
+import { PageHeader, Card, Badge, Button } from '@/components';
+import { mockApplications } from '@/features/applications/data/mockApplications';
+import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
+import { mockAttendanceHistory, calculateAttendanceMetrics } from '@/features/attendance/data/mockAttendance';
+import { initialMockTasks } from '@/features/tasks/data/mockTasks';
+import { InternshipDeadlinesDashboardCard } from './components/InternshipDeadlinesDashboardCard';
+import { Briefcase, FileText, Award, ArrowRight, Clock, CheckSquare, Sparkles, MessageCircle, UserCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import {
-  initialActiveInternshipData,
-  initialApplicationSummaryData,
-  type ActiveInternshipData,
-  type ApplicationSummaryData,
-} from './data/mockStudentData';
 
 export const StudentDashboard: React.FC = () => {
-  const [activeInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
-  const [appSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
-
-  const getStatusBadge = (status: ApplicationSummaryData['recentApplications'][0]['status']) => {
-    switch (status) {
-      case 'selected':
-        return <Badge variant="emerald">Selected</Badge>;
-      case 'faculty_approved':
-        return <Badge variant="sky">Faculty Approved</Badge>;
-      case 'under_review':
-        return <Badge variant="amber">Under Review</Badge>;
-      case 'rejected':
-        return <Badge variant="rose">Rejected</Badge>;
-      default:
-        return <Badge variant="neutral">Applied</Badge>;
-    }
-  };
-
-  const actions = [
-    {
-      id: 'act_01',
-      title: 'Submit Daily Work Log',
-      description: 'Log progress and hours for component integration sprint',
-      dueDate: 'Today, 6:00 PM',
-      type: 'log',
-      linkPath: '/student/work-logs',
-    },
-    {
-      id: 'act_02',
-      title: 'Complete Assigned Daily Task',
-      description: 'Build Student Daily Tasks & Work Logs module components',
-      dueDate: 'Today, 5:00 PM',
-      type: 'task',
-      linkPath: '/student/tasks',
-    },
-    {
-      id: 'act_03',
-      title: 'Complete Profile Details',
-      description: 'Add GitHub profile and project links to reach 100% completion',
-      dueDate: 'In 2 days',
-      type: 'profile',
-      linkPath: '/student/profile',
-    },
-  ];
+  const [isIntern] = useState<boolean>(true); // Dynamic student state indicator
+  const activeInternship = mockActiveInternshipData;
+  const attendance = calculateAttendanceMetrics(mockAttendanceHistory);
+  const openTasks = initialMockTasks.filter((t) => t.status !== 'Completed').length;
+  const applicationCount = mockApplications.length;
 
   return (
     <div className="space-y-6">
-      {/* 1. Context Header */}
+      {/* 1. Page Header */}
       <PageHeader
-        title="Welcome back, Alex!"
-        description="Track your active internship journey, application pipeline, and upcoming tasks."
-        action={
-          <Link to="/student/profile">
-            <Button variant="outline" size="sm">
-              View Profile (85% Complete)
-            </Button>
-          </Link>
-        }
+        title="Student Workspace Dashboard"
+        description="Monitor your active internship, application pipelines, daily productivity, and career roadmaps."
       />
 
-      {/* Quick Key Metrics Banner */}
+      {/* Non-Intern Student Onboarding Card */}
+      {!isIntern && (
+        <div className="p-6 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-2xl shadow-md space-y-4">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            <h3 className="font-extrabold text-base">You haven't started an internship yet</h3>
+          </div>
+          <p className="text-xs text-indigo-100 max-w-2xl leading-relaxed">
+            Follow your personalized preparation checklist to complete your profile, discuss skill gaps with your Faculty Mentor, and explore verified opportunities.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs pt-1">
+            <div className="p-3 bg-white/10 rounded-xl border border-white/10">1. Complete Profile</div>
+            <div className="p-3 bg-white/10 rounded-xl border border-white/10">2. Review Skill Gaps</div>
+            <div className="p-3 bg-white/10 rounded-xl border border-white/10">3. Target Open Roles</div>
+            <div className="p-3 bg-white/10 rounded-xl border border-white/10">4. Interview Prep</div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Link to="/student/chat">
+              <Button size="sm" variant="primary" className="bg-indigo-600 text-white hover:bg-indigo-700">
+                <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
+                Talk to Faculty Mentor
+              </Button>
+            </Link>
+            <Link to="/student/internships">
+              <Button size="sm" variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                <Briefcase className="w-3.5 h-3.5 mr-1.5" />
+                Explore Internships
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Key Metric Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to="/student/internship" className="block transition-transform hover:-translate-y-0.5">
-          <StatCard title="Active Internship" value={activeInternship.title.split(' ')[0] + ' Intern'} icon={Compass} description={activeInternship.companyName} />
-        </Link>
-        <Link to="/student/attendance" className="block transition-transform hover:-translate-y-0.5">
-          <StatCard title="Attendance Rate" value={`${activeInternship.attendancePercentage}%`} icon={CheckSquare} trend={{ value: 'Optimal (Above 90%)', isPositive: true }} />
-        </Link>
-        <StatCard title="Placement Readiness" value="78 / 100" icon={Sparkles} description="Good alignment" />
-        <Link to="/student/applications" className="block transition-transform hover:-translate-y-0.5">
-          <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected â€¢ ${appSummary.underReview + appSummary.facultyApproved} Active`} />
-        </Link>
+        <Card className="p-4 flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+            <Briefcase className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">ACTIVE INTERNSHIP</span>
+            <span className="text-sm font-bold text-slate-900 truncate block max-w-[140px]">
+              {isIntern && activeInternship ? activeInternship.companyName : 'None Active'}
+            </span>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">APPLICATIONS</span>
+            <span className="text-sm font-bold text-slate-900">{applicationCount} Submitted</span>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <CheckSquare className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">ATTENDANCE</span>
+            <span className="text-sm font-bold text-slate-900">{isIntern ? `${attendance.attendancePercentage}%` : 'N/A'}</span>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">OPEN TASKS</span>
+            <span className="text-sm font-bold text-slate-900">{isIntern ? `${openTasks} Open` : '0 Open'}</span>
+          </div>
+        </Card>
       </div>
 
-      {/* 2. Primary Workspace Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Columns */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Current Internship Status Card */}
-          <Card title="Active Internship Journey">
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-base font-bold text-slate-900 hover:text-indigo-600 transition-colors">
-                      <Link to="/student/internship">{activeInternship.title}</Link>
-                    </h3>
-                    <Badge variant="emerald">Active</Badge>
-                  </div>
-                  <p className="text-xs font-medium text-indigo-600 mt-0.5">{activeInternship.companyName}</p>
-                </div>
-                <div className="text-xs text-slate-500 space-y-1">
-                  <div className="flex items-center space-x-1.5">
-                    <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Mentor: {activeInternship.mentorName}</span>
-                  </div>
-                  <div className="flex items-center space-x-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{`${activeInternship.startDate} to ${activeInternship.endDate}`}</span>
-                  </div>
-                </div>
-              </div>
+      {/* 3. Priority Internship Deadlines Section */}
+      <InternshipDeadlinesDashboardCard />
 
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="font-semibold text-slate-700">Current Milestone:</span>
-                  <span className="text-slate-600">{activeInternship.currentMilestone}</span>
-                </div>
-                <ProgressBar progress={activeInternship.progressPercentage} label="Overall Internship Progress" color="indigo" />
+      {/* 4. Active Internship Journey */}
+      {isIntern && activeInternship && (
+        <Card title="Active Internship Journey" subtitle="Current active enrollment details and milestones">
+          <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{activeInternship.internshipTitle}</h4>
+                <p className="text-indigo-600 font-semibold">{activeInternship.companyName} â€¢ {activeInternship.workMode}</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-500 block text-[11px]">Tasks Progress</span>
-                  <span className="text-sm font-bold text-slate-900">{`${activeInternship.completedTasks} / ${activeInternship.totalTasks} Tasks Completed`}</span>
-                </div>
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-500 block text-[11px]">Health Score Signal</span>
-                  <span className="text-sm font-bold text-emerald-600">{`${activeInternship.healthScore} / 100 (Optimal Status)`}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 flex flex-wrap justify-end gap-2">
-                <Link to="/student/tasks">
-                  <Button variant="outline" size="sm">
-                    <CheckSquare className="w-3.5 h-3.5 mr-1" /> View Tasks
-                  </Button>
-                </Link>
-                <Link to="/student/work-logs">
-                  <Button variant="outline" size="sm">
-                    <FileText className="w-3.5 h-3.5 mr-1" /> Work Logs
-                  </Button>
-                </Link>
-                <Link to="/student/internship">
-                  <Button variant="primary" size="sm">
-                    My Internship <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </Link>
-              </div>
+              <Link to="/student/internships">
+                <Badge variant="indigo" className="hover:bg-indigo-700 cursor-pointer">
+                  Go to Internship Journey â†’
+                </Badge>
+              </Link>
             </div>
-          </Card>
-
-          {/* Applications Pipeline Summary Card */}
-          <Card title="Applications Summary" subtitle="Overview of submitted internship applications">
-            <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-400 block text-[10px]">TOTAL</span>
-                  <span className="text-base font-bold text-slate-800">{appSummary.total}</span>
-                </div>
-                <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-lg">
-                  <span className="text-amber-600 block text-[10px]">REVIEW</span>
-                  <span className="text-base font-bold text-amber-700">{appSummary.underReview}</span>
-                </div>
-                <div className="p-2.5 bg-sky-50/50 border border-sky-100 rounded-lg">
-                  <span className="text-sky-600 block text-[10px]">APPROVED</span>
-                  <span className="text-base font-bold text-sky-700">{appSummary.facultyApproved}</span>
-                </div>
-                <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg">
-                  <span className="text-emerald-600 block text-[10px]">SELECTED</span>
-                  <span className="text-base font-bold text-emerald-700">{appSummary.selected}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {appSummary.recentApplications.map((app) => (
-                  <div key={app.id} className="p-3 bg-slate-50/80 rounded-lg flex items-center justify-between text-xs border border-slate-100">
-                    <div>
-                      <h4 className="font-semibold text-slate-800">{app.title}</h4>
-                      <p className="text-[11px] text-slate-500">{`${app.company} - Applied on ${app.appliedDate}`}</p>
-                    </div>
-                    {getStatusBadge(app.status)}
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-1 flex justify-end">
-                <Link to="/student/applications">
-                  <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700">
-                    View All Applications <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Right 1 Column */}
-        <div className="space-y-6">
-          {/* Action Required Card */}
-          <Card title="Action Required" subtitle="Pending items for your attention">
-            <div className="space-y-3">
-              {actions.map((act) => (
-                <div key={act.id} className="p-3 border border-slate-100 rounded-lg space-y-1 hover:border-slate-300 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <h5 className="text-xs font-semibold text-slate-900">{act.title}</h5>
-                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{act.dueDate}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500">{act.description}</p>
-                  <Link to={act.linkPath} className="inline-flex items-center text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 pt-1">
-                    Take Action <ArrowRight className="w-3 h-3 ml-1" />
-                  </Link>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* AI / Career Preview Card */}
-          <Card title="AI Intelligence Preview" subtitle="Career and Skill Gap Insights">
-            <div className="space-y-3 text-xs text-slate-600">
-              <div className="p-3 bg-indigo-50/60 rounded-lg border border-indigo-100 space-y-1">
-                <div className="flex items-center space-x-1.5 text-indigo-900 font-semibold">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>Skill-Gap Analysis</span>
-                </div>
-                <p className="text-[11px] text-indigo-800 leading-relaxed">
-                  Your profile matches 85% of active Software Engineering requirements. Consider adding Docker and CI/CD basics to increase match score.
-                </p>
-              </div>
-
-              <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-100 space-y-1">
-                <div className="flex items-center space-x-1.5 text-emerald-900 font-semibold">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Weekly Report Drafter</span>
-                </div>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  4 work logs recorded this week. AI weekly report draft generation will be ready on Friday.
-                </p>
-              </div>
-
-              <p className="text-[10px] text-slate-400 text-center italic pt-1">
-                Full AI module edge functions will connect in future phases.
-              </p>
-            </div>
-          </Card>
-        </div>
-      </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

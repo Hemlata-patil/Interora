@@ -1,71 +1,55 @@
 import React, { useState, useMemo } from 'react';
-import { PageHeader, EmptyState } from '@/components';
+import { PageHeader, Card, EmptyState, Badge } from '@/components';
+import { initialMockInternships, type Internship } from './data/mockInternships';
+import { mockActiveInternshipData } from './data/mockActiveInternship';
 import { InternshipCard } from './components/InternshipCard';
-import { InternshipSearch } from './components/InternshipSearch';
 import { InternshipFilters, type InternshipFilterState } from './components/InternshipFilters';
-import { mockInternships } from './data/mockInternships';
-import { Compass } from 'lucide-react';
+import { InternshipSearch } from './components/InternshipSearch';
+import { InternshipJourneySection } from './components/InternshipJourneySection';
+import { InternshipJourneyEmptyState } from './components/InternshipJourneyEmptyState';
+import { Search, Compass, Sparkles, Briefcase } from 'lucide-react';
+
+const initialFilterState: InternshipFilterState = {
+  searchQuery: '',
+  location: 'all',
+  workMode: 'all',
+  internshipType: 'all',
+  duration: 'all',
+  stipendOnly: 'all',
+};
 
 export const MarketplacePage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'journey'>('marketplace');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<InternshipFilterState>({
-    location: 'all',
-    workMode: 'all',
-    internshipType: 'all',
-    duration: 'all',
-    stipendOnly: 'all',
-  });
+  const [filters, setFilters] = useState<InternshipFilterState>(initialFilterState);
 
-  const handleResetFilters = () => {
-    setSearchQuery('');
-    setFilters({
-      location: 'all',
-      workMode: 'all',
-      internshipType: 'all',
-      duration: 'all',
-      stipendOnly: 'all',
-    });
-  };
+  // Student has active enrollment status
+  const hasActiveInternship = Boolean(mockActiveInternshipData);
 
   const filteredInternships = useMemo(() => {
-    return mockInternships.filter((item) => {
-      // 1. Text Search (Title, Company, Skills)
-      const q = searchQuery.toLowerCase().trim();
-      if (q) {
+    return initialMockInternships.filter((item: Internship) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
         const matchesTitle = item.title.toLowerCase().includes(q);
         const matchesCompany = item.companyName.toLowerCase().includes(q);
-        const matchesSkills = item.skills.some((s) => s.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesCompany && !matchesSkills) {
-          return false;
-        }
+        const matchesSkills = item.skillsRequired.some((s: string) => s.toLowerCase().includes(q));
+
+        if (!matchesTitle && !matchesCompany && !matchesSkills) return false;
       }
 
-      // 2. Location Filter
-      if (filters.location !== 'all') {
-        const locLower = filters.location.toLowerCase();
-        const itemLocLower = item.location.toLowerCase();
-        if (!itemLocLower.includes(locLower)) {
-          return false;
-        }
+      if (filters.location !== 'all' && !item.location.toLowerCase().includes(filters.location.toLowerCase())) {
+        return false;
       }
 
-      // 3. Work Mode Filter
       if (filters.workMode !== 'all' && item.workMode !== filters.workMode) {
         return false;
       }
 
-      // 4. Internship Type Filter
-      if (filters.internshipType !== 'all' && item.internshipType !== filters.internshipType) {
+      if (filters.internshipType !== 'all' && item.type !== filters.internshipType) {
         return false;
       }
 
-      // 5. Duration Filter
       if (filters.duration !== 'all' && item.duration !== filters.duration) {
-        return false;
-      }
-
-      // 6. Stipend Filter
-      if (filters.stipendOnly === 'paid' && item.stipend.toLowerCase().includes('unpaid')) {
         return false;
       }
 
@@ -73,65 +57,94 @@ export const MarketplacePage: React.FC = () => {
     });
   }, [searchQuery, filters]);
 
-  const hasActiveFilters =
-    Boolean(searchQuery) ||
-    filters.location !== 'all' ||
-    filters.workMode !== 'all' ||
-    filters.internshipType !== 'all' ||
-    filters.duration !== 'all' ||
-    filters.stipendOnly !== 'all';
+  const handleReset = () => {
+    setSearchQuery('');
+    setFilters(initialFilterState);
+  };
 
   return (
     <div className="space-y-6">
+      {/* 1. Header */}
       <PageHeader
-        title="Find Your Internship"
-        description="Discover verified internship opportunities, filter by location, work mode, or skills, and apply directly."
+        title="Student Internship Marketplace"
+        description="Discover verified internship opportunities with live application deadlines or track your active internship journey."
+        action={
+          <Badge variant="indigo" className="px-3 py-1 font-semibold">
+            {filteredInternships.length} Opportunities Available
+          </Badge>
+        }
       />
 
-      {/* Search & Filters Controls */}
-      <div className="space-y-4">
-        <InternshipSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
-        <InternshipFilters
-          filters={filters}
-          onFilterChange={setFilters}
-          onReset={handleResetFilters}
-        />
+      {/* 2. Primary Navigation Tabs */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab('marketplace')}
+          className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'marketplace'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Compass className="w-4 h-4" />
+          <span>Discover Internships</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('journey')}
+          className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'journey'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>My Internship Journey</span>
+          {hasActiveInternship && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+        </button>
       </div>
 
-      {/* Results Header */}
-      <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-        <span>Showing <strong className="text-slate-800 font-semibold">{filteredInternships.length}</strong> available opportunities</span>
-        {hasActiveFilters && (
-          <button
-            onClick={handleResetFilters}
-            className="text-indigo-600 hover:text-indigo-700 font-medium underline cursor-pointer"
-          >
-            Clear active filters
-          </button>
-        )}
-      </div>
+      {/* 3. Tab Content */}
+      {activeTab === 'marketplace' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Filters Column */}
+          <div className="lg:col-span-1 space-y-4">
+            <InternshipSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+            <InternshipFilters
+              filters={filters}
+              onFilterChange={setFilters}
+              onReset={handleReset}
+            />
+          </div>
 
-      {/* Internship Listings Grid */}
-      {filteredInternships.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredInternships.map((internship) => (
-            <InternshipCard key={internship.id} internship={internship} />
-          ))}
+          {/* Listings Grid */}
+          <div className="lg:col-span-3">
+            {filteredInternships.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filteredInternships.map((internship: Internship) => (
+                  <InternshipCard key={internship.id} internship={internship} />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <EmptyState
+                  icon={<Search className="w-6 h-6 text-slate-400" />}
+                  title="No internships found"
+                  description="No active internship opportunities match your current filter selections. Try resetting your search parameters."
+                />
+              </Card>
+            )}
+          </div>
         </div>
       ) : (
-        <EmptyState
-          icon={<Compass className="w-6 h-6 text-slate-400" />}
-          title="No Internships Found"
-          description="No internship listings match your current search query or filter settings. Try clearing active filters."
-          action={
-            <button
-              onClick={handleResetFilters}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              Reset Search & Filters
-            </button>
-          }
-        />
+        <div>
+          {hasActiveInternship ? (
+            <InternshipJourneySection onExploreClick={() => setActiveTab('marketplace')} />
+          ) : (
+            <InternshipJourneyEmptyState onExploreClick={() => setActiveTab('marketplace')} />
+          )}
+        </div>
       )}
     </div>
   );

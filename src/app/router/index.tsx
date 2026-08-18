@@ -5,8 +5,13 @@ import { LoginPage } from '@/pages/LoginPage';
 import { VerifyCertificatePage } from '@/pages/VerifyCertificatePage';
 import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout } from '@/app/layouts/RoleLayouts';
 
+import { RegisterPage } from '@/features/auth/pages/RegisterPage';
+import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
+
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
+import { ProfileCompletionPage } from '@/features/student/pages/ProfileCompletionPage';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
 import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
 import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPage';
@@ -22,6 +27,7 @@ import { CertificatesPage } from '@/features/certificates/CertificatesPage';
 import { AICareerPage } from '@/features/ai/AICareerPage';
 import { CareerPrepPage } from '@/features/career-prep/CareerPrepPage';
 import { ChatPage } from '@/features/chat/ChatPage';
+import { InternshipDeadlinesPage } from '@/features/internship-deadlines/InternshipDeadlinesPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -29,9 +35,12 @@ import { AdminDashboard } from '@/features/admin/AdminDashboard';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
-  // Public Routes
+  // Public & Auth Routes
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/verify/:token', element: <VerifyCertificatePage /> },
 
   // Student Routes Group
@@ -44,8 +53,16 @@ const router = createBrowserRouter([
     element: <StudentLayout><StudentDashboard /></StudentLayout>,
   },
   {
+    path: '/student/profile-completion',
+    element: <StudentLayout><ProfileCompletionPage /></StudentLayout>,
+  },
+  {
     path: '/student/internships',
     element: <StudentLayout><MarketplacePage /></StudentLayout>,
+  },
+  {
+    path: '/student/internship-deadlines',
+    element: <StudentLayout><InternshipDeadlinesPage /></StudentLayout>,
   },
   {
     path: '/student/internships/:id',
