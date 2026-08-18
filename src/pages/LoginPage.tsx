@@ -41,7 +41,8 @@ export const LoginPage: React.FC = () => {
               options={[
                 { value: 'student', label: 'Student Workspace' },
                 { value: 'faculty', label: 'Faculty Mentor Workspace' },
-                { value: 'company', label: 'Company / Industry Mentor Workspace' },
+                { value: 'company', label: 'Company Workspace' },
+                { value: 'mentor', label: 'Industry Mentor Workspace' },
                 { value: 'admin', label: 'System Admin Workspace' },
               ]}
             />

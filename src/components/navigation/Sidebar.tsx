@@ -48,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, isOpen, onClose }) => {
         return [
           { label: 'Dashboard', path: '/faculty', icon: LayoutDashboard, group: 'Home' },
           { label: 'Approvals', path: '/faculty/approvals', icon: FileCheck, group: 'Workflows' },
+          { label: 'Student Guidance', path: '/faculty/guidance', icon: Sparkles, group: 'Workflows' },
           { label: 'Students', path: '/faculty/students', icon: Users, group: 'Monitoring' },
           { label: 'Attendance', path: '/faculty/attendance', icon: CheckSquare, group: 'Monitoring' },
           { label: 'Cross-Verification', path: '/faculty/cross-verification', icon: FileCheck, group: 'Monitoring' },
@@ -58,10 +59,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, isOpen, onClose }) => {
       case 'company':
         return [
           { label: 'Dashboard', path: '/company', icon: LayoutDashboard, group: 'Home' },
-          { label: 'Listings', path: '/company/listings', icon: Briefcase, group: 'Operations' },
+          { label: 'Company Profile', path: '/company/profile', icon: User, group: 'Home' },
+          { label: 'Internships', path: '/company/listings', icon: Briefcase, group: 'Operations' },
           { label: 'Applicants', path: '/company/applicants', icon: Users, group: 'Operations' },
-          { label: 'Active Interns', path: '/company/interns', icon: Users, group: 'Monitoring' },
+          { label: 'My Interns', path: '/company/interns', icon: Users, group: 'Monitoring' },
+          { label: 'Mentor Management', path: '/company/mentors', icon: Users, group: 'Monitoring' },
+          { label: 'Milestones', path: '/company/milestones', icon: FileCheck, group: 'Monitoring' },
           { label: 'Evaluations', path: '/company/evaluations', icon: FileCheck, group: 'Completion' },
+          { label: 'PPO / Conversion', path: '/company/ppo', icon: Award, group: 'Completion' },
+          { label: 'Certificates', path: '/company/certificates', icon: Award, group: 'Completion' },
+          { label: 'Notifications', path: '/company/notifications', icon: Sparkles, group: 'Home' },
+        ];
+      case 'mentor':
+        return [
+          { label: 'Dashboard', path: '/mentor', icon: LayoutDashboard, group: 'Home' },
+          { label: 'My Interns', path: '/mentor/interns', icon: Users, group: 'Monitoring' },
+          { label: 'Tasks & Proof', path: '/mentor/tasks', icon: CheckSquare, group: 'Monitoring' },
+          { label: 'Milestones', path: '/mentor/milestones', icon: FileCheck, group: 'Monitoring' },
+          { label: 'Evaluations', path: '/mentor/evaluations', icon: FileCheck, group: 'Completion' },
+          { label: 'Notifications', path: '/mentor/notifications', icon: Sparkles, group: 'Home' },
         ];
       case 'admin':
         return [

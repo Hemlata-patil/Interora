@@ -8,53 +8,66 @@ import {
   Modal, 
   Input
 } from '@/components';
-import { mockFacultyStudents } from './mockData';
-import type { SharedStudentData, CompanyEvaluation } from './mockData';
+import { 
+  mockFacultyStudents, 
+  mockCompanyEvaluations, 
+  setMockCompanyEvaluations 
+} from './mockData';
+import type { 
+  SharedStudentData, 
+  CompanyEvaluationData 
+} from './mockData';
 import { CheckCircle2, ShieldAlert, FileSearch, Star } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
 
+const MOCK_LOGGED_IN_FACULTY_ID = 'fac-1';
+
 export const CrossVerification: React.FC = () => {
   // Using a local state copy so we can simulate updates
-  const [students, setStudents] = useState<SharedStudentData[]>(mockFacultyStudents);
+  const [evaluations, setEvaluations] = useState<CompanyEvaluationData[]>(mockCompanyEvaluations);
 
-  const evaluationStudents = useMemo(() => {
-    return students.filter(s => s.companyEvaluation !== undefined);
-  }, [students]);
+  const facultyEvaluations = useMemo(() => {
+    // Show only evaluations assigned to this faculty mentor that are NOT drafts
+    return evaluations.filter(e => 
+      e.facultyMentorId === MOCK_LOGGED_IN_FACULTY_ID && 
+      e.status !== 'Draft'
+    );
+  }, [evaluations]);
 
-  const totalEvaluations = evaluationStudents.length;
-  const pendingCount = evaluationStudents.filter(s => s.companyEvaluation?.cross_verified === false && !s.companyEvaluation?.cross_verification_note).length;
-  const verifiedCount = evaluationStudents.filter(s => s.companyEvaluation?.cross_verified === true).length;
-  const discrepancyCount = evaluationStudents.filter(s => s.companyEvaluation?.cross_verified === false && s.companyEvaluation?.cross_verification_note).length;
+  const pendingCount = facultyEvaluations.filter(e => e.status === 'Pending Faculty Verification').length;
+  const verifiedCount = facultyEvaluations.filter(e => e.status === 'Verified').length;
+  const discrepancyCount = facultyEvaluations.filter(e => e.status === 'Correction Required').length;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<SharedStudentData | null>(null);
+  const [selectedEval, setSelectedEval] = useState<CompanyEvaluationData | null>(null);
   
   const [isDiscrepancyModalOpen, setIsDiscrepancyModalOpen] = useState(false);
   const [discrepancyNote, setDiscrepancyNote] = useState('');
 
-  const handleReview = (student: SharedStudentData) => {
-    setSelectedStudent(student);
+  const handleReview = (evaluation: CompanyEvaluationData) => {
+    setSelectedEval(evaluation);
     setIsModalOpen(true);
   };
 
   const handleCrossVerify = () => {
-    if (!selectedStudent) return;
+    if (!selectedEval) return;
     
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id && s.companyEvaluation) {
+    const updatedEvals = evaluations.map(e => {
+      if (e.id === selectedEval.id) {
         return {
-          ...s,
-          companyEvaluation: {
-            ...s.companyEvaluation,
-            cross_verified: true,
-            cross_verified_by: 'Faculty Mentor',
-            cross_verified_at: new Date().toLocaleDateString(),
-            cross_verification_note: undefined
-          }
+          ...e,
+          status: 'Verified' as const,
+          crossVerified: true,
+          crossVerifiedBy: 'Dr. Mehta (You)', // Mock name for fac-1
+          crossVerifiedAt: new Date().toLocaleDateString(),
+          discrepancyNote: undefined
         };
       }
-      return s;
-    }));
+      return e;
+    });
+
+    setEvaluations(updatedEvals);
+    setMockCompanyEvaluations(updatedEvals);
     
     setIsModalOpen(false);
   };
@@ -64,53 +77,57 @@ export const CrossVerification: React.FC = () => {
   };
 
   const handleFlagDiscrepancy = () => {
-    if (!selectedStudent || !discrepancyNote.trim()) return;
+    if (!selectedEval || !discrepancyNote.trim()) return;
     
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id && s.companyEvaluation) {
+    const updatedEvals = evaluations.map(e => {
+      if (e.id === selectedEval.id) {
         return {
-          ...s,
-          companyEvaluation: {
-            ...s.companyEvaluation,
-            cross_verified: false,
-            cross_verification_note: discrepancyNote
-          }
+          ...e,
+          status: 'Correction Required' as const,
+          crossVerified: false,
+          discrepancyNote: discrepancyNote
         };
       }
-      return s;
-    }));
+      return e;
+    });
+
+    setEvaluations(updatedEvals);
+    setMockCompanyEvaluations(updatedEvals);
     
     setIsDiscrepancyModalOpen(false);
     setIsModalOpen(false);
     setDiscrepancyNote('');
   };
 
-  const getStatusBadge = (evalData: CompanyEvaluation) => {
-    if (evalData.cross_verified) {
+  const getStatusBadge = (evalData: CompanyEvaluationData) => {
+    if (evalData.status === 'Verified') {
       return <Badge variant="emerald">Verified</Badge>;
     }
-    if (evalData.cross_verification_note) {
-      return <Badge variant="rose">Discrepancy</Badge>;
+    if (evalData.status === 'Correction Required') {
+      return <Badge variant="rose">Correction Required</Badge>;
     }
     return <Badge variant="amber">Pending Verification</Badge>;
   };
 
-  const columns: Column<SharedStudentData>[] = [
+  const columns: Column<CompanyEvaluationData>[] = [
     {
       header: 'Student',
-      cell: (row) => (
-        <div>
-          <div className="font-medium text-slate-900">{row.studentName}</div>
-          <div className="text-xs text-slate-500">{row.studentId}</div>
-        </div>
-      ),
+      cell: (row) => {
+        const student = mockFacultyStudents.find(s => s.id === row.internId);
+        return (
+          <div>
+            <div className="font-medium text-slate-900">{student?.studentName || 'Unknown'}</div>
+            <div className="text-xs text-slate-500">{student?.studentId || row.internId}</div>
+          </div>
+        );
+      },
     },
     {
-      header: 'Company / Role',
+      header: 'Evaluation Type',
       cell: (row) => (
         <div>
-          <div className="font-medium text-slate-900">{row.company}</div>
-          <div className="text-xs text-slate-500">{row.role}</div>
+          <div className="font-medium text-slate-900">{row.evaluationType}</div>
+          <div className="text-xs text-slate-500">{row.evaluationPeriod}</div>
         </div>
       ),
     },
@@ -119,22 +136,22 @@ export const CrossVerification: React.FC = () => {
       cell: (row) => (
         <div className="flex items-center gap-1 text-slate-700 font-semibold">
           <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-          {row.companyEvaluation?.overallRating.toFixed(1)}
+          {row.overallRating.toFixed(1)}
         </div>
       ),
     },
     {
-      header: 'Submitted By',
+      header: 'Submitted',
       cell: (row) => (
         <div>
-          <div className="font-medium text-slate-900">{row.companyEvaluation?.submittedBy}</div>
-          <div className="text-xs text-slate-500">{row.companyEvaluation?.submittedDate}</div>
+          <div className="font-medium text-slate-900">{row.submittedAt || 'N/A'}</div>
+          <div className="text-xs text-slate-500">Updated: {row.updatedAt}</div>
         </div>
       ),
     },
     {
       header: 'Status',
-      cell: (row) => row.companyEvaluation ? getStatusBadge(row.companyEvaluation) : null,
+      cell: (row) => getStatusBadge(row),
     },
     {
       header: 'Action',
@@ -184,7 +201,7 @@ export const CrossVerification: React.FC = () => {
         <div className="p-4">
           <Table 
             columns={columns} 
-            data={evaluationStudents} 
+            data={facultyEvaluations} 
             keyExtractor={(row) => row.id} 
           />
         </div>
@@ -198,88 +215,120 @@ export const CrossVerification: React.FC = () => {
         description="Cross-verify the evaluation submitted by the company mentor."
         className="max-w-2xl"
       >
-        {selectedStudent && selectedStudent.companyEvaluation && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg shrink-0">
-                  {selectedStudent.studentName.charAt(0)}
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 leading-tight">{selectedStudent.studentName}</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">{selectedStudent.studentId}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-slate-900">{selectedStudent.company}</p>
-                <p className="text-xs text-slate-500">{selectedStudent.role}</p>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
-              <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm uppercase tracking-wider mb-1">Evaluation Details</h4>
-                  <p className="text-xs text-slate-500">Submitted by: <span className="font-medium text-slate-700">{selectedStudent.companyEvaluation.submittedBy}</span> on {selectedStudent.companyEvaluation.submittedDate}</p>
-                </div>
-                {getStatusBadge(selectedStudent.companyEvaluation)}
-              </div>
-
-              <div className="grid grid-cols-2 gap-y-4">
-                <div>
-                  <p className="text-xs text-slate-500 font-medium mb-1">Technical Skills</p>
-                  {renderStars(selectedStudent.companyEvaluation.technicalSkills)}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium mb-1">Communication</p>
-                  {renderStars(selectedStudent.companyEvaluation.communication)}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium mb-1">Professionalism</p>
-                  {renderStars(selectedStudent.companyEvaluation.professionalism)}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium mb-1">Problem Solving</p>
-                  {renderStars(selectedStudent.companyEvaluation.problemSolving)}
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <p className="text-xs font-semibold text-slate-700 uppercase">Overall Rating</p>
-                  <div className="flex items-center gap-1 text-lg font-bold text-amber-500">
-                    <Star className="w-5 h-5 fill-amber-500" />
-                    {selectedStudent.companyEvaluation.overallRating.toFixed(1)}
+        {selectedEval && (() => {
+          const student = mockFacultyStudents.find(s => s.id === selectedEval.internId);
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg shrink-0">
+                    {student?.studentName.charAt(0) || '?'}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 leading-tight">{student?.studentName || 'Unknown Intern'}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">{student?.studentId || selectedEval.internId}</p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-medium mb-1">Written Feedback</p>
-                  <p className="text-sm text-slate-800 italic">"{selectedStudent.companyEvaluation.writtenFeedback}"</p>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-900">{selectedEval.evaluationType}</p>
+                  <p className="text-xs text-slate-500">{selectedEval.evaluationPeriod}</p>
                 </div>
               </div>
-              
-              {selectedStudent.companyEvaluation.cross_verification_note && (
-                <div className="bg-rose-50 p-4 rounded-lg border border-rose-100 mt-4">
-                  <p className="text-xs font-semibold text-rose-700 uppercase mb-1">Discrepancy Note</p>
-                  <p className="text-sm text-rose-800">{selectedStudent.companyEvaluation.cross_verification_note}</p>
-                </div>
-              )}
-            </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              {!selectedStudent.companyEvaluation.cross_verified && (
-                <>
-                  <Button variant="outline" onClick={openDiscrepancyFlag}>
-                    Flag Discrepancy
-                  </Button>
-                  <Button variant="primary" onClick={handleCrossVerify}>
-                    Cross-Verify
-                  </Button>
-                </>
-              )}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <div>
+                    <h4 className="font-semibold text-slate-900 text-sm uppercase tracking-wider mb-1">Evaluation Details</h4>
+                    <p className="text-xs text-slate-500">Submitted on: <span className="font-medium text-slate-700">{selectedEval.submittedAt || 'N/A'}</span></p>
+                  </div>
+                  {getStatusBadge(selectedEval)}
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-4">
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Technical Skills</p>
+                    {renderStars(selectedEval.technicalSkills)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Quality of Work</p>
+                    {renderStars(selectedEval.qualityOfWork)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Communication</p>
+                    {renderStars(selectedEval.communication)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Problem Solving</p>
+                    {renderStars(selectedEval.problemSolving)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Teamwork</p>
+                    {renderStars(selectedEval.teamwork)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Professionalism</p>
+                    {renderStars(selectedEval.professionalism)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Time Management</p>
+                    {renderStars(selectedEval.timeManagement)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Initiative</p>
+                    {renderStars(selectedEval.initiative)}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mt-4 space-y-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-xs font-semibold text-slate-700 uppercase">Overall Rating</p>
+                    <div className="flex items-center gap-1 text-lg font-bold text-amber-500">
+                      <Star className="w-5 h-5 fill-amber-500" />
+                      {selectedEval.overallRating.toFixed(1)}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Strengths</p>
+                    <p className="text-sm text-slate-800 bg-white p-2 border border-slate-200 rounded">{selectedEval.strengths || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Areas for Improvement</p>
+                    <p className="text-sm text-slate-800 bg-white p-2 border border-slate-200 rounded">{selectedEval.areasForImprovement || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Mentor Comments</p>
+                    <p className="text-sm text-slate-800 bg-white p-2 border border-slate-200 rounded italic">"{selectedEval.comments || 'No comments provided'}"</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium mb-1">Recommendation</p>
+                    <Badge variant="neutral" className="bg-white border border-slate-200">{selectedEval.recommendation}</Badge>
+                  </div>
+                </div>
+                
+                {selectedEval.status === 'Correction Required' && selectedEval.discrepancyNote && (
+                  <div className="bg-rose-50 p-4 rounded-lg border border-rose-100 mt-4">
+                    <p className="text-xs font-semibold text-rose-700 uppercase mb-1">Discrepancy Note Flagged</p>
+                    <p className="text-sm text-rose-800">{selectedEval.discrepancyNote}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                {selectedEval.status === 'Pending Faculty Verification' && (
+                  <>
+                    <Button variant="outline" onClick={openDiscrepancyFlag}>
+                      Flag Discrepancy
+                    </Button>
+                    <Button variant="primary" onClick={handleCrossVerify}>
+                      Cross-Verify
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Discrepancy Modal */}

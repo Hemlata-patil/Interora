@@ -16,3 +16,7 @@ export const CompanyLayout: React.FC<{ children: React.ReactNode }> = ({ childre
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <AppLayout role="admin">{children}</AppLayout>
 );
+
+export const MentorLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <AppLayout role="mentor">{children}</AppLayout>
+);
