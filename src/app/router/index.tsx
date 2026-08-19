@@ -87,6 +87,7 @@ const router = createBrowserRouter([
     path: '/student/applications',
     element: <StudentLayout><ApplicationsPage /></StudentLayout>,
   },
+
   {
     path: '/student/applications/:id',
     element: <StudentLayout><ApplicationDetailsPage /></StudentLayout>,

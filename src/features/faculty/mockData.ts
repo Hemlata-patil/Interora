@@ -1318,3 +1318,42 @@ export const setMockGuidanceConversations = (data: GuidanceConversation[]) => {
   mockGuidanceConversationsData.length = 0;
   mockGuidanceConversationsData.push(...data);
 };
+
+// ==========================================
+// INTERNSHIP OFFER LETTERS
+// ==========================================
+export type OfferStatus = 'draft' | 'pending_response' | 'accepted' | 'rejected';
+export type StudentResponseStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface OfferLetterData {
+  id: string;
+  applicationId: string;
+  studentId: string;
+  internshipId: string;
+  companyId: string;
+  studentName: string;
+  companyName: string;
+  internshipTitle: string;
+  role: string;
+  startDate: string;
+  endDate: string;
+  workMode: string;
+  internshipAddress?: string;
+  stipend: string;
+  offerDate: string;
+  additionalTerms: string;
+  status: OfferStatus;
+  studentResponse: StudentResponseStatus;
+  respondedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+let mockOfferLettersData: OfferLetterData[] = [];
+
+export const mockOfferLetters = mockOfferLettersData;
+export const setMockOfferLetters = (data: OfferLetterData[]) => {
+  mockOfferLettersData = data;
+  mockOfferLettersData.length = 0;
+  mockOfferLettersData.push(...data);
+};

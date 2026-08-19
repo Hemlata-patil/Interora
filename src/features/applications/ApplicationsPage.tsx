@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
 import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
-import { Search, MapPin, Clock, DollarSign, Calendar, Compass, Eye, AlertCircle } from 'lucide-react';
+import { Search, MapPin, Clock, DollarSign, Calendar, Compass, Eye, AlertCircle, FileText, CheckCircle2, XCircle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const ApplicationsPage: React.FC = () => {
@@ -147,7 +147,7 @@ export const ApplicationsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 pt-2 sm:pt-0 shrink-0">
+                <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 pt-2 sm:pt-0 shrink-0">
                   <Link to={`/student/applications/${app.id}`}>
                     <Button variant="outline" size="sm">
                       <Eye className="w-3.5 h-3.5 mr-1.5" /> View Details

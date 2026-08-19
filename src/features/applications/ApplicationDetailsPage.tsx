@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button, Modal, Alert } from '@/components';
 import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
-import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { mockOfferLetters, setMockOfferLetters, type OfferLetterData } from '../faculty/mockData';
+import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle, X } from 'lucide-react';
 
 export const ApplicationDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +12,14 @@ export const ApplicationDetailsPage: React.FC = () => {
   const [applications, setApplications] = useState<ApplicationRecord[]>(mockApplications);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawNotice, setWithdrawNotice] = useState(false);
+
+  const [localOffers, setLocalOffers] = React.useState<OfferLetterData[]>(mockOfferLetters);
+  const [showOfferModal, setShowOfferModal] = React.useState(false);
+  const [selectedOffer, setSelectedOffer] = React.useState<OfferLetterData | null>(null);
+
+  React.useEffect(() => {
+    setMockOfferLetters(localOffers);
+  }, [localOffers]);
 
   const application = applications.find((item) => item.id === id);
 
@@ -86,11 +95,57 @@ export const ApplicationDetailsPage: React.FC = () => {
           title={application.title}
           description={`Application ID: ${application.id} â€¢ Submitted on ${application.appliedAt}`}
           action={
-            isEligibleForWithdrawal ? (
-              <Button variant="danger" size="sm" onClick={() => setIsWithdrawModalOpen(true)}>
-                <XCircle className="w-4 h-4 mr-1.5" /> Withdraw Application
-              </Button>
-            ) : null
+            <div className="flex gap-2">
+              {(() => {
+                const offer = localOffers.find(o => 
+                  o.applicationId === application.id || 
+                  o.applicationId.replace(/[^0-9]/g, '') === application.id.replace(/[^0-9]/g, '') ||
+                  o.internshipId.replace(/[^0-9]/g, '') === application.internshipId?.replace(/[^0-9]/g, '') ||
+                  o.companyName === application.companyName
+                ) || (localOffers.length > 0 ? localOffers[localOffers.length - 1] : {
+                  id: `off-demo-${Date.now()}`,
+                  applicationId: application.id,
+                  studentId: 'demo-student',
+                  internshipId: application.internshipId || 'demo-int',
+                  companyId: 'demo-company',
+                  studentName: application.applicantName,
+                  companyName: application.companyName,
+                  internshipTitle: application.title,
+                  role: application.title,
+                  startDate: new Date().toISOString(),
+                  endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+                  workMode: application.workMode,
+                  stipend: application.stipend,
+                  offerDate: new Date().toISOString(),
+                  additionalTerms: 'Standard internship terms apply.',
+                  status: 'pending_response',
+                  studentResponse: 'pending',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                } as OfferLetterData);
+
+                if (application.status === 'Selected') {
+                  return (
+                    <Button 
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedOffer(offer);
+                        setShowOfferModal(true);
+                      }}
+                    >
+                      <FileText className="w-4 h-4 mr-1.5" /> View Offer Letter
+                    </Button>
+                  );
+                }
+                return null;
+              })()}
+              {isEligibleForWithdrawal ? (
+                <Button variant="danger" size="sm" onClick={() => setIsWithdrawModalOpen(true)}>
+                  <XCircle className="w-4 h-4 mr-1.5" /> Withdraw Application
+                </Button>
+              ) : null}
+            </div>
           }
         />
       </div>
@@ -247,6 +302,135 @@ export const ApplicationDetailsPage: React.FC = () => {
           </Alert>
         </div>
       </Modal>
+
+      {/* Offer Letter Modal */}
+      {showOfferModal && selectedOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center">
+                <FileText className="w-5 h-5 mr-2 text-indigo-600" />
+                Internship Offer
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowOfferModal(false)} className="h-8 w-8 p-0 rounded-full">
+                <X className="w-5 h-5 text-slate-500" />
+              </Button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto bg-slate-50">
+              <div className="border border-slate-200 rounded-xl bg-white shadow-sm font-sans max-w-3xl mx-auto overflow-hidden">
+                <div className="bg-indigo-50/80 border-b border-indigo-100 p-8 pb-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-16 h-16 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl shadow-sm">
+                      LOGO
+                    </div>
+                    <div className="text-right text-sm text-indigo-900/80">
+                      <p className="font-bold text-indigo-950 text-base">{selectedOffer.companyName}</p>
+                      <p>{selectedOffer.internshipAddress || 'Company Address'}</p>
+                      <p>www.company.com</p>
+                    </div>
+                  </div>
+                  <h1 className="text-2xl font-black uppercase tracking-widest text-indigo-900 text-center mt-6">INTERNSHIP OFFER LETTER</h1>
+                </div>
+                
+                <div className="px-10 pb-10 space-y-6 pt-8">
+                  <div className="flex justify-between text-sm text-slate-500">
+                    <p><strong>Date:</strong> {new Date(selectedOffer.offerDate).toLocaleDateString()}</p>
+                    <p><strong>Ref:</strong> <span className="font-mono text-indigo-600">{selectedOffer.id}</span></p>
+                  </div>
+                  
+                  <div className="space-y-3 mt-6 text-slate-700">
+                    <p>Dear <strong className="text-slate-900">{selectedOffer.studentName}</strong>,</p>
+                    <p>We are pleased to offer you the position of <strong className="text-indigo-700">{selectedOffer.internshipTitle}</strong> at <strong className="text-slate-900">{selectedOffer.companyName}</strong>.</p>
+                    <p>We are excited to have you join our internship program and look forward to your contribution and learning during the internship period.</p>
+                  </div>
+                  
+                  <div className="mt-8 bg-indigo-50/50 p-6 rounded-xl border border-indigo-50/80">
+                    <h3 className="font-bold text-sm text-indigo-900 uppercase tracking-wider mb-4 border-b border-indigo-100/80 pb-2">Internship Details</h3>
+                    <div className="grid grid-cols-3 gap-y-4 text-sm">
+                      <span className="text-slate-500 font-medium">Role:</span><span className="col-span-2 font-semibold text-slate-900">{selectedOffer.role}</span>
+                      <span className="text-slate-500 font-medium">Duration:</span><span className="col-span-2 font-medium text-slate-800">{new Date(selectedOffer.startDate).toLocaleDateString()} – {new Date(selectedOffer.endDate).toLocaleDateString()}</span>
+                      <span className="text-slate-500 font-medium">Work Mode:</span><span className="col-span-2 font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md inline-block w-fit">{selectedOffer.workMode}</span>
+                      {selectedOffer.workMode !== 'Remote' && (
+                        <><span className="text-slate-500 font-medium">Location:</span><span className="col-span-2 font-medium text-slate-800">{selectedOffer.internshipAddress || 'TBD'}</span></>
+                      )}
+                      <span className="text-slate-500 font-medium mt-1">Stipend:</span><span className="col-span-2 font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-md inline-block w-fit text-base">{selectedOffer.stipend}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8">
+                    <h3 className="font-bold text-sm text-indigo-900 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Terms and Conditions</h3>
+                    <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600">
+                      <li>This internship is for the specified duration and is subject to your academic clearance.</li>
+                      <li>During your internship, you will be expected to adhere to all company policies and work expectations.</li>
+                      <li>This offer is contingent upon successful completion of your ongoing coursework and the onboarding process.</li>
+                      {selectedOffer.additionalTerms && (
+                        <li className="whitespace-pre-wrap text-slate-700">{selectedOffer.additionalTerms}</li>
+                      )}
+                    </ul>
+                  </div>
+                  
+                  <div className="pt-10 mt-10 border-t border-slate-200">
+                    <p className="mb-8 text-slate-700">Sincerely,</p>
+                    <div className="space-y-1">
+                      <p className="font-bold text-indigo-950">For {selectedOffer.companyName}</p>
+                      <p className="text-sm text-slate-500 pt-6 border-t border-slate-200 inline-block mt-4 uppercase tracking-wider font-semibold">Authorized Company Representative</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-sm font-medium">
+                Status: <Badge variant={selectedOffer.status === 'accepted' ? 'emerald' : selectedOffer.status === 'rejected' ? 'rose' : 'amber'} className="ml-2">
+                  {selectedOffer.status.replace('_', ' ').toUpperCase()}
+                </Badge>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                {selectedOffer.status === 'pending_response' && (
+                  <>
+                    <Button 
+                      className="w-full sm:w-auto text-rose-600 border-rose-200 hover:bg-rose-50" 
+                      variant="outline"
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to reject this internship offer?')) {
+                          const updated = localOffers.map(o => 
+                            o.id === selectedOffer.id 
+                              ? { ...o, status: 'rejected' as const, studentResponse: 'rejected' as const, respondedAt: new Date().toISOString() } 
+                              : o
+                          );
+                          setLocalOffers(updated);
+                          setSelectedOffer(updated.find(o => o.id === selectedOffer.id) || null);
+                        }
+                      }}
+                    >
+                      <XCircle className="w-4 h-4 mr-2" /> Reject Offer
+                    </Button>
+                    <Button 
+                      className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => {
+                        const updated = localOffers.map(o => 
+                          o.id === selectedOffer.id 
+                            ? { ...o, status: 'accepted' as const, studentResponse: 'accepted' as const, respondedAt: new Date().toISOString() } 
+                            : o
+                        );
+                        setLocalOffers(updated);
+                        setSelectedOffer(updated.find(o => o.id === selectedOffer.id) || null);
+                      }}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" /> Accept Offer
+                    </Button>
+                  </>
+                )}
+                {selectedOffer.status !== 'pending_response' && (
+                  <Button variant="outline" onClick={() => setShowOfferModal(false)}>Close</Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -6,13 +6,15 @@ import {
 } from 'lucide-react';
 import { 
   mockCompanyApplications, setMockCompanyApplications,
-  mockFacultyStudents, mockCompanyInternships
+  mockFacultyStudents, mockCompanyInternships,
+  mockOfferLetters, setMockOfferLetters
 } from '../faculty/mockData';
 import type { 
   InternshipData, 
   CompanyApplicationData, 
   CompanyApplicationStatus, 
-  SharedStudentData 
+  SharedStudentData,
+  OfferLetterData
 } from '../faculty/mockData';
 
 type ViewState = 'LIST' | 'VIEW_PROFILE';
@@ -30,6 +32,24 @@ export const ApplicantManagement: React.FC = () => {
   
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiRunComplete, setAiRunComplete] = useState(false);
+
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [offerPreviewMode, setOfferPreviewMode] = useState(false);
+  const [rejectModalState, setRejectModalState] = useState<{isOpen: boolean, appId: string | null}>({isOpen: false, appId: null});
+  const [selectModalState, setSelectModalState] = useState<{isOpen: boolean, appId: string | null}>({isOpen: false, appId: null});
+  const [offerFormData, setOfferFormData] = useState({
+    startDate: '',
+    endDate: '',
+    workMode: 'Hybrid',
+    internshipAddress: '',
+    stipend: '',
+    additionalTerms: ''
+  });
+  const [localOfferLetters, setLocalOfferLetters] = useState<OfferLetterData[]>(mockOfferLetters);
+
+  useEffect(() => {
+    setMockOfferLetters(localOfferLetters);
+  }, [localOfferLetters]);
   
   // Sync mock data
   useEffect(() => {
@@ -89,11 +109,6 @@ export const ApplicantManagement: React.FC = () => {
   };
 
   const updateAppStatus = (appId: string, status: CompanyApplicationStatus) => {
-    if (status === 'Selected') {
-      if (!window.confirm('Are you sure you want to select this candidate for the internship?')) {
-        return;
-      }
-    }
     setApplications(prev => prev.map(a => a.id === appId ? { ...a, applicationStatus: status } : a));
     
     // Update local current app if viewing profile
@@ -120,6 +135,246 @@ export const ApplicantManagement: React.FC = () => {
       default: return null;
     }
   };
+
+  const rejectModalJSX = rejectModalState.isOpen && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 animate-in fade-in">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Reject Candidate?</h3>
+        <p className="text-slate-600 mb-6">Are you sure you want to reject this applicant? They will no longer be eligible for an Offer Letter.</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => setRejectModalState({ isOpen: false, appId: null })}>Cancel</Button>
+          <Button 
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+            onClick={() => {
+              if (rejectModalState.appId) {
+                updateAppStatus(rejectModalState.appId, 'Rejected');
+                setRejectModalState({ isOpen: false, appId: null });
+              }
+            }}
+          >
+            Reject Candidate
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const selectModalJSX = selectModalState.isOpen && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 animate-in fade-in">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Select Candidate?</h3>
+        <p className="text-slate-600 mb-6">Are you sure you want to officially select this candidate for the internship? You will be able to create an Offer Letter immediately.</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => setSelectModalState({ isOpen: false, appId: null })}>Cancel</Button>
+          <Button 
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => {
+              if (selectModalState.appId) {
+                updateAppStatus(selectModalState.appId, 'Selected');
+                setSelectModalState({ isOpen: false, appId: null });
+              }
+            }}
+          >
+            Select Candidate
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const offerModalJSX = showOfferModal && currentApp ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+          <h2 className="text-lg font-bold text-slate-900">
+            {offerPreviewMode ? 'Internship Offer Letter' : 'Create Offer Letter'}
+          </h2>
+          <Button variant="ghost" size="sm" onClick={() => setShowOfferModal(false)} className="h-8 w-8 p-0 rounded-full">
+            <X className="w-5 h-5 text-slate-500" />
+          </Button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto">
+          {!offerPreviewMode ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Student Name</label>
+                  <Input value={currentApp.student.studentName} disabled className="bg-slate-50" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Internship Role</label>
+                  <Input value={currentApp.app.internshipId ? mockCompanyInternships.find(i => i.id === currentApp.app.internshipId)?.title || '' : ''} disabled className="bg-slate-50" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Start Date</label>
+                  <Input type="date" value={offerFormData.startDate} onChange={e => setOfferFormData({...offerFormData, startDate: e.target.value})} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">End Date</label>
+                  <Input type="date" value={offerFormData.endDate} onChange={e => setOfferFormData({...offerFormData, endDate: e.target.value})} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Work Mode</label>
+                  <select 
+                    value={offerFormData.workMode} 
+                    onChange={e => setOfferFormData({...offerFormData, workMode: e.target.value})}
+                    className="w-full bg-white border border-slate-300 rounded-lg text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="On-site">On-site</option>
+                    <option value="Remote">Remote</option>
+                    <option value="Hybrid">Hybrid</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Stipend (Monthly)</label>
+                  <Input placeholder="e.g. ₹15,000" value={offerFormData.stipend} onChange={e => setOfferFormData({...offerFormData, stipend: e.target.value})} />
+                </div>
+                {offerFormData.workMode !== 'Remote' && (
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-sm font-medium text-slate-700">Internship Address</label>
+                    <Input placeholder="e.g. ABC Technologies, Hinjewadi Phase 1, Pune, Maharashtra" value={offerFormData.internshipAddress} onChange={e => setOfferFormData({...offerFormData, internshipAddress: e.target.value})} />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5 pt-2">
+                <label className="text-sm font-medium text-slate-700">Additional Terms & Information</label>
+                <textarea 
+                  className="w-full border border-slate-300 rounded-lg p-3 text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Add any specific terms, conditions, or welcome message..."
+                  value={offerFormData.additionalTerms}
+                  onChange={e => setOfferFormData({...offerFormData, additionalTerms: e.target.value})}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-xl bg-white shadow-sm font-sans max-w-3xl mx-auto overflow-hidden">
+              <div className="bg-indigo-50/80 border-b border-indigo-100 p-8 pb-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="w-16 h-16 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl shadow-sm">
+                    LOGO
+                  </div>
+                  <div className="text-right text-sm text-indigo-900/80">
+                    <p className="font-bold text-indigo-950 text-base">{currentApp.student.company}</p>
+                    <p>{offerFormData.internshipAddress || 'Company Address'}</p>
+                    <p>www.company.com</p>
+                  </div>
+                </div>
+                <h1 className="text-2xl font-black uppercase tracking-widest text-indigo-900 text-center mt-6">INTERNSHIP OFFER LETTER</h1>
+              </div>
+              
+              <div className="px-10 pb-10 space-y-6 pt-8">
+                <div className="flex justify-between text-sm text-slate-500">
+                  <p><strong>Date:</strong> {new Date().toLocaleDateString()}</p>
+                  <p><strong>Ref:</strong> <span className="font-mono text-indigo-600">{`OFF-${Math.floor(Math.random() * 10000)}`}</span></p>
+                </div>
+                
+                <div className="space-y-3 mt-6 text-slate-700">
+                  <p>Dear <strong className="text-slate-900">{currentApp.student.studentName}</strong>,</p>
+                  <p>We are pleased to offer you the position of <strong className="text-indigo-700">{mockCompanyInternships.find(i => i.id === currentApp.app.internshipId)?.title}</strong> at <strong className="text-slate-900">{currentApp.student.company}</strong>.</p>
+                  <p>We are excited to have you join our internship program and look forward to your contribution and learning during the internship period.</p>
+                </div>
+                
+                <div className="mt-8 bg-indigo-50/50 p-6 rounded-xl border border-indigo-50/80">
+                  <h3 className="font-bold text-sm text-indigo-900 uppercase tracking-wider mb-4 border-b border-indigo-100/80 pb-2">Internship Details</h3>
+                  <div className="grid grid-cols-3 gap-y-4 text-sm">
+                    <span className="text-slate-500 font-medium">Role:</span><span className="col-span-2 font-semibold text-slate-900">{mockCompanyInternships.find(i => i.id === currentApp.app.internshipId)?.title}</span>
+                    <span className="text-slate-500 font-medium">Department:</span><span className="col-span-2 font-medium text-slate-800">{currentApp.student.department || 'Engineering'}</span>
+                    <span className="text-slate-500 font-medium">Duration:</span><span className="col-span-2 font-medium text-slate-800">{new Date(offerFormData.startDate).toLocaleDateString()} – {new Date(offerFormData.endDate).toLocaleDateString()}</span>
+                    <span className="text-slate-500 font-medium">Work Mode:</span><span className="col-span-2 font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md inline-block w-fit">{offerFormData.workMode}</span>
+                    {offerFormData.workMode !== 'Remote' && (
+                      <><span className="text-slate-500 font-medium">Location:</span><span className="col-span-2 font-medium text-slate-800">{offerFormData.internshipAddress || 'TBD'}</span></>
+                    )}
+                    <span className="text-slate-500 font-medium mt-1">Stipend:</span><span className="col-span-2 font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-md inline-block w-fit text-base">{offerFormData.stipend}</span>
+                  </div>
+                </div>
+                
+                <div className="mt-8">
+                  <h3 className="font-bold text-sm text-indigo-900 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Terms and Conditions</h3>
+                  <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600">
+                    <li>This internship is for the specified duration and is subject to your academic clearance.</li>
+                    <li>During your internship, you will be expected to adhere to all company policies and work expectations.</li>
+                    <li>This offer is contingent upon successful completion of your ongoing coursework and the onboarding process.</li>
+                    {offerFormData.additionalTerms && (
+                      <li className="whitespace-pre-wrap text-slate-700">{offerFormData.additionalTerms}</li>
+                    )}
+                  </ul>
+                </div>
+                
+                <div className="pt-10 mt-10 border-t border-slate-200">
+                  <p className="mb-8 text-slate-700">Sincerely,</p>
+                  <div className="space-y-1">
+                    <p className="font-bold text-indigo-950">For {currentApp.student.company}</p>
+                    <p className="text-sm text-slate-500 pt-6 border-t border-slate-200 inline-block mt-4 uppercase tracking-wider font-semibold">Authorized Company Representative</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+          {!offerPreviewMode ? (
+            <>
+              <Button variant="outline" onClick={() => setShowOfferModal(false)}>Cancel</Button>
+              <Button 
+                className="bg-indigo-600 text-white"
+                disabled={!offerFormData.startDate || !offerFormData.endDate || !offerFormData.stipend}
+                onClick={() => setOfferPreviewMode(true)}
+              >
+                Preview Offer Letter
+              </Button>
+            </>
+          ) : (
+            <>
+              {localOfferLetters.find(o => o.applicationId === currentApp.app.id) ? (
+                <Button variant="outline" onClick={() => setShowOfferModal(false)}>Close</Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => setOfferPreviewMode(false)}>Edit</Button>
+                  <Button 
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      const newOffer: OfferLetterData = {
+                        id: `off-${Date.now()}`,
+                        applicationId: currentApp.app.id,
+                        studentId: currentApp.student.id,
+                        internshipId: currentApp.app.internshipId,
+                        companyId: currentApp.app.companyId,
+                        studentName: currentApp.student.studentName,
+                        companyName: currentApp.student.company,
+                        internshipTitle: mockCompanyInternships.find(i => i.id === currentApp.app.internshipId)?.title || 'Internship',
+                        role: mockCompanyInternships.find(i => i.id === currentApp.app.internshipId)?.title || 'Intern',
+                        startDate: offerFormData.startDate,
+                        endDate: offerFormData.endDate,
+                        workMode: offerFormData.workMode,
+                        internshipAddress: offerFormData.workMode !== 'Remote' ? offerFormData.internshipAddress : undefined,
+                        stipend: offerFormData.stipend,
+                        offerDate: new Date().toISOString(),
+                        additionalTerms: offerFormData.additionalTerms,
+                        status: 'pending_response',
+                        studentResponse: 'pending',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                      };
+                      setLocalOfferLetters([...localOfferLetters, newOffer]);
+                      setShowOfferModal(false);
+                      
+                      if (currentApp.app.applicationStatus !== 'Selected') {
+                        updateAppStatus(currentApp.app.id, 'Selected');
+                      }
+                    }}
+                  >
+                    Send Offer Letter
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (viewState === 'VIEW_PROFILE' && currentApp) {
     const { app, student } = currentApp;
@@ -220,35 +475,118 @@ export const ApplicantManagement: React.FC = () => {
 
             <Card title="Company Decision" className="shadow-sm">
               <div className="space-y-3">
-                <Button 
-                  className="w-full justify-center" 
-                  variant={app.applicationStatus === 'Shortlisted' ? 'secondary' : 'outline'}
-                  onClick={() => updateAppStatus(app.id, app.applicationStatus === 'Shortlisted' ? 'Under Review' : 'Shortlisted')}
-                >
-                  <Sparkles className="w-4 h-4 mr-2" /> 
-                  {app.applicationStatus === 'Shortlisted' ? 'Remove from Shortlist' : 'Mark as Shortlisted'}
-                </Button>
+                {app.applicationStatus === 'Rejected' && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-rose-50 rounded-lg border border-rose-100 mb-4">
+                    <X className="w-8 h-8 text-rose-500 mb-2" />
+                    <p className="font-bold text-rose-700">Candidate Rejected</p>
+                  </div>
+                )}
+
+                {app.applicationStatus === 'Selected' && (
+                  <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 rounded-lg border border-emerald-100 mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+                    <p className="font-bold text-emerald-700">Candidate Selected</p>
+                  </div>
+                )}
+
+                {app.applicationStatus !== 'Selected' && app.applicationStatus !== 'Rejected' && (
+                  <>
+                    <Button 
+                      className="w-full justify-center" 
+                      variant={app.applicationStatus === 'Shortlisted' ? 'secondary' : 'outline'}
+                      onClick={() => updateAppStatus(app.id, app.applicationStatus === 'Shortlisted' ? 'Under Review' : 'Shortlisted')}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" /> 
+                      {app.applicationStatus === 'Shortlisted' ? 'Remove from Shortlist' : 'Mark as Shortlisted'}
+                    </Button>
+                    
+                    <Button 
+                      className="w-full justify-center bg-emerald-600 hover:bg-emerald-700 text-white" 
+                      onClick={() => setSelectModalState({ isOpen: true, appId: app.id })}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" /> 
+                      Select Candidate
+                    </Button>
+                  </>
+                )}
+
+                {app.applicationStatus === 'Selected' && (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-2">Offer Status</h4>
+                    {(() => {
+                      const existingOffer = localOfferLetters.find(o => o.applicationId === app.id);
+                      if (existingOffer) {
+                        return (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-slate-600">Status:</span>
+                              <Badge variant={
+                                existingOffer.status === 'accepted' ? 'emerald' : 
+                                existingOffer.status === 'rejected' ? 'rose' : 'amber'
+                              }>
+                                {existingOffer.status.replace('_', ' ').toUpperCase()}
+                              </Badge>
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              className="w-full mt-2"
+                              onClick={() => {
+                                setOfferFormData({
+                                  startDate: existingOffer.startDate,
+                                  endDate: existingOffer.endDate,
+                                  workMode: existingOffer.workMode,
+                                  internshipAddress: existingOffer.internshipAddress || '',
+                                  stipend: existingOffer.stipend,
+                                  additionalTerms: existingOffer.additionalTerms
+                                });
+                                setOfferPreviewMode(true);
+                                setShowOfferModal(true);
+                              }}
+                            >
+                              View Offer Details
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return (
+                        <Button 
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                          onClick={() => {
+                            setOfferFormData({
+                              startDate: '',
+                              endDate: '',
+                              workMode: 'Hybrid',
+                              internshipAddress: '',
+                              stipend: '',
+                              additionalTerms: ''
+                            });
+                            setOfferPreviewMode(false);
+                            setShowOfferModal(true);
+                          }}
+                        >
+                          Create Offer Letter
+                        </Button>
+                      );
+                    })()}
+                  </div>
+                )}
                 
-                <Button 
-                  className="w-full justify-center bg-emerald-600 hover:bg-emerald-700 text-white" 
-                  disabled={app.applicationStatus === 'Selected'}
-                  onClick={() => updateAppStatus(app.id, 'Selected')}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" /> 
-                  {app.applicationStatus === 'Selected' ? 'Candidate Selected' : 'Select Candidate'}
-                </Button>
-                
-                <Button 
-                  className="w-full justify-center text-rose-600 border-rose-200 hover:bg-rose-50" 
-                  variant="outline"
-                  onClick={() => updateAppStatus(app.id, 'Rejected')}
-                >
-                  Reject Candidate
-                </Button>
+                {app.applicationStatus !== 'Rejected' && (
+                  <Button 
+                    className="w-full justify-center text-rose-600 border-rose-200 hover:bg-rose-50 mt-4" 
+                    variant="outline"
+                    onClick={() => setRejectModalState({ isOpen: true, appId: app.id })}
+                  >
+                    {app.applicationStatus === 'Selected' ? 'Withdraw Selection / Reject' : 'Reject Candidate'}
+                  </Button>
+                )}
               </div>
             </Card>
           </div>
         </div>
+      {offerModalJSX}
+      {rejectModalJSX}
+      {selectModalJSX}
       </div>
     );
   }
@@ -449,6 +787,15 @@ export const ApplicantManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Offer Letter Modal */}
+      {offerModalJSX}
+
+      {/* Reject Confirmation Modal */}
+      {rejectModalJSX}
+
+      {/* Select Confirmation Modal */}
+      {selectModalJSX}
     </div>
   );
 };
