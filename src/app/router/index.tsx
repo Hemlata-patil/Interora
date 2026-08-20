@@ -60,6 +60,7 @@ import { InternshipInsights } from '@/features/faculty/InternshipInsights';
 import { CrossVerification } from '@/features/faculty/CrossVerification';
 import { StudentEvaluations } from '@/features/faculty/StudentEvaluations';
 import { PlacementAnalytics } from '@/features/faculty/PlacementAnalytics';
+import { FacultyProfile } from '@/features/faculty/FacultyProfile';
 import { StudentGuidance } from '@/features/faculty/StudentGuidance';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
@@ -184,6 +185,10 @@ const router = createBrowserRouter([
   {
     path: '/faculty/placement-analytics',
     element: <FacultyLayout><PlacementAnalytics /></FacultyLayout>,
+  },
+  {
+    path: '/faculty/profile',
+    element: <FacultyLayout><FacultyProfile /></FacultyLayout>,
   },
 
   // Company Routes Group

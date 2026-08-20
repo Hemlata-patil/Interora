@@ -182,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/student/profile',
+            path: '/faculty/profile',
             icon: User,
             group: 'Account',
           },
@@ -362,7 +362,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/student/profile',
+            path: '/admin/profile',
             icon: User,
             group: 'Account',
           },
@@ -394,7 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Interora
               </h1>
               <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
-                Learn ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Intern ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Grow
+                Learn ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Intern ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Grow
               </span>
             </div>
           </div>
