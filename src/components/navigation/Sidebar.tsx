@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Compass,
@@ -393,9 +393,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <h1 className="text-base font-bold text-slate-900 leading-none">
                 Interora
               </h1>
-              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
-                Learn ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Intern ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Grow
-              </span>
+            <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block mt-1">
+              Learn | Intern | Grow
+            </span>
             </div>
           </div>
 
