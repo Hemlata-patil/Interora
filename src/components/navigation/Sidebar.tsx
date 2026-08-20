@@ -27,26 +27,18 @@ import interoraLogo from '@/assets/interora_logo.png';
 export interface NavItem {
   label: string;
   path: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ElementType;
   badge?: string;
   group?: string;
 }
 
-export interface SidebarProps {
-  role?: 'student' | 'faculty' | 'company' | 'mentor' | 'admin';
-  userEmail?: string;
-  userName?: string;
+interface SidebarProps {
   isOpen?: boolean;
+  role: 'student' | 'faculty' | 'company' | 'mentor' | 'admin';
   onClose?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  role = 'student',
-  userEmail = 'alex.johnson@student.edu',
-  userName = 'Alex Johnson',
-  isOpen = true,
-  onClose,
-}) => {
+export const Sidebar: React.FC<SidebarProps> = ({ role, onClose }) => {
   const location = useLocation();
 
   const getRoleNavItems = (): NavItem[] => {
@@ -55,64 +47,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return [
           {
             label: 'Dashboard',
-            path: '/student/dashboard',
-            icon: Compass,
-            group: 'Student Journey',
+            path: '/student',
+            icon: LayoutDashboard,
+            group: 'Overview',
           },
           {
-            label: 'Internship Discovery',
-            path: '/student/internships',
-            icon: Briefcase,
-            group: 'Student Journey',
+            label: 'Explore Internships',
+            path: '/student/marketplace',
+            icon: Compass,
+            group: 'Internships',
           },
           {
             label: 'My Applications',
             path: '/student/applications',
             icon: FileText,
-            group: 'Student Journey',
+            group: 'Internships',
           },
           {
-            label: 'Chat',
-            path: '/student/chat',
-            icon: MessageCircle,
-            group: 'Student Journey',
-          },
-          {
-            label: 'Attendance',
-            path: '/student/attendance',
-            icon: CheckSquare,
-            group: 'Student Journey',
-          },
-          {
-            label: 'Productivity',
-            path: '/student/tasks',
-            icon: BookOpen,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Milestones & Evaluations',
-            path: '/student/milestones',
-            icon: Target,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Certificates & Graduation',
-            path: '/student/certificates',
-            icon: Award,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Career Prep',
-            path: '/student/career-prep',
-            icon: BookOpen,
-            group: 'Career & Growth',
-          },
-          {
-            label: 'AI & Career',
-            path: '/student/ai-career',
+            label: 'AI Career Coach',
+            path: '/student/ai-career-prep',
             icon: Sparkles,
             badge: 'AI',
             group: 'Career & Growth',
+          },
+          {
+            label: 'Attendance & Check-in',
+            path: '/student/attendance',
+            icon: CheckSquare,
+            group: 'Daily Work',
+          },
+          {
+            label: 'My Tasks & Submissions',
+            path: '/student/tasks',
+            icon: Target,
+            group: 'Daily Work',
+          },
+          {
+            label: 'Messages & Chat',
+            path: '/student/chat',
+            icon: MessageCircle,
+            group: 'Communication',
+          },
+          {
+            label: 'Evaluation & Feedback',
+            path: '/student/evaluation',
+            icon: FileCheck,
+            group: 'Assessment',
+          },
+          {
+            label: 'Certificates',
+            path: '/student/certificates',
+            icon: Award,
+            group: 'Credentials',
           },
           {
             label: 'Profile',
@@ -127,36 +113,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             label: 'Dashboard',
             path: '/faculty',
-            icon: Compass,
+            icon: LayoutDashboard,
             group: 'Overview',
           },
           {
-            label: 'Approvals',
+            label: 'Application Approvals',
             path: '/faculty/approvals',
-            icon: CheckSquare,
-            badge: '3',
-            group: 'Workflows',
+            icon: FileText,
+            group: 'Approvals',
+          },
+          {
+            label: 'Assigned Students',
+            path: '/faculty/students',
+            icon: Users,
+            group: 'Students',
           },
           {
             label: 'Student Guidance',
             path: '/faculty/guidance',
-            icon: Sparkles,
-            group: 'Workflows',
+            icon: BookOpen,
+            group: 'Students',
           },
           {
-            label: 'Evaluations',
+            label: 'Evaluations & Grading',
             path: '/faculty/evaluations',
             icon: FileCheck,
-            group: 'Workflows',
+            group: 'Assessment',
           },
           {
-            label: 'Students',
-            path: '/faculty/students',
-            icon: Users,
-            group: 'Monitoring',
-          },
-          {
-            label: 'Attendance',
+            label: 'Attendance & Logs',
             path: '/faculty/attendance',
             icon: CheckSquare,
             group: 'Monitoring',
@@ -193,68 +178,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             label: 'Dashboard',
             path: '/company',
-            icon: Compass,
+            icon: LayoutDashboard,
             group: 'Overview',
           },
           {
-            label: 'Company Profile',
-            path: '/company/profile',
-            icon: User,
-            group: 'Home',
-          },
-          {
-            label: 'Internships',
-            path: '/company/listings',
+            label: 'Post Internship',
+            path: '/company/post-internship',
             icon: Briefcase,
-            group: 'Operations',
+            group: 'Recruitment',
           },
           {
             label: 'Applicants',
             path: '/company/applicants',
             icon: Users,
-            group: 'Operations',
+            group: 'Recruitment',
           },
           {
-            label: 'My Interns',
+            label: 'Manage Interns',
             path: '/company/interns',
             icon: GraduationCap,
-            group: 'Monitoring',
+            group: 'Management',
           },
           {
-            label: 'Mentor Management',
+            label: 'Industry Mentors',
             path: '/company/mentors',
             icon: Users,
-            group: 'Monitoring',
-          },
-          {
-            label: 'Milestones',
-            path: '/company/milestones',
-            icon: FileCheck,
-            group: 'Monitoring',
-          },
-          {
-            label: 'Evaluations',
-            path: '/company/evaluations',
-            icon: ShieldCheck,
-            group: 'Completion',
-          },
-          {
-            label: 'PPO / Conversion',
-            path: '/company/ppo',
-            icon: Award,
-            group: 'Completion',
+            group: 'Management',
           },
           {
             label: 'Certificates',
             path: '/company/certificates',
             icon: Award,
-            group: 'Completion',
+            group: 'Credentials',
           },
           {
-            label: 'Notifications',
-            path: '/company/notifications',
-            icon: Sparkles,
-            group: 'Home',
+            label: 'Profile',
+            path: '/company/profile',
+            icon: User,
+            group: 'Account',
           },
         ];
 
@@ -264,37 +225,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: 'Dashboard',
             path: '/mentor',
             icon: LayoutDashboard,
-            group: 'Home',
+            group: 'Overview',
           },
           {
             label: 'My Interns',
             path: '/mentor/interns',
             icon: Users,
-            group: 'Monitoring',
+            group: 'Mentorship',
           },
           {
-            label: 'Tasks & Proof',
+            label: 'Tasks & Milestones',
             path: '/mentor/tasks',
-            icon: CheckSquare,
-            group: 'Monitoring',
+            icon: Target,
+            group: 'Mentorship',
           },
           {
-            label: 'Milestones',
-            path: '/mentor/milestones',
-            icon: FileCheck,
-            group: 'Monitoring',
+            label: 'Attendance & Proofs',
+            path: '/mentor/attendance',
+            icon: CheckSquare,
+            group: 'Verification',
           },
           {
             label: 'Evaluations',
             path: '/mentor/evaluations',
             icon: FileCheck,
-            group: 'Completion',
+            group: 'Assessment',
           },
           {
-            label: 'Notifications',
-            path: '/mentor/notifications',
-            icon: Sparkles,
-            group: 'Home',
+            label: 'Chat with Interns',
+            path: '/mentor/chat',
+            icon: MessageCircle,
+            group: 'Communication',
           },
           {
             label: 'Profile',
@@ -374,131 +335,96 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems = getRoleNavItems();
 
+  const groupedItems = navItems.reduce<Record<string, NavItem[]>>((acc, item) => {
+    const group = item.group || 'General';
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(item);
+    return acc;
+  }, {});
+
   return (
-    <aside
-      className={`w-64 bg-white border-r border-slate-200 min-h-screen flex flex-col justify-between shrink-0 shadow-xs transition-all ${
-        isOpen ? 'block' : 'hidden md:block'
-      }`}
-    >
-      <div>
-        {/* Brand Logo & Platform Title */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <img
-              src={interoraLogo}
-              alt="Interora Logo"
-              className="h-9 w-auto object-contain"
-            />
-            <div>
-              <h1 className="text-base font-bold text-slate-900 leading-none">
-                Interora
-              </h1>
-              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
-                Learn ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Intern ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Grow
-              </span>
-            </div>
-          </div>
-
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="md:hidden text-slate-400 hover:text-slate-600 p-1"
-              aria-label="Close navigation"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
-        </div>
-
-        {/* Role Identity Banner */}
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-          <div className="text-xs">
-            <span className="text-slate-400 block text-[10px] uppercase font-semibold">
-              Active Role
-            </span>
-            <span className="font-bold text-slate-800 capitalize">
-              {role} Portal
+    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 z-30">
+      <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src={interoraLogo} alt="Interora Logo" className="h-8 w-auto object-contain" />
+          <div>
+            <h1 className="text-base font-bold text-slate-900 leading-none">
+              Interora
+            </h1>
+            <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
+              Learn â€¢ Intern â€¢ Grow
             </span>
           </div>
-
-          <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded uppercase">
-            AlphaStack
-          </span>
         </div>
 
-        {/* Navigation List */}
-        <nav className="p-3 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-
-            const isActive =
-              location.pathname === item.path ||
-              (item.path !== '/' &&
-                item.path !== '/student/dashboard' &&
-                item.path !== '/faculty' &&
-                item.path !== '/company' &&
-                item.path !== '/mentor' &&
-                item.path !== '/admin' &&
-                location.pathname.startsWith(`${item.path}/`));
-
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={() =>
-                  `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`
-                }
-              >
-                <div className="flex items-center space-x-2.5">
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-
-                {item.badge && (
-                  <span
-                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
-                      isActive
-                        ? 'bg-white text-indigo-700'
-                        : 'bg-indigo-100 text-indigo-700'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </NavLink>
-            );
-          })}
-        </nav>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+            aria-label="Close Sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
-      {/* User Footer Profile */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-              {userName.charAt(0).toUpperCase()}
+      <nav className="flex-1 overflow-y-auto p-4 space-y-6">
+        {Object.entries(groupedItems).map(([groupName, items]) => (
+          <div key={groupName} className="space-y-1">
+            <div className="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              {groupName}
             </div>
+            {items.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                item.path === '/student' || item.path === '/faculty' || item.path === '/company' || item.path === '/admin' || item.path === '/mentor'
+                  ? location.pathname === item.path
+                  : location.pathname.startsWith(item.path);
 
-            <div className="truncate">
-              <span className="text-xs font-bold text-slate-800 block truncate">
-                {userName}
-              </span>
-              <span className="text-[10px] text-slate-400 block truncate">
-                {userEmail}
-              </span>
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+
+      <div className="p-4 border-t border-slate-200">
+        <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+              A
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 truncate">Alex Johnson</p>
+              <p className="text-[10px] text-slate-500 truncate">alex.johnson@student.edu</p>
             </div>
           </div>
-
-          <NavLink
-            to="/login"
-            className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
-            title="Log Out"
-          >
+          <NavLink to="/login" className="text-slate-400 hover:text-slate-600 p-1 shrink-0">
             <LogOut className="w-4 h-4" />
           </NavLink>
         </div>
@@ -506,3 +432,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
+
