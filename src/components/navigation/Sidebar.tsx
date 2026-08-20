@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'faculty':
         return [
           {
-            label: 'Overview',
+            label: 'Dashboard',
             path: '/faculty',
             icon: Compass,
             group: 'Overview',
@@ -182,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/admin/profile',
+            path: '/student/profile',
             icon: User,
             group: 'Account',
           },
@@ -191,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'company':
         return [
           {
-            label: 'Overview',
+            label: 'Dashboard',
             path: '/company',
             icon: Compass,
             group: 'Overview',
@@ -298,7 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/admin/profile',
+            path: '/student/profile',
             icon: User,
             group: 'Account',
           },
@@ -362,7 +362,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/admin/profile',
+            path: '/student/profile',
             icon: User,
             group: 'Account',
           },
@@ -446,9 +446,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
-                className={({ isActive: linkActive }) =>
+                className={() =>
                   `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    linkActive || isActive
+                    isActive
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`

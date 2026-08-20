@@ -7,6 +7,8 @@ import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout 
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
+import { StudentChat } from '@/features/student/StudentChat';
+import { StudentCareerPrep } from '@/features/student/StudentCareerPrep';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
 import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
 import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPage';
@@ -95,6 +97,14 @@ const router = createBrowserRouter([
   {
     path: '/student/applications',
     element: <StudentLayout><ApplicationsPage /></StudentLayout>,
+  },
+  {
+    path: '/student/chat',
+    element: <StudentLayout><StudentChat /></StudentLayout>,
+  },
+  {
+    path: '/student/career-prep',
+    element: <StudentLayout><StudentCareerPrep /></StudentLayout>,
   },
 
   {
