@@ -20,6 +20,7 @@ import {
   LayoutDashboard,
   FileCheck,
   TrendingUp,
+  Building2,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -181,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/student/profile',
+            path: '/admin/profile',
             icon: User,
             group: 'Account',
           },
@@ -297,7 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/student/profile',
+            path: '/admin/profile',
             icon: User,
             group: 'Account',
           },
@@ -306,10 +307,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'admin':
         return [
           {
-            label: 'Overview',
+            label: 'Dashboard',
             path: '/admin',
-            icon: Compass,
+            icon: LayoutDashboard,
             group: 'Overview',
+          },
+          {
+            label: 'Student Applications',
+            path: '/admin/applications',
+            icon: FileText,
+            group: 'Administration',
           },
           {
             label: 'User Management',
@@ -322,6 +329,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             path: '/admin/internships',
             icon: Briefcase,
             group: 'Administration',
+          },
+          {
+            label: 'Industry & Company Management',
+            path: '/admin/companies',
+            icon: Building2,
+            group: 'Administration',
+          },
+          {
+            label: 'Faculty Mentor Management',
+            path: '/admin/faculty-mentors',
+            icon: GraduationCap,
+            group: 'Administration',
+          },
+          {
+            label: 'PPO Approvals',
+            path: '/admin/ppos',
+            icon: CheckSquare,
+            group: 'Oversight',
           },
           {
             label: 'Certificates',
@@ -337,12 +362,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           {
             label: 'Profile',
-            path: '/student/profile',
+            path: '/admin/profile',
             icon: User,
             group: 'Account',
           },
         ];
-
       default:
         return [];
     }
@@ -370,7 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Interora
               </h1>
               <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
-                Learn • Intern • Grow
+                Learn ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Intern ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Grow
               </span>
             </div>
           </div>

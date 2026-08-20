@@ -36,6 +36,15 @@ import { CompanyCertificates } from '@/features/company/CompanyCertificates';
 import { CompanyNotifications } from '@/features/company/CompanyNotifications';
 import { MentorManagement } from '@/features/company/MentorManagement';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
+import { AdminUsers } from '@/features/admin/AdminUsers';
+import { AdminInternships } from '@/features/admin/AdminInternships';
+import { AdminCertificates } from '@/features/admin/AdminCertificates';
+import { AdminAnalytics } from '@/features/admin/AdminAnalytics';
+import { AdminApplications } from '@/features/admin/AdminApplications';
+import { AdminProfile } from '@/features/admin/AdminProfile';
+import { AdminPPOs } from '@/features/admin/AdminPPOs';
+import { AdminCompanies } from '@/features/admin/AdminCompanies';
+import { AdminFacultyMentors } from '@/features/admin/AdminFacultyMentors';
 import { MentorDashboard } from '@/features/companyMentor/MentorDashboard';
 import { MentorMyInterns } from '@/features/companyMentor/MentorMyInterns';
 import { MentorTasks } from '@/features/companyMentor/MentorTasks';
@@ -265,20 +274,40 @@ const router = createBrowserRouter([
     element: <AdminLayout><AdminDashboard /></AdminLayout>,
   },
   {
+    path: '/admin/applications',
+    element: <AdminLayout><AdminApplications /></AdminLayout>,
+  },
+  {
+    path: '/admin/ppos',
+    element: <AdminLayout><AdminPPOs /></AdminLayout>,
+  },
+  {
     path: '/admin/users',
-    element: <AdminLayout><FeaturePlaceholder title="User Management" category="Admin Operations" /></AdminLayout>,
+    element: <AdminLayout><AdminUsers /></AdminLayout>,
   },
   {
     path: '/admin/internships',
-    element: <AdminLayout><FeaturePlaceholder title="Platform Internships" category="Admin Operations" /></AdminLayout>,
+    element: <AdminLayout><AdminInternships /></AdminLayout>,
+  },
+  {
+    path: '/admin/companies',
+    element: <AdminLayout><AdminCompanies /></AdminLayout>,
+  },
+  {
+    path: '/admin/faculty-mentors',
+    element: <AdminLayout><AdminFacultyMentors /></AdminLayout>,
   },
   {
     path: '/admin/certificates',
-    element: <AdminLayout><FeaturePlaceholder title="Certificates Oversight" category="Admin Operations" /></AdminLayout>,
+    element: <AdminLayout><AdminCertificates /></AdminLayout>,
   },
   {
     path: '/admin/analytics',
-    element: <AdminLayout><FeaturePlaceholder title="Analytics & AI Services" category="System Oversight" /></AdminLayout>,
+    element: <AdminLayout><AdminAnalytics /></AdminLayout>,
+  },
+  {
+    path: '/admin/profile',
+    element: <AdminLayout><AdminProfile /></AdminLayout>,
   },
 
   // Fallback Route

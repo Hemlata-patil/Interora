@@ -10,7 +10,7 @@ import {
   Select, 
   EmptyState 
 } from '@/components';
-import { mockFacultyStudents } from './mockData';
+import { mockFacultyStudents, mockCompanyApplications, setMockCompanyApplications } from './mockData';
 import type { SharedStudentData, ApplicationStatus } from './mockData';
 import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';

@@ -84,7 +84,7 @@ export const ApplicantManagement: React.FC = () => {
                             student.skills.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
       
       // 2. Match Faculty Filter
-      const matchesFaculty = filterFaculty === 'All' || app.facultyApprovalStatus === filterFaculty;
+      const matchesFaculty = filterFaculty === 'All' ? app.facultyApprovalStatus === 'approved' : app.facultyApprovalStatus === filterFaculty;
       
       // 3. Match App Status Filter
       const matchesStatus = filterStatus === 'All' || app.applicationStatus === filterStatus;
