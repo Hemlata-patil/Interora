@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button, Modal, Alert } from '@/components';
 import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
 import { mockOfferLetters, setMockOfferLetters, type OfferLetterData } from '../faculty/mockData';
-import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle, X } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle, X, Download } from 'lucide-react';
 
 export const ApplicationDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -388,6 +388,13 @@ export const ApplicationDetailsPage: React.FC = () => {
                 </Badge>
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
+                <Button 
+                  variant="outline" 
+                  onClick={() => alert('Offer letter download started')} 
+                  className="w-full sm:w-auto text-slate-600 border-slate-200 hover:bg-slate-50"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download
+                </Button>
                 {selectedOffer.status === 'pending_response' && (
                   <>
                     <Button 
