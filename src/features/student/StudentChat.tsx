@@ -125,7 +125,7 @@ export const StudentChat: React.FC = () => {
               <div className="w-20 h-20 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center mb-4">
                 <User className="w-10 h-10" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Dr. Priya Sharma</h3>
+              <h3 className="text-lg font-bold text-slate-900">Dr. Rajesh Sharma (CS1 Mentor)</h3>
               <p className="text-sm text-slate-500 font-medium">Faculty Mentor / Coordinator</p>
 
               <div className="w-full h-px bg-slate-100 my-4" />
@@ -152,7 +152,7 @@ export const StudentChat: React.FC = () => {
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Dr. Priya Sharma</h3>
+                <h3 className="text-sm font-bold text-slate-900">Dr. Rajesh Sharma (CS1 Mentor)</h3>
                 <div className="flex items-center text-xs text-emerald-600 font-medium">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full mr-1.5" />
                   Online
