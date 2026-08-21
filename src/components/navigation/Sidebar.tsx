@@ -15,8 +15,13 @@ import {
   LogOut,
   X,
   Target,
-  BookOpen,
   MessageCircle,
+  BookOpen,
+  LayoutDashboard,
+  FileCheck,
+  TrendingUp,
+  Building2,
+  Clock,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -49,17 +54,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
     switch (role) {
       case 'student':
         return [
-          { label: 'Dashboard', path: '/student/dashboard', icon: Compass, group: 'Student Journey' },
-          { label: 'Discover Internships', path: '/student/internships', icon: Briefcase, group: 'Student Journey' },
-          { label: 'My Applications', path: '/student/applications', icon: FileText, group: 'Student Journey' },
-          { label: 'Attendance', path: '/student/attendance', icon: CheckSquare, group: 'Student Journey' },
-          { label: 'Chat', path: '/student/chat', icon: MessageCircle, badge: '1', group: 'Student Journey' },
-          { label: 'Career Prep', path: '/student/career-prep', icon: BookOpen, group: 'Career & Growth' },
-          { label: 'AI & Career', path: '/student/ai-career', icon: Sparkles, badge: 'AI', group: 'Career & Growth' },
-          { label: 'Profile', path: '/student/profile', icon: User, group: 'Career & Growth' },
-          { label: 'Productivity', path: '/student/tasks', icon: CheckSquare, group: 'Internship Progress' },
-          { label: 'Milestones & Evaluations', path: '/student/milestones', icon: Target, group: 'Internship Progress' },
-          { label: 'Certificates & Graduation', path: '/student/certificates', icon: Award, group: 'Internship Progress' },
+          {
+            label: 'Dashboard',
+            path: '/student/dashboard',
+            icon: LayoutDashboard,
+            group: 'Explore',
+          },
+          {
+            label: 'Find Opportunities',
+            path: '/student/internships',
+            icon: Compass,
+            group: 'Explore',
+          },
+          {
+            label: 'Active Internship',
+            path: '/student/internship',
+            icon: Briefcase,
+            group: 'Core',
+          },
+          {
+            label: 'My Applications',
+            path: '/student/applications',
+            icon: FileText,
+            group: 'Core',
+          },
+          {
+            label: 'Student Chat',
+            path: '/student/chat',
+            icon: MessageCircle,
+            group: 'Growth',
+          },
+          {
+            label: 'Career Prep Module',
+            path: '/student/career-prep',
+            icon: Target,
+            group: 'Growth',
+          },
+          {
+            label: 'AI Career Assistant',
+            path: '/student/ai-career',
+            icon: Sparkles,
+            group: 'Growth',
+          },
+          {
+            label: 'Profile & Documents',
+            path: '/student/profile',
+            icon: User,
+            group: 'Account',
+          },
         ];
 
       case 'faculty':
@@ -374,13 +416,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="p-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const currentPath = location.pathname;
-            const itemPath = item.path;
 
-            // Exact match or sub-route match (preventing prefix collision for root /student)
             const isActive =
-              currentPath === itemPath ||
-              (itemPath !== '/student' && itemPath !== '/' && currentPath.startsWith(itemPath + '/'));
+              location.pathname === item.path ||
+              (item.path !== '/' &&
+                item.path !== '/student/dashboard' &&
+                item.path !== '/faculty' &&
+                item.path !== '/company' &&
+                item.path !== '/mentor' &&
+                item.path !== '/admin' &&
+                location.pathname.startsWith(`${item.path}/`));
 
             return (
               <NavLink

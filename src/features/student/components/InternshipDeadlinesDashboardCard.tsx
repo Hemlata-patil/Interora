@@ -11,7 +11,7 @@ export const InternshipDeadlinesDashboardCard: React.FC = () => {
     return initialMockInternships
       .map((item) => ({
         ...item,
-        countdown: calculateInternshipCountdown(item.applicationDeadline),
+        countdown: calculateInternshipCountdown(item.deadline),
       }))
       .filter((item) => item.countdown.status !== 'EXPIRED' && item.countdown.status !== 'UNAVAILABLE')
       .sort((a, b) => a.countdown.totalMilliseconds - b.countdown.totalMilliseconds)

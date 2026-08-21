@@ -9,7 +9,7 @@ export interface InternshipJourneySectionProps {
 }
 
 export const InternshipJourneySection: React.FC<InternshipJourneySectionProps> = ({ onExploreClick }) => {
-  const [selectedInternshipId, setSelectedInternshipId] = useState<string>(mockActiveInternshipsList[0].id);
+  const [selectedInternshipId, setSelectedInternshipId] = useState<string>(mockActiveInternshipsList[0].id || 'int_01');
 
   const active: ActiveInternshipDetails =
     mockActiveInternshipsList.find((i) => i.id === selectedInternshipId) || mockActiveInternshipsList[0];

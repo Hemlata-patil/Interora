@@ -1,74 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PageHeader, Card, Button, Input, Select, Badge, Alert } from '@/components';
-import { User, FileText, Plus, Trash2, Save, X } from 'lucide-react';
+import { User, GraduationCap, Award, FileText, Briefcase, Check, Plus, Trash2, Save, X } from 'lucide-react';
 import {
   initialStudentProfileData,
   type StudentProfileData,
   type StudentSkill,
 } from './data/mockStudentData';
-import { supabase } from '@/services/supabase/supabaseClient';
 
 export const StudentProfile: React.FC = () => {
   const [profile, setProfile] = useState<StudentProfileData>(initialStudentProfileData);
-  const [studentRollNo, setStudentRollNo] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<StudentProfileData>(initialStudentProfileData);
   const [newSkillName, setNewSkillName] = useState('');
   const [newSkillLevel, setNewSkillLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
   const [saveNotification, setSaveNotification] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchStudentProfile = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) return;
-
-      const userEmail = userData.user.email || '';
-      const metaName = userData.user.user_metadata?.full_name || '';
-
-      const { data: studentData, error } = await supabase
-        .from('student_profiles')
-        .select('*')
-        .eq('id', userData.user.id)
-        .single();
-
-      if (studentData && !error) {
-        setStudentRollNo(studentData.student_id || '');
-        const loaded: StudentProfileData = {
-          fullName: studentData.full_name || metaName || 'Student',
-          email: userEmail,
-          phone: studentData.phone || '',
-          institution: 'Raisoni Institute of Engineering & Technology',
-          degree: studentData.course || 'B.Tech',
-          department: studentData.department || 'Computer Science & Engineering',
-          yearSemester: '3rd Year / 6th Semester',
-          cgpa: studentData.cgpa || '8.5 / 10.0',
-          resumeHeadline: studentData.bio || 'Motivated student seeking internship opportunities.',
-          resumeFileName: 'Resume_Verified.pdf',
-          skills: initialStudentProfileData.skills,
-          interests: initialStudentProfileData.interests,
-          preferredRoles: ['Software Engineer', 'Web Developer'],
-          preferredLocations: ['Remote', 'Pune', 'Mumbai'],
-          availability: 'Immediate (Full-Time)',
-        };
-        setProfile(loaded);
-        setFormData(loaded);
-      } else {
-        setProfile((prev) => ({
-          ...prev,
-          fullName: metaName || prev.fullName,
-          email: userEmail || prev.email,
-        }));
-        setFormData((prev) => ({
-          ...prev,
-          fullName: metaName || prev.fullName,
-          email: userEmail || prev.email,
-        }));
-      }
-    };
-
-    fetchStudentProfile();
-  }, []);
 
   const handleEdit = () => {
     setFormData({ ...profile });
@@ -80,33 +25,8 @@ export const StudentProfile: React.FC = () => {
     setIsEditing(false);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveError(null);
-
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user) {
-      const { error } = await supabase
-        .from('student_profiles')
-        .update({
-          full_name: formData.fullName,
-          phone: formData.phone,
-          department: formData.department,
-          course: formData.degree,
-          student_id: studentRollNo,
-          cgpa: formData.cgpa,
-          bio: formData.resumeHeadline,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userData.user.id);
-
-      if (error) {
-        console.error('[StudentProfile] Update error:', error);
-        setSaveError(error.message);
-        return;
-      }
-    }
-
     setProfile({ ...formData });
     setIsEditing(false);
     setSaveNotification(true);
@@ -136,106 +56,79 @@ export const StudentProfile: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-6">
       <PageHeader
-        title="Student Profile & Verification"
-        description="Manage your academic credentials, verified skills, and internship preferences."
+        title="Student Profile and Career Preferences"
+        description="Manage your academic records, technical skills, resume, and internship targets."
+        action={
+          !isEditing ? (
+            <Button variant="primary" size="sm" onClick={handleEdit}>
+              Edit Profile
+            </Button>
+          ) : (
+            <div className="flex space-x-2">
+              <Button variant="ghost" size="sm" onClick={handleCancel}>
+                <X className="w-4 h-4 mr-1" /> Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSave}>
+                <Save className="w-4 h-4 mr-1" /> Save Changes
+              </Button>
+            </div>
+          )
+        }
       />
 
       {saveNotification && (
-        <Alert type="success" title="Profile Saved Successfully">
-          Your student profile and career parameters have been updated.
-        </Alert>
-      )}
-
-      {saveError && (
-        <Alert type="error" title="Profile Save Error">
-          {saveError}
+        <Alert type="success" title="Profile Saved">
+          Your profile details and career preferences have been updated locally. (Supabase persistence ready for Phase 2).
         </Alert>
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Header Action Card */}
-        <Card className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white p-6 rounded-2xl border-none">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-full bg-indigo-600 text-white font-bold text-2xl flex items-center justify-center border-2 border-indigo-400/50 shadow-md">
-                {profile.fullName.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">{profile.fullName}</h2>
-                <p className="text-xs text-indigo-200">{profile.email} • {studentRollNo || 'Student Roll No'}</p>
-                <div className="flex items-center space-x-2 mt-2">
-                  <Badge variant="indigo">Verified Student</Badge>
-                  <Badge variant="emerald">{profile.department}</Badge>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-              {!isEditing ? (
-                <Button type="button" variant="secondary" onClick={handleEdit}>
-                  Edit Profile
-                </Button>
-              ) : (
-                <>
-                  <Button type="button" variant="ghost" className="text-white hover:bg-white/10" onClick={handleCancel}>
-                    <X className="w-4 h-4 mr-1" /> Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" className="bg-indigo-600 hover:bg-indigo-500">
-                    <Save className="w-4 h-4 mr-1" /> Save Changes
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* 1. Basic Information */}
-        <Card title="Basic Personal Information" subtitle="Official contact parameters">
+        {/* 1. Personal Information */}
+        <Card title="Personal Information" subtitle="Basic contact details for mentors and companies">
           {!isEditing ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div>
                 <span className="text-slate-400 block text-[11px]">Full Name</span>
-                <span className="font-semibold text-slate-800">{profile.fullName}</span>
+                <span className="font-semibold text-slate-800 text-sm">{profile.fullName}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-[11px]">Email Address</span>
-                <span className="font-semibold text-slate-800">{profile.email}</span>
+                <span className="font-semibold text-slate-800 text-sm">{profile.email}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-[11px]">Phone Number</span>
-                <span className="font-semibold text-slate-800">{profile.phone || 'Not specified'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Student Roll No.</span>
-                <span className="font-semibold text-slate-800">{studentRollNo || 'N/A'}</span>
+                <span className="font-semibold text-slate-800 text-sm">{profile.phone}</span>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 label="Full Name"
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                required
               />
-              <Input label="Email" value={formData.email} disabled />
               <Input
-                label="Phone"
+                label="Email Address"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+              />
+              <Input
+                label="Phone Number"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-              <Input
-                label="Student ID"
-                value={studentRollNo}
-                onChange={(e) => setStudentRollNo(e.target.value)}
+                required
               />
             </div>
           )}
         </Card>
 
-        {/* 2. Academic Background */}
-        <Card title="Academic Background" subtitle="Enrolled program and academic performance">
+        {/* 2. Academic / Education Information */}
+        <Card title="Education and Institutional Metadata" subtitle="University enrollment and academic standing">
           {!isEditing ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
               <div>
@@ -247,8 +140,8 @@ export const StudentProfile: React.FC = () => {
                 <span className="font-semibold text-slate-800">{profile.degree}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Department / Branch</span>
-                <span className="font-semibold text-slate-800">{profile.department}</span>
+                <span className="text-slate-400 block text-[11px]">Department and Semester</span>
+                <span className="font-semibold text-slate-800">{`${profile.department} (${profile.yearSemester})`}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-[11px]">CGPA / Percentage</span>

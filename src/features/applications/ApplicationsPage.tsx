@@ -1,25 +1,47 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { PageHeader, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
+import { Search, Compass, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { PageHeader, Card, Badge, Button, EmptyState } from '@/components';
-import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
-import { calculateInternshipCountdown } from '@/features/internships/utils/internshipCountdown';
-import { FileText, Search, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
+import {
+  fetchStudentApplicationsBackend,
+  type StudentApplicationRecord,
+} from '@/services/api/backendService';
 
 export const ApplicationsPage: React.FC = () => {
   const [applications, setApplications] = useState<StudentApplicationRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    const loadApps = async () => {
+      const remoteApps = await fetchStudentApplicationsBackend();
+      setApplications(remoteApps);
+    };
+    loadApps();
+  }, []);
+
+  const counts = useMemo(() => {
+    return {
+      total: applications.length,
+      pending: applications.filter((a) => a.status === 'Submitted').length,
+      approvedSelected: applications.filter((a) => a.status === 'Shortlisted' || a.status === 'Selected').length,
+      rejectedWithdrawn: applications.filter((a) => a.status === 'Rejected').length,
+    };
+  }, [applications]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter((app) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = app.title.toLowerCase().includes(q);
-        const matchesCompany = app.companyName.toLowerCase().includes(q);
-        if (!matchesTitle && !matchesCompany) return false;
+      const q = searchQuery.toLowerCase().trim();
+      if (q) {
+        const matchTitle = (app.internshipTitle || '').toLowerCase().includes(q);
+        const matchCompany = (app.companyName || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchCompany) return false;
       }
 
-      if (statusFilter !== 'All' && app.status !== statusFilter) return false;
+      if (statusFilter !== 'all' && app.status !== statusFilter) {
+        return false;
+      }
+
       return true;
     });
   }, [applications, searchQuery, statusFilter]);
@@ -28,11 +50,8 @@ export const ApplicationsPage: React.FC = () => {
     switch (status) {
       case 'Selected':
         return <Badge variant="emerald">Selected</Badge>;
-      case 'Faculty Approved':
-      case 'Company Review':
-        return <Badge variant="indigo">{status}</Badge>;
-      case 'Pending Faculty Review':
-        return <Badge variant="neutral">Submitted</Badge>;
+      case 'Shortlisted':
+        return <Badge variant="indigo">Shortlisted</Badge>;
       case 'Rejected':
         return <Badge variant="rose">Rejected</Badge>;
       default:
@@ -42,95 +61,99 @@ export const ApplicationsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Header */}
       <PageHeader
         title="My Applications"
-        description="Track your submitted internship applications, status updates, and application window deadlines."
+        description="Monitor submitted internship applications, review status updates, and track hiring decisions."
       />
 
-      {/* 2. Applications Summary Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-            <FileText className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">TOTAL APPLICATIONS</span>
-            <span className="text-sm font-bold text-slate-900">{applications.length} Submitted</span>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">SHORTLISTED / SELECTED</span>
-            <span className="text-sm font-bold text-slate-900">
-              {applications.filter((a) => a.status === 'Selected' || a.status === 'Faculty Approved').length} Active
-            </span>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">UNDER REVIEW</span>
-            <span className="text-sm font-bold text-slate-900">
-              {applications.filter((a) => a.status === 'Company Review' || a.status === 'Pending Faculty Review').length} Pending
-            </span>
-          </div>
-        </Card>
+      {/* Summary Banner Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">TOTAL APPLICATIONS</span>
+          <span className="text-2xl font-bold text-slate-900 mt-1 block">{counts.total}</span>
+        </div>
+        <div className="p-4 bg-white border border-amber-200 rounded-xl shadow-xs">
+          <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wider block">SUBMITTED</span>
+          <span className="text-2xl font-bold text-amber-700 mt-1 block">{counts.pending}</span>
+        </div>
+        <div className="p-4 bg-white border border-emerald-200 rounded-xl shadow-xs">
+          <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider block">SHORTLISTED / SELECTED</span>
+          <span className="text-2xl font-bold text-emerald-700 mt-1 block">{counts.approvedSelected}</span>
+        </div>
+        <div className="p-4 bg-white border border-rose-200 rounded-xl shadow-xs">
+          <span className="text-[11px] font-semibold text-rose-600 uppercase tracking-wider block">REJECTED</span>
+          <span className="text-2xl font-bold text-rose-700 mt-1 block">{counts.rejectedWithdrawn}</span>
+        </div>
       </div>
 
-      {/* 3. List of Applications */}
-      <div className="space-y-3">
-        {filteredApplications.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredApplications.map((app) => {
-              const countdown = calculateInternshipCountdown();
+      {/* Controls Bar: Search & Status Filter */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+        <div className="sm:col-span-2 relative">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <Search className="w-4 h-4" />
+          </div>
+          <Input
+            placeholder="Search applications by position or company..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-              return (
-                <Card key={app.id} className="p-4 hover:border-slate-300 transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <h4 className="font-bold text-slate-900 text-sm">{app.title}</h4>
-                        {getStatusBadge(app.status)}
-                      </div>
-                      <p className="text-indigo-600 font-semibold">{app.companyName} â€¢ Applied on {app.appliedAt}</p>
-                    </div>
+        <Select
+          label="Filter Status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          options={[
+            { value: 'all', label: 'All Statuses' },
+            { value: 'Submitted', label: 'Submitted' },
+            { value: 'Shortlisted', label: 'Shortlisted' },
+            { value: 'Selected', label: 'Selected' },
+            { value: 'Rejected', label: 'Rejected' },
+          ]}
+        />
+      </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-right">
-                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Application Status</span>
-                        <span className="text-[11px] font-bold text-slate-700">{app.status}</span>
-                      </div>
-
-                      <Link to={`/student/applications/${app.id}`}>
-                        <Button variant="outline" size="sm">
-                          <span>View Details</span>
-                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                        </Button>
-                      </Link>
-                    </div>
+      {/* Applications List */}
+      {filteredApplications.length > 0 ? (
+        <div className="space-y-3">
+          {filteredApplications.map((app) => (
+            <Card key={app.id} className="hover:border-slate-300 transition-all">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center space-x-3">
+                    <h3 className="text-base font-bold text-slate-900 leading-snug">
+                      {app.internshipTitle || 'Internship Position'}
+                    </h3>
+                    {getStatusBadge(app.status)}
                   </div>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card>
-            <EmptyState
-              icon={<Search className="w-6 h-6 text-slate-400" />}
-              title="No applications found"
-              description="No submitted applications match your current search parameter."
-            />
-          </Card>
-        )}
-      </div>
+
+                  <p className="text-xs font-semibold text-slate-600">
+                    {app.companyName || 'Corporate Partner'}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-1">
+                    <span>Applied on: <strong className="text-slate-700 font-medium">{new Date(app.appliedAt).toLocaleDateString()}</strong></span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Compass className="w-6 h-6 text-slate-400" />}
+          title="No Applications Found"
+          description="You have not submitted any internship applications yet."
+          action={
+            <Link to="/student/opportunities">
+              <Button variant="primary" size="sm">
+                Browse Internships
+              </Button>
+            </Link>
+          }
+        />
+      )}
     </div>
   );
 };

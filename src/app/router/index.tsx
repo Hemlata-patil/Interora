@@ -6,13 +6,10 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { VerifyCertificatePage } from '@/pages/VerifyCertificatePage';
 import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout } from '@/app/layouts/RoleLayouts';
 
-import { RegisterPage } from '@/features/auth/pages/RegisterPage';
-import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
-import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
-
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
-import { ProfileCompletionPage } from '@/features/student/pages/ProfileCompletionPage';
+import { StudentChat } from '@/features/student/StudentChat';
+import { StudentCareerPrep } from '@/features/student/StudentCareerPrep';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
 import { InternshipDetailsPage } from '@/features/internships/InternshipDetailsPage';
 import { ActiveInternshipPage } from '@/features/internships/ActiveInternshipPage';
@@ -26,9 +23,6 @@ import { WorkLogsPage } from '@/features/tasks/WorkLogsPage';
 import { MilestonesPage } from '@/features/milestones/MilestonesPage';
 import { CertificatesPage } from '@/features/certificates/CertificatesPage';
 import { AICareerPage } from '@/features/ai/AICareerPage';
-import { CareerPrepPage } from '@/features/career-prep/CareerPrepPage';
-import { ChatPage } from '@/features/chat/ChatPage';
-import { InternshipDeadlinesPage } from '@/features/internship-deadlines/InternshipDeadlinesPage';
 
 import { FacultyDashboard } from '@/features/faculty/FacultyDashboard';
 import { CompanyDashboard } from '@/features/company/CompanyDashboard';
@@ -72,12 +66,10 @@ import { StudentGuidance } from '@/features/faculty/StudentGuidance';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
 
 const router = createBrowserRouter([
-  // Public & Auth Routes
+  // Public Routes
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
-  { path: '/forgot-password', element: <ForgotPasswordPage /> },
-  { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/verify/:token', element: <VerifyCertificatePage /> },
 
   // Student Routes Group
@@ -90,16 +82,8 @@ const router = createBrowserRouter([
     element: <StudentLayout><StudentDashboard /></StudentLayout>,
   },
   {
-    path: '/student/profile-completion',
-    element: <StudentLayout><ProfileCompletionPage /></StudentLayout>,
-  },
-  {
     path: '/student/internships',
     element: <StudentLayout><MarketplacePage /></StudentLayout>,
-  },
-  {
-    path: '/student/internship-deadlines',
-    element: <StudentLayout><InternshipDeadlinesPage /></StudentLayout>,
   },
   {
     path: '/student/internships/:id',
@@ -157,14 +141,6 @@ const router = createBrowserRouter([
   {
     path: '/student/ai-career',
     element: <StudentLayout><AICareerPage /></StudentLayout>,
-  },
-  {
-    path: '/student/career-prep',
-    element: <StudentLayout><CareerPrepPage /></StudentLayout>,
-  },
-  {
-    path: '/student/chat',
-    element: <StudentLayout><ChatPage /></StudentLayout>,
   },
   {
     path: '/student/certificate',
