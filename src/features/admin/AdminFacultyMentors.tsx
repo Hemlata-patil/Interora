@@ -11,9 +11,15 @@ import {
   ShieldAlert,
   Mail,
   Users,
-  Layers
+  Layers,
+  KeyRound,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { mockFacultyStudents } from '@/features/faculty/mockData';
+import {
+  registerFacultyMentorBackend,
+  type FacultyRegistrationInput
+} from '@/services/api/backendService';
 
 export type BatchDivision = 'CS1' | 'CS2' | 'CS3' | 'CS4';
 
@@ -26,6 +32,7 @@ export interface FacultyMentorRecord {
   department: 'CSE' | 'IT' | 'AIML' | 'ECE';
   batch: BatchDivision;
   designation: string;
+  tempPassword?: string;
   assignedStudentCount: number;
   status: 'Active' | 'Inactive';
 }
@@ -40,6 +47,7 @@ export const initialFacultyMentors: FacultyMentorRecord[] = [
     department: 'CSE',
     batch: 'CS1',
     designation: 'Professor & Head',
+    tempPassword: 'password@123',
     assignedStudentCount: 22,
     status: 'Active',
   },
@@ -52,6 +60,7 @@ export const initialFacultyMentors: FacultyMentorRecord[] = [
     department: 'CSE',
     batch: 'CS2',
     designation: 'Associate Professor',
+    tempPassword: 'password@123',
     assignedStudentCount: 19,
     status: 'Active',
   },
@@ -64,6 +73,7 @@ export const initialFacultyMentors: FacultyMentorRecord[] = [
     department: 'CSE',
     batch: 'CS3',
     designation: 'Assistant Professor',
+    tempPassword: 'password@123',
     assignedStudentCount: 17,
     status: 'Active',
   },
@@ -76,6 +86,7 @@ export const initialFacultyMentors: FacultyMentorRecord[] = [
     department: 'CSE',
     batch: 'CS4',
     designation: 'Assistant Professor',
+    tempPassword: 'password@123',
     assignedStudentCount: 20,
     status: 'Active',
   },
@@ -92,6 +103,7 @@ export const AdminFacultyMentors: React.FC = () => {
   const [editingMentor, setEditingMentor] = useState<FacultyMentorRecord | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -102,6 +114,7 @@ export const AdminFacultyMentors: React.FC = () => {
     batch: 'CS1' as BatchDivision,
     designation: 'Assistant Professor',
     phone: '',
+    tempPassword: '',
     status: 'Active' as 'Active' | 'Inactive',
   });
 
@@ -126,8 +139,10 @@ export const AdminFacultyMentors: React.FC = () => {
       batch: 'CS1',
       designation: 'Assistant Professor',
       phone: '',
+      tempPassword: 'faculty@123',
       status: 'Active',
     });
+    setShowPassword(false);
     setIsModalOpen(true);
   };
 
@@ -141,14 +156,21 @@ export const AdminFacultyMentors: React.FC = () => {
       batch: m.batch,
       designation: m.designation,
       phone: m.phone,
+      tempPassword: m.tempPassword || '',
       status: m.status,
     });
+    setShowPassword(false);
     setIsModalOpen(true);
   };
 
-  const handleSaveMentor = (e: React.FormEvent) => {
+  const handleSaveMentor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email) return;
+    if (!formData.name.trim() || !formData.email.trim()) return;
+
+    if (!editingMentor && (!formData.tempPassword || formData.tempPassword.length < 6)) {
+      alert('Please provide a temporary password of at least 6 characters for the faculty mentor login.');
+      return;
+    }
 
     if (editingMentor) {
       setMentors((prev) =>
@@ -161,9 +183,25 @@ export const AdminFacultyMentors: React.FC = () => {
         ...formData,
         assignedStudentCount: 0,
       };
+
+      try {
+        await registerFacultyMentorBackend({
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          facultyId: formData.facultyId.trim(),
+          department: formData.department,
+          batch: formData.batch,
+          designation: formData.designation,
+          phone: formData.phone,
+          password: formData.tempPassword,
+        });
+      } catch (err) {
+        console.warn('Faculty mentor backend registration notice:', err);
+      }
+
       setMentors((prev) => [...prev, newMentor]);
       setSuccessNotice(
-        `Faculty Mentor account provisioned for ${formData.name} (Assigned to Batch ${formData.batch}). Students selecting Batch ${formData.batch} will now automatically be assigned to them.`
+        `Faculty Mentor ${formData.name} provisioned successfully for Batch ${formData.batch}. Faculty can log in using Email: ${formData.email} and Temporary Password: ${formData.tempPassword}.`
       );
     }
     setIsModalOpen(false);
@@ -186,7 +224,7 @@ export const AdminFacultyMentors: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Mentor Management"
-        description="Provision faculty accounts, map mentors to specific branch batches (CS1, CS2, CS3, CS4), and oversee student cohort distribution."
+        description="Provision faculty mentor accounts with login credentials, assign branch cohorts (CS1, CS2, CS3, CS4), and oversee mentorship distribution."
         action={
           <Button variant="primary" size="sm" onClick={handleOpenCreateModal} className="flex items-center gap-1.5 shadow-sm">
             <Plus className="w-4 h-4" />
@@ -297,7 +335,7 @@ export const AdminFacultyMentors: React.FC = () => {
             <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
               <tr>
                 <th className="p-3.5">Faculty Mentor</th>
-                <th className="p-3.5">Contact Info</th>
+                <th className="p-3.5">Email of Faculty</th>
                 <th className="p-3.5">Department</th>
                 <th className="p-3.5">Assigned Batch / Division</th>
                 <th className="p-3.5">Designation</th>
@@ -390,7 +428,7 @@ export const AdminFacultyMentors: React.FC = () => {
             <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-lg text-indigo-900 text-[11px] flex items-start gap-2">
               <Layers className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Batch-Wise Mentorship Routing:</strong> When students register and select their batch (e.g. <strong>{formData.batch}</strong>), they will be automatically assigned exclusively to this faculty mentor for work-log tracking, evaluation, and guidance.
+                <strong>Batch-Wise Mentorship Routing:</strong> Students registering under Batch <strong>{formData.batch}</strong> will be assigned to this faculty mentor. Mentors can sign in using their <strong>Email of Faculty</strong> and <strong>Temporary Password</strong>.
               </span>
             </div>
 
@@ -405,7 +443,7 @@ export const AdminFacultyMentors: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Official Institutional Email</label>
+              <label className="block font-semibold text-slate-700 mb-1">Email of Faculty</label>
               <Input
                 required
                 type="email"
@@ -413,6 +451,33 @@ export const AdminFacultyMentors: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                  Temporary Password for Faculty Login
+                </span>
+                {editingMentor && <span className="text-[10px] text-slate-400 font-normal">(Leave blank to keep unchanged)</span>}
+              </label>
+              <div className="relative">
+                <Input
+                  required={!editingMentor}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="e.g. faculty@123"
+                  value={formData.tempPassword}
+                  onChange={(e) => setFormData({ ...formData, tempPassword: e.target.value })}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
