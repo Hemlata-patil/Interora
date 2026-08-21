@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { APP_INFO } from '@/constants';
+import { LogoBrand } from '@/components/navigation/LogoBrand';
 import type { UserRole } from '@/types';
 import { Button, Input, Select, Card } from '@/components';
 import { initialCompanyApplications } from '@/features/admin/AdminCompanies';

@@ -1,4 +1,5 @@
 import React from 'react';
+import { LogoBrand } from '@/components/navigation/LogoBrand';
 import { Link } from 'react-router-dom';
 import { APP_INFO } from '@/constants';
 import { Button, Card, Badge } from '@/components';
@@ -20,13 +21,7 @@ export const LandingPage: React.FC = () => {
       {/* Navigation Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <img src={APP_INFO.logo} alt={APP_INFO.name} className="h-9 w-auto object-contain" />
-            <div>
-              <span className="text-lg font-bold text-slate-900 leading-none block">{APP_INFO.name}</span>
-              <span className="text-[10px] text-indigo-600 font-semibold tracking-wider uppercase">{APP_INFO.tagline}</span>
-            </div>
-          </div>
+          <LogoBrand />
           <div className="flex items-center space-x-3">
             <Link to="/login">
               <Button variant="ghost" size="sm">Sign In</Button>
