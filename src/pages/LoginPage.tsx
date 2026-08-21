@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { APP_INFO } from '@/constants';
 import { LogoBrand } from '@/components/navigation/LogoBrand';
 import type { UserRole } from '@/types';
 import { Button, Input, Select, Card } from '@/components';
-import { initialCompanyApplications } from '@/features/admin/AdminCompanies';
 import { loginUserBackend } from '@/services/api/backendService';
 import { ShieldAlert } from 'lucide-react';
 
@@ -37,12 +36,8 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md space-y-6">
         {/* Brand header */}
-        <div className="text-center space-y-2">
-          <Link to="/" className="inline-flex items-center space-x-3">
-            <img src={APP_INFO.logo} alt={APP_INFO.name} className="h-10 w-auto object-contain" />
-            <span className="text-2xl font-bold text-slate-900">{APP_INFO.name}</span>
-          </Link>
-          <p className="text-xs text-slate-500">{APP_INFO.tagline}</p>
+        <div className="flex flex-col items-center justify-center text-center space-y-2">
+          <LogoBrand enableNormalNavigation={true} />
         </div>
 
         {errorMsg && (
@@ -92,15 +87,6 @@ export const LoginPage: React.FC = () => {
               {loading ? 'Authenticating...' : `Sign In to ${role.charAt(0).toUpperCase() + role.slice(1)} Portal`}
             </Button>
           </form>
-
-          <div className="text-center pt-4 text-xs text-slate-500 border-t mt-4 space-y-2">
-            <div>
-              New student?{' '}
-              <Link to="/register" className="text-indigo-600 font-bold hover:underline">
-                Create Student Account
-              </Link>
-            </div>
-          </div>
         </Card>
       </div>
     </div>
