@@ -2,12 +2,19 @@ export type AttendanceDayStatus = 'present' | 'absent' | 'late' | 'weekend';
 
 export interface AttendanceRecord {
   id: string;
-  date: string; // YYYY-MM-DD
-  day: string; // e.g. Mon, Tue
+  date: string;
+  day: string;
   status: AttendanceDayStatus;
-  checkIn: string; // e.g. 09:00 AM or '-'
-  checkOut: string; // e.g. 05:30 PM or '-'
-  workingHours: string; // e.g. 8h 30m or '-'
+  checkIn: string;
+  checkOut: string;
+  workingHours: string;
+  checkInPhotoUrl?: string;
+  checkInLat?: number;
+  checkInLng?: number;
+  checkOutPhotoUrl?: string;
+  checkOutLat?: number;
+  checkOutLng?: number;
+  locationAddress?: string;
 }
 
 export const mockAttendanceHistory: AttendanceRecord[] = [
@@ -41,7 +48,6 @@ export const calculateAttendanceMetrics = (records: AttendanceRecord[]): Attenda
   const lateDays = workingRecords.filter((r) => r.status === 'late').length;
   const absentDays = workingRecords.filter((r) => r.status === 'absent').length;
 
-  // Present + Late counts towards valid attendance
   const effectivePresent = presentDays + lateDays;
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((effectivePresent / totalWorkingDays) * 100) : 0;
 

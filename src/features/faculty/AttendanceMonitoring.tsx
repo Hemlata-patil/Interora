@@ -4,7 +4,7 @@ import { Table } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { Building2, Laptop, Briefcase, CheckCircle2, XCircle, Users } from 'lucide-react';
+import { Building2, Laptop, Briefcase, CheckCircle2, XCircle, Users, Camera, MapPin, ShieldCheck } from 'lucide-react';
 import { mockFacultyStudents } from './mockData';
 import type { SharedStudentData, WorkMode } from './mockData';
 

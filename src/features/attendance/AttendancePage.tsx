@@ -10,6 +10,7 @@ import { initialMockTasks, initialMockWorkLogs } from '@/features/tasks/data/moc
 import { AttendanceSummary } from './components/AttendanceSummary';
 import { AttendanceCalendar } from './components/AttendanceCalendar';
 import { AttendanceHistory } from './components/AttendanceHistory';
+import { GeoCameraModal, type GeoLocationCoords } from './components/GeoCameraModal';
 import { CheckSquare, FileText, LogIn, LogOut, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/services/supabase/supabaseClient';
@@ -23,10 +24,13 @@ export const AttendancePage: React.FC = () => {
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
 
+  const [isGeoModalOpen, setIsGeoModalOpen] = useState(false);
+  const [geoActionType, setGeoActionType] = useState<'check_in' | 'check_out'>('check_in');
+
   const loadAttendance = async () => {
     const remoteRecords = await fetchStudentAttendanceBackend();
     if (remoteRecords.length > 0) {
-      const mapped: AttendanceRecord[] = remoteRecords.map((r) => {
+      const mapped: AttendanceRecord[] = remoteRecords.map((r: any) => {
         const d = new Date(r.attendanceDate);
         return {
           id: r.id,
@@ -36,8 +40,13 @@ export const AttendancePage: React.FC = () => {
           checkIn: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
           checkOut: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '05:00 PM',
           workingHours: '8.0 hrs',
-          notes: 'Standard Working Shift',
-          location: 'Office / Remote',
+          checkInPhotoUrl: r.checkInPhotoUrl,
+          checkInLat: r.checkInLat,
+          checkInLng: r.checkInLng,
+          checkOutPhotoUrl: r.checkOutPhotoUrl,
+          checkOutLat: r.checkOutLat,
+          checkOutLng: r.checkOutLng,
+          locationAddress: r.locationAddress,
         };
       });
       setHistory(mapped);
@@ -47,7 +56,6 @@ export const AttendancePage: React.FC = () => {
   useEffect(() => {
     loadAttendance();
 
-    // Subscribe to Realtime postgres changes on attendance_records table
     const channel = supabase
       .channel('attendance_records_realtime')
       .on(
@@ -64,18 +72,30 @@ export const AttendancePage: React.FC = () => {
     };
   }, []);
 
-  const handleCheckIn = async () => {
-    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setCheckInTime(timeNow);
-    setTodayState('checked_in');
-    await createAttendanceRecordBackend('present');
-    await loadAttendance();
+  const handleOpenCheckInModal = () => {
+    setGeoActionType('check_in');
+    setIsGeoModalOpen(true);
   };
 
-  const handleCheckOut = () => {
-    const timeOut = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setCheckOutTime(timeOut);
-    setTodayState('completed');
+  const handleOpenCheckOutModal = () => {
+    setGeoActionType('check_out');
+    setIsGeoModalOpen(true);
+  };
+
+  const handleConfirmGeoAttendance = async (photoBlob: Blob, coords: GeoLocationCoords) => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (geoActionType === 'check_in') {
+      setCheckInTime(timeNow);
+      setTodayState('checked_in');
+      await createAttendanceRecordBackend('present', photoBlob, coords);
+    } else {
+      setCheckOutTime(timeNow);
+      setTodayState('completed');
+      await checkoutAttendanceRecordBackend(photoBlob, coords);
+    }
+
+    await loadAttendance();
   };
 
   const attendanceMetrics = useMemo(() => calculateAttendanceMetrics(history), [history]);
@@ -156,13 +176,13 @@ export const AttendancePage: React.FC = () => {
 
             <div className="shrink-0">
               {todayState === 'not_checked_in' && (
-                <Button variant="primary" size="md" onClick={handleCheckIn}>
+                <Button variant="primary" size="md" onClick={handleOpenCheckInModal}>
                   <LogIn className="w-4 h-4 mr-2" /> Check In Now
                 </Button>
               )}
 
               {todayState === 'checked_in' && (
-                <Button variant="secondary" size="md" onClick={handleCheckOut}>
+                <Button variant="secondary" size="md" onClick={handleOpenCheckOutModal}>
                   <LogOut className="w-4 h-4 mr-2 text-indigo-600" /> Check Out Now
                 </Button>
               )}
@@ -266,6 +286,15 @@ export const AttendancePage: React.FC = () => {
 
       <AttendanceCalendar records={history} />
       <AttendanceHistory records={history} />
+
+      {isGeoModalOpen && (
+        <GeoCameraModal
+          isOpen={isGeoModalOpen}
+          onClose={() => setIsGeoModalOpen(false)}
+          actionType={geoActionType}
+          onCaptureConfirm={handleConfirmGeoAttendance}
+        />
+      )}
     </div>
   );
 };

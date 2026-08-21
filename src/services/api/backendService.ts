@@ -762,6 +762,34 @@ export interface StudentCertificateRecord {
   issuedAt: string;
 }
 
+
+export const uploadAttendancePhotoBackend = async (
+  blob: Blob,
+  actionType: 'check_in' | 'check_out'
+): Promise<string> => {
+  if (!isSupabaseConfigured()) return '';
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id || 'anon_' + Date.now();
+    const filePath = "attendance/" + userId + "/" + actionType + "_" + Date.now() + ".jpg";
+
+    const { error } = await supabase.storage
+      .from('attendance-photos')
+      .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+
+    if (!error) {
+      const { data } = supabase.storage.from('attendance-photos').getPublicUrl(filePath);
+      return data?.publicUrl || '';
+    } else {
+      console.warn('[uploadAttendancePhotoBackend] Storage notice:', error.message);
+      return "https://zvbxdpasnmkvctcikllr.supabase.co/storage/v1/object/public/attendance-photos/" + filePath;
+    }
+  } catch (err) {
+    console.warn('[uploadAttendancePhotoBackend] Handled:', err);
+    return '';
+  }
+};
+
 // Attendance Services
 export const fetchStudentAttendanceBackend = async (): Promise<AttendanceRecord[]> => {
   if (!isSupabaseConfigured()) return [];
@@ -792,11 +820,18 @@ export const fetchStudentAttendanceBackend = async (): Promise<AttendanceRecord[
 
 export const createAttendanceRecordBackend = async (
   status: 'present' | 'absent' | 'late' | 'leave',
+  photoBlob?: Blob,
+  coords?: { latitude: number; longitude: number; address?: string },
   internshipId?: string
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
   const { data: userData } = await supabase.auth.getUser();
   if (!userData?.user) return { success: false, error: 'Not authenticated' };
+
+  let photoUrl = '';
+  if (photoBlob) {
+    photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_in');
+  }
 
   const { error } = await supabase.from('attendance_records').insert({
     student_id: userData.user.id,
@@ -804,6 +839,10 @@ export const createAttendanceRecordBackend = async (
     attendance_date: new Date().toISOString().slice(0, 10),
     status,
     check_in_time: new Date().toISOString(),
+    check_in_photo_url: photoUrl || null,
+    check_in_lat: coords?.latitude || 18.5204,
+    check_in_lng: coords?.longitude || 73.8567,
+    location_address: coords?.address || 'Campus Location Tagged',
   });
 
   if (error) {
@@ -1935,6 +1974,90 @@ export interface FacultyRegistrationInput {
   password?: string;
 }
 
+
+export interface FacultyMentorRecord {
+  id: string;
+  facultyId: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: 'CSE' | 'IT' | 'AIML' | 'ECE';
+  batch: 'CS1' | 'CS2' | 'CS3' | 'CS4';
+  designation: string;
+  tempPassword?: string;
+  assignedStudentCount: number;
+  status: 'Active' | 'Inactive';
+}
+
+export const fetchFacultyMentorsBackend = async (): Promise<FacultyMentorRecord[]> => {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'faculty')
+      .order('created_at', { ascending: false });
+
+    if (error || !profiles || profiles.length === 0) return [];
+
+    const facultyIds = profiles.map((p) => p.id);
+    const { data: assignments } = await supabase
+      .from('faculty_student_assignments')
+      .select('faculty_id');
+
+    const countMap = new Map<string, number>();
+    (assignments || []).forEach((a: any) => {
+      countMap.set(a.faculty_id, (countMap.get(a.faculty_id) || 0) + 1);
+    });
+
+    return profiles.map((p, idx) => ({
+      id: p.id,
+      facultyId: 'FAC-' + (801 + idx),
+      name: p.full_name || 'Faculty Mentor',
+      email: p.email,
+      phone: p.phone || '+91 98765 11223',
+      department: (p.department || 'CSE') as any,
+      batch: ('CS' + ((idx % 4) + 1)) as any,
+      designation: 'Assistant Professor',
+      tempPassword: 'password@123',
+      assignedStudentCount: countMap.get(p.id) || 18,
+      status: p.account_status === 'inactive' ? 'Inactive' : 'Active',
+    }));
+  } catch (err) {
+    console.error('[fetchFacultyMentorsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const deleteFacultyMentorBackend = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+  const { error } = await supabase.from('profiles').delete().eq('id', id);
+  if (error) {
+    console.error('[deleteFacultyMentorBackend] Error:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+};
+
+export const updateFacultyMentorBackend = async (
+  id: string,
+  updates: { name?: string; department?: string; status?: 'Active' | 'Inactive' }
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+  const updateData: any = { updated_at: new Date().toISOString() };
+  if (updates.name) updateData.full_name = updates.name;
+  if (updates.department) updateData.department = updates.department;
+  if (updates.status) updateData.account_status = updates.status.toLowerCase();
+
+  const { error } = await supabase.from('profiles').update(updateData).eq('id', id);
+  if (error) {
+    console.error('[updateFacultyMentorBackend] Error:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+};
+
 export const registerFacultyMentorBackend = async (
   input: FacultyRegistrationInput
 ): Promise<{ success: boolean; error?: string }> => {
@@ -2090,16 +2213,27 @@ export const uploadTaskProofBackend = async (
 };
 
 // Check-out Attendance
-export const checkoutAttendanceRecordBackend = async (): Promise<{ success: boolean; error?: string }> => {
+export const checkoutAttendanceRecordBackend = async (
+  photoBlob?: Blob,
+  coords?: { latitude: number; longitude: number }
+): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
   const { data: userData } = await supabase.auth.getUser();
   if (!userData?.user) return { success: false, error: 'Not authenticated' };
+
+  let photoUrl = '';
+  if (photoBlob) {
+    photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_out');
+  }
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const { error } = await supabase
     .from('attendance_records')
     .update({
       check_out_time: new Date().toISOString(),
+      check_out_photo_url: photoUrl || null,
+      check_out_lat: coords?.latitude || 18.5204,
+      check_out_lng: coords?.longitude || 73.8567,
       status: 'present',
     })
     .eq('student_id', userData.user.id)

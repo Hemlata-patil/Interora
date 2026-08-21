@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Select, Button, Modal } from '@/components';
 import {
   GraduationCap,
@@ -18,24 +18,15 @@ import {
 } from 'lucide-react';
 import {
   registerFacultyMentorBackend,
-  type FacultyRegistrationInput
+  fetchFacultyMentorsBackend,
+  deleteFacultyMentorBackend,
+  updateFacultyMentorBackend,
+  type FacultyRegistrationInput,
+  type FacultyMentorRecord,
 } from '@/services/api/backendService';
+import { supabase } from '@/services/supabase/supabaseClient';
 
 export type BatchDivision = 'CS1' | 'CS2' | 'CS3' | 'CS4';
-
-export interface FacultyMentorRecord {
-  id: string;
-  facultyId: string;
-  name: string;
-  email: string;
-  phone: string;
-  department: 'CSE' | 'IT' | 'AIML' | 'ECE';
-  batch: BatchDivision;
-  designation: string;
-  tempPassword?: string;
-  assignedStudentCount: number;
-  status: 'Active' | 'Inactive';
-}
 
 export const initialFacultyMentors: FacultyMentorRecord[] = [
   {
@@ -118,6 +109,31 @@ export const AdminFacultyMentors: React.FC = () => {
     status: 'Active' as 'Active' | 'Inactive',
   });
 
+  const loadMentors = async () => {
+    const remote = await fetchFacultyMentorsBackend();
+    if (remote && remote.length > 0) {
+      // Merge remote with initial default mentors to guarantee persistent presence
+      const remoteIds = new Set(remote.map((r) => r.id));
+      const combined = [...remote, ...initialFacultyMentors.filter((m) => !remoteIds.has(m.id))];
+      setMentors(combined);
+    }
+  };
+
+  useEffect(() => {
+    loadMentors();
+
+    const channel = supabase
+      .channel('admin_faculty_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        loadMentors();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const filteredMentors = mentors.filter((m) => {
     const matchesSearch =
       m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -173,6 +189,12 @@ export const AdminFacultyMentors: React.FC = () => {
     }
 
     if (editingMentor) {
+      await updateFacultyMentorBackend(editingMentor.id, {
+        name: formData.name,
+        department: formData.department,
+        status: formData.status,
+      });
+
       setMentors((prev) =>
         prev.map((m) => (m.id === editingMentor.id ? { ...m, ...formData } : m))
       );
@@ -184,38 +206,40 @@ export const AdminFacultyMentors: React.FC = () => {
         assignedStudentCount: 0,
       };
 
-      try {
-        await registerFacultyMentorBackend({
-          name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
-          facultyId: formData.facultyId.trim(),
-          department: formData.department,
-          batch: formData.batch,
-          designation: formData.designation,
-          phone: formData.phone,
-          password: formData.tempPassword,
-        });
-      } catch (err) {
-        console.warn('Faculty mentor backend registration notice:', err);
-      }
+      await registerFacultyMentorBackend({
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        facultyId: formData.facultyId.trim(),
+        department: formData.department,
+        batch: formData.batch,
+        designation: formData.designation,
+        phone: formData.phone,
+        password: formData.tempPassword,
+      });
 
-      setMentors((prev) => [...prev, newMentor]);
+      setMentors((prev) => [newMentor, ...prev]);
       setSuccessNotice(
         `Faculty Mentor ${formData.name} provisioned successfully for Batch ${formData.batch}. Faculty can log in using Email: ${formData.email} and Temporary Password: ${formData.tempPassword}.`
       );
+      await loadMentors();
     }
     setIsModalOpen(false);
   };
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
+    const target = mentors.find((m) => m.id === id);
+    if (!target) return;
+    const newStatus = target.status === 'Active' ? 'Inactive' : 'Active';
+
+    await updateFacultyMentorBackend(id, { status: newStatus });
+
     setMentors((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, status: m.status === 'Active' ? 'Inactive' : 'Active' } : m
-      )
+      prev.map((m) => (m.id === id ? { ...m, status: newStatus } : m))
     );
   };
 
-  const handleDeleteMentor = (id: string) => {
+  const handleDeleteMentor = async (id: string) => {
+    await deleteFacultyMentorBackend(id);
     setMentors((prev) => prev.filter((m) => m.id !== id));
     setDeleteConfirmId(null);
   };
