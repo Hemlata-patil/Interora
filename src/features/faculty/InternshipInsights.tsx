@@ -47,10 +47,16 @@ const getRiskFactors = (student: SharedStudentData): string[] => {
 };
 
 const getRiskLevel = (student: SharedStudentData, factors: string[]): 'On Track' | 'Needs Attention' | 'High Risk' => {
+  const attendancePct = student.attendance.workingDays > 0 
+    ? Math.round((student.attendance.present / student.attendance.workingDays) * 100)
+    : 0;
+
+  if (attendancePct === 0 || student.progressPercentage === 0) return 'High Risk';
   if (student.internshipStatus === 'Completed') return 'On Track';
-  if (factors.length === 0) return 'On Track';
+  if (attendancePct >= 85 && student.progressPercentage >= 60) return 'On Track';
+  if (factors.length >= 2 || attendancePct < 70) return 'High Risk';
   if (factors.length === 1) return 'Needs Attention';
-  return 'High Risk';
+  return 'On Track';
 };
 
 export const InternshipInsights: React.FC = () => {
@@ -411,7 +417,7 @@ export const InternshipInsights: React.FC = () => {
               <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0 mt-1" />
               <div>
                 <h4 className="font-semibold text-emerald-700 text-sm mb-1">On Track</h4>
-                <p className="text-xs text-slate-600 leading-relaxed">Healthy attendance, progress, and recent activity.</p>
+                <p className="text-xs text-slate-600 leading-relaxed">Healthy attendance and progress.</p>
               </div>
             </div>
             
