@@ -73,6 +73,7 @@ export interface StudentApplicationRecord {
   internshipTitle?: string;
   companyName?: string;
   studentName?: string;
+  facultyRating?: number;
 }
 
 // 1. Student Registration
@@ -647,6 +648,7 @@ export const fetchCompanyApplicantsBackend = async (
     appliedAt: app.applied_at,
     internshipTitle: internshipMap.get(app.internship_id) || 'Internship Position',
     studentName: profileMap.get(app.student_id) || 'Student Candidate',
+    facultyRating: app.faculty_rating,
   }));
 
   console.log('[Applicants] Final result:', finalResult);
@@ -1777,6 +1779,254 @@ export const updateAdminCompanyApprovalBackend = async (
 
   if (error) {
     console.error('[updateAdminCompanyApprovalBackend] Error:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/* ====================================================================
+   INTERNSHIP TASKS & MILESTONES (COMPANY LEVEL)
+   ==================================================================== */
+
+export interface InternshipTaskInput {
+  title: string;
+  description?: string;
+  priority?: string;
+  dueDate?: string;
+  status?: string;
+}
+
+export interface InternshipMilestoneInput {
+  title: string;
+  description?: string;
+  targetDate?: string;
+  status?: string;
+}
+
+export interface InternshipTaskRecord {
+  id: string;
+  internshipId: string;
+  title: string;
+  description?: string;
+  priority?: string;
+  dueDate?: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface InternshipMilestoneRecord {
+  id: string;
+  internshipId: string;
+  title: string;
+  description?: string;
+  targetDate?: string;
+  status: string;
+  createdAt: string;
+}
+
+// Tasks
+export const createInternshipTaskBackend = async (
+  internshipId: string,
+  input: InternshipTaskInput
+): Promise<{ success: boolean; data?: InternshipTaskRecord; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+
+  const { data, error } = await supabase
+    .from('internship_tasks')
+    .insert({
+      internship_id: internshipId,
+      title: input.title,
+      description: input.description || null,
+      priority: input.priority || null,
+      due_date: input.dueDate || null,
+      status: input.status || 'Pending',
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('[createInternshipTaskBackend] Error:', error);
+    return { success: false, error: error.message };
+  }
+
+  return {
+    success: true,
+    data: {
+      id: data.id,
+      internshipId: data.internship_id,
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      dueDate: data.due_date,
+      status: data.status,
+      createdAt: data.created_at,
+    },
+  };
+};
+
+export const fetchInternshipTasksBackend = async (
+  internshipId: string
+): Promise<InternshipTaskRecord[]> => {
+  if (!isSupabaseConfigured()) return [];
+
+  const { data, error } = await supabase
+    .from('internship_tasks')
+    .select('*')
+    .eq('internship_id', internshipId)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return [];
+
+  return data.map((t) => ({
+    id: t.id,
+    internshipId: t.internship_id,
+    title: t.title,
+    description: t.description,
+    priority: t.priority,
+    dueDate: t.due_date,
+    status: t.status,
+    createdAt: t.created_at,
+  }));
+};
+
+export const updateInternshipTaskBackend = async (
+  taskId: string,
+  input: Partial<InternshipTaskInput>
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+
+  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+  if (input.title !== undefined) payload.title = input.title;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.priority !== undefined) payload.priority = input.priority;
+  if (input.dueDate !== undefined) payload.due_date = input.dueDate;
+  if (input.status !== undefined) payload.status = input.status;
+
+  const { error } = await supabase
+    .from('internship_tasks')
+    .update(payload)
+    .eq('id', taskId);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const deleteInternshipTaskBackend = async (
+  taskId: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+  const { error } = await supabase.from('internship_tasks').delete().eq('id', taskId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+// Milestones
+export const createInternshipMilestoneBackend = async (
+  internshipId: string,
+  input: InternshipMilestoneInput
+): Promise<{ success: boolean; data?: InternshipMilestoneRecord; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+
+  const { data, error } = await supabase
+    .from('internship_milestones')
+    .insert({
+      internship_id: internshipId,
+      title: input.title,
+      description: input.description || null,
+      target_date: input.targetDate || null,
+      status: input.status || 'Pending',
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('[createInternshipMilestoneBackend] Error:', error);
+    return { success: false, error: error.message };
+  }
+
+  return {
+    success: true,
+    data: {
+      id: data.id,
+      internshipId: data.internship_id,
+      title: data.title,
+      description: data.description,
+      targetDate: data.target_date,
+      status: data.status,
+      createdAt: data.created_at,
+    },
+  };
+};
+
+export const fetchInternshipMilestonesBackend = async (
+  internshipId: string
+): Promise<InternshipMilestoneRecord[]> => {
+  if (!isSupabaseConfigured()) return [];
+
+  const { data, error } = await supabase
+    .from('internship_milestones')
+    .select('*')
+    .eq('internship_id', internshipId)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return [];
+
+  return data.map((m) => ({
+    id: m.id,
+    internshipId: m.internship_id,
+    title: m.title,
+    description: m.description,
+    targetDate: m.target_date,
+    status: m.status,
+    createdAt: m.created_at,
+  }));
+};
+
+export const updateInternshipMilestoneBackend = async (
+  milestoneId: string,
+  input: Partial<InternshipMilestoneInput>
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+
+  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+  if (input.title !== undefined) payload.title = input.title;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.targetDate !== undefined) payload.target_date = input.targetDate;
+  if (input.status !== undefined) payload.status = input.status;
+
+  const { error } = await supabase
+    .from('internship_milestones')
+    .update(payload)
+    .eq('id', milestoneId);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const deleteInternshipMilestoneBackend = async (
+  milestoneId: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+  const { error } = await supabase.from('internship_milestones').delete().eq('id', milestoneId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+// Faculty Rating
+export const updateApplicationFacultyRatingBackend = async (
+  applicationId: string,
+  facultyRating: number
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
+
+  const { error } = await supabase
+    .from('student_applications')
+    .update({ faculty_rating: facultyRating, updated_at: new Date().toISOString() })
+    .eq('id', applicationId);
+
+  if (error) {
+    console.error('[updateApplicationFacultyRatingBackend] Error:', error);
     return { success: false, error: error.message };
   }
 
