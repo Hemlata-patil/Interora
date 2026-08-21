@@ -20,35 +20,34 @@ import {
 } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
 
-// Simple transparent rule-based logic for Risk
+// Transparent & logically aligned rule-based logic for Risk Level
 const getRiskFactors = (student: SharedStudentData): string[] => {
   const factors: string[] = [];
   const attendancePct = Math.round((student.attendance.present / student.attendance.workingDays) * 100);
-  
-  if (attendancePct < 75) {
-    factors.push('Low attendance');
+
+  if (attendancePct < 70) {
+    factors.push('Low attendance (<70%)');
   }
 
-  // Only consider progress risk if they are actively in the internship
-  if ((student.internshipStatus === 'Active' || student.internshipStatus === 'At Risk') && student.progressPercentage < 40) {
-    factors.push('Low progress');
-  }
-
-  // Check recent activity, ignoring completed or not started internships
-  if (student.internshipStatus !== 'Completed' && student.internshipStatus !== 'Not Started') {
+  // Active internships progress & activity risk checks
+  if (student.internshipStatus === 'Active' || student.internshipStatus === 'At Risk') {
+    if (student.progressPercentage < 30) {
+      factors.push('Low progress (<30%)');
+    }
     if (student.lastActivity.includes('days') || student.lastActivity.includes('month') || student.lastActivity === 'Never') {
       factors.push('Low recent activity');
     }
   }
 
-  if (student.riskIndicator !== 'None' && !factors.includes(student.riskIndicator)) {
+  if (student.riskIndicator && student.riskIndicator !== 'None' && !factors.includes(student.riskIndicator)) {
     factors.push(student.riskIndicator);
   }
 
   return factors;
 };
 
-const getRiskLevel = (factors: string[]): 'On Track' | 'Needs Attention' | 'High Risk' => {
+const getRiskLevel = (student: SharedStudentData, factors: string[]): 'On Track' | 'Needs Attention' | 'High Risk' => {
+  if (student.internshipStatus === 'Completed') return 'On Track';
   if (factors.length === 0) return 'On Track';
   if (factors.length === 1) return 'Needs Attention';
   return 'High Risk';
@@ -73,7 +72,7 @@ export const InternshipInsights: React.FC = () => {
   const studentHealthData = useMemo(() => {
     return allStudents.map(student => {
       const factors = getRiskFactors(student);
-      const riskLevel = getRiskLevel(factors);
+      const riskLevel = getRiskLevel(student, factors);
       const attendancePct = Math.round((student.attendance.present / student.attendance.workingDays) * 100);
       
       return {
