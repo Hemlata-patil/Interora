@@ -95,9 +95,9 @@ export const LoginPage: React.FC = () => {
 
           <div className="text-center pt-4 text-xs text-slate-500 border-t mt-4 space-y-2">
             <div>
-              Don't have an account?{' '}
+              New student?{' '}
               <Link to="/register" className="text-indigo-600 font-bold hover:underline">
-                Create Account / Register Company
+                Create Student Account
               </Link>
             </div>
           </div>
