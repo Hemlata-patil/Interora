@@ -44,8 +44,8 @@ const getRiskLevel = (student: SharedStudentData, _factors: string[]): 'On Track
     : 0;
   const progressPct = student.progressPercentage;
 
-  // 1. High Risk: Severe attendance < 60% OR (Progress == 0 AND Attendance == 0)
-  if (attendancePct < 60 || (progressPct === 0 && attendancePct === 0)) {
+  // 1. High Risk: Progress == 0% OR Severe attendance < 60%
+  if (progressPct === 0 || attendancePct < 60) {
     return 'High Risk';
   }
 
