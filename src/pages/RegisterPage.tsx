@@ -13,7 +13,7 @@ export const RegisterPage: React.FC = () => {
   // Student Form State
   const [studentForm, setStudentForm] = useState({
     fullName: '',
-    studentId: '',
+    studentId: 'CS1',
     email: '',
     phone: '',
     department: 'CSE',
@@ -78,12 +78,16 @@ export const RegisterPage: React.FC = () => {
                 value={studentForm.fullName}
                 onChange={(e) => setStudentForm({ ...studentForm, fullName: e.target.value })}
               />
-              <Input
-                label="Student / Enrollment ID"
-                required
-                placeholder="e.g. STU-2026-001"
+              <Select
+                label="Choose Batch"
                 value={studentForm.studentId}
                 onChange={(e) => setStudentForm({ ...studentForm, studentId: e.target.value })}
+                options={[
+                  { value: 'CS1', label: 'CS1' },
+                  { value: 'CS2', label: 'CS2' },
+                  { value: 'CS3', label: 'CS3' },
+                  { value: 'CS4', label: 'CS4' },
+                ]}
               />
             </div>
 
