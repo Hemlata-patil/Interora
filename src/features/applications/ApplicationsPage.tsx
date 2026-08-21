@@ -1,40 +1,43 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
-import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
-import { Search, MapPin, Clock, DollarSign, Calendar, Compass, Eye, AlertCircle, FileText, CheckCircle2, XCircle, X } from 'lucide-react';
+import { Search, Compass, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  fetchStudentApplicationsBackend,
+  type StudentApplicationRecord,
+} from '@/services/api/backendService';
 
 export const ApplicationsPage: React.FC = () => {
-  const [applications] = useState<ApplicationRecord[]>(mockApplications);
+  const [applications, setApplications] = useState<StudentApplicationRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    const loadApps = async () => {
+      const remoteApps = await fetchStudentApplicationsBackend();
+      setApplications(remoteApps);
+    };
+    loadApps();
+  }, []);
 
   const counts = useMemo(() => {
     return {
       total: applications.length,
-      pending: applications.filter(
-        (a) => a.status === 'Pending Faculty Review' || a.status === 'Company Review'
-      ).length,
-      approvedSelected: applications.filter(
-        (a) => a.status === 'Faculty Approved' || a.status === 'Selected'
-      ).length,
-      rejectedWithdrawn: applications.filter(
-        (a) => a.status === 'Rejected' || a.status === 'Withdrawn'
-      ).length,
+      pending: applications.filter((a) => a.status === 'Submitted').length,
+      approvedSelected: applications.filter((a) => a.status === 'Shortlisted' || a.status === 'Selected').length,
+      rejectedWithdrawn: applications.filter((a) => a.status === 'Rejected').length,
     };
   }, [applications]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter((app) => {
-      // 1. Text Search (Title or Company)
       const q = searchQuery.toLowerCase().trim();
       if (q) {
-        const matchTitle = app.title.toLowerCase().includes(q);
-        const matchCompany = app.companyName.toLowerCase().includes(q);
+        const matchTitle = (app.internshipTitle || '').toLowerCase().includes(q);
+        const matchCompany = (app.companyName || '').toLowerCase().includes(q);
         if (!matchTitle && !matchCompany) return false;
       }
 
-      // 2. Status Filter
       if (statusFilter !== 'all' && app.status !== statusFilter) {
         return false;
       }
@@ -43,31 +46,24 @@ export const ApplicationsPage: React.FC = () => {
     });
   }, [applications, searchQuery, statusFilter]);
 
-  const getStatusBadge = (status: ApplicationStatus) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Selected':
         return <Badge variant="emerald">Selected</Badge>;
-      case 'Faculty Approved':
-        return <Badge variant="emerald">Faculty Approved</Badge>;
-      case 'Company Review':
-        return <Badge variant="indigo">Company Review</Badge>;
-      case 'Pending Faculty Review':
-        return <Badge variant="amber">Pending Faculty Review</Badge>;
+      case 'Shortlisted':
+        return <Badge variant="indigo">Shortlisted</Badge>;
       case 'Rejected':
         return <Badge variant="rose">Rejected</Badge>;
-      case 'Withdrawn':
-        return <Badge variant="neutral">Withdrawn</Badge>;
       default:
-        return <Badge variant="neutral">{status}</Badge>;
+        return <Badge variant="amber">Submitted</Badge>;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <PageHeader
         title="My Applications"
-        description="Monitor submitted internship applications, review faculty approvals, and track hiring decisions."
+        description="Monitor submitted internship applications, review status updates, and track hiring decisions."
       />
 
       {/* Summary Banner Cards */}
@@ -77,15 +73,15 @@ export const ApplicationsPage: React.FC = () => {
           <span className="text-2xl font-bold text-slate-900 mt-1 block">{counts.total}</span>
         </div>
         <div className="p-4 bg-white border border-amber-200 rounded-xl shadow-xs">
-          <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wider block">PENDING REVIEW</span>
+          <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wider block">SUBMITTED</span>
           <span className="text-2xl font-bold text-amber-700 mt-1 block">{counts.pending}</span>
         </div>
         <div className="p-4 bg-white border border-emerald-200 rounded-xl shadow-xs">
-          <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider block">APPROVED / SELECTED</span>
+          <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider block">SHORTLISTED / SELECTED</span>
           <span className="text-2xl font-bold text-emerald-700 mt-1 block">{counts.approvedSelected}</span>
         </div>
         <div className="p-4 bg-white border border-rose-200 rounded-xl shadow-xs">
-          <span className="text-[11px] font-semibold text-rose-600 uppercase tracking-wider block">REJECTED / WITHDRAWN</span>
+          <span className="text-[11px] font-semibold text-rose-600 uppercase tracking-wider block">REJECTED</span>
           <span className="text-2xl font-bold text-rose-700 mt-1 block">{counts.rejectedWithdrawn}</span>
         </div>
       </div>
@@ -97,7 +93,7 @@ export const ApplicationsPage: React.FC = () => {
             <Search className="w-4 h-4" />
           </div>
           <Input
-            placeholder="Search applications by internship title or company..."
+            placeholder="Search applications by position or company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -110,12 +106,10 @@ export const ApplicationsPage: React.FC = () => {
           onChange={(e) => setStatusFilter(e.target.value)}
           options={[
             { value: 'all', label: 'All Statuses' },
-            { value: 'Pending Faculty Review', label: 'Pending Faculty Review' },
-            { value: 'Faculty Approved', label: 'Faculty Approved' },
-            { value: 'Company Review', label: 'Company Review' },
+            { value: 'Submitted', label: 'Submitted' },
+            { value: 'Shortlisted', label: 'Shortlisted' },
             { value: 'Selected', label: 'Selected' },
             { value: 'Rejected', label: 'Rejected' },
-            { value: 'Withdrawn', label: 'Withdrawn' },
           ]}
         />
       </div>
@@ -128,31 +122,19 @@ export const ApplicationsPage: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1.5 flex-1">
                   <div className="flex items-center space-x-3">
-                    <h3 className="text-base font-bold text-slate-900 leading-snug hover:text-indigo-600 transition-colors">
-                      <Link to={`/student/applications/${app.id}`}>{app.title}</Link>
+                    <h3 className="text-base font-bold text-slate-900 leading-snug">
+                      {app.internshipTitle || 'Internship Position'}
                     </h3>
                     {getStatusBadge(app.status)}
                   </div>
 
                   <p className="text-xs font-semibold text-slate-600">
-                    {app.companyName} â€¢ <span className="font-normal text-slate-500">{app.location} ({app.workMode})</span>
+                    {app.companyName || 'Corporate Partner'}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-1">
-                    <span>Applied on: <strong className="text-slate-700 font-medium">{app.appliedAt}</strong></span>
-                    <span>â€¢</span>
-                    <span>Stipend: <strong className="text-emerald-600 font-medium">{app.stipend}</strong></span>
-                    <span>â€¢</span>
-                    <span>Duration: <strong className="text-slate-700 font-medium">{app.duration}</strong></span>
+                    <span>Applied on: <strong className="text-slate-700 font-medium">{new Date(app.appliedAt).toLocaleDateString()}</strong></span>
                   </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 pt-2 sm:pt-0 shrink-0">
-                  <Link to={`/student/applications/${app.id}`}>
-                    <Button variant="outline" size="sm">
-                      <Eye className="w-3.5 h-3.5 mr-1.5" /> View Details
-                    </Button>
-                  </Link>
                 </div>
               </div>
             </Card>
@@ -162,9 +144,9 @@ export const ApplicationsPage: React.FC = () => {
         <EmptyState
           icon={<Compass className="w-6 h-6 text-slate-400" />}
           title="No Applications Found"
-          description="No application records match your current search query or filter selection."
+          description="You have not submitted any internship applications yet."
           action={
-            <Link to="/student/internships">
+            <Link to="/student/opportunities">
               <Button variant="primary" size="sm">
                 Browse Internships
               </Button>

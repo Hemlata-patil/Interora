@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Button, Modal } from '@/components';
-import { Building2, Search, CheckCircle2, XCircle, Mail, Send, Eye, ShieldCheck, Trash2 } from 'lucide-react';
-import { mockCompanyProfile } from '@/features/faculty/mockData';
+import { Building2, Search, CheckCircle2, XCircle, Mail, Eye, ShieldCheck, Trash2, ShieldAlert } from 'lucide-react';
+import {
+  fetchCompanyApplicationsBackend,
+  approveCompanyBackend,
+  rejectCompanyBackend,
+  sendCompanyInvitationBackend,
+} from '@/services/api/backendService';
 
 export interface CompanyApplication {
   id: string;
@@ -29,7 +34,7 @@ export const initialCompanyApplications: CompanyApplication[] = [
     website: 'https://techcorp.com',
     appliedDate: '2026-08-01',
     status: 'Approved',
-    invitationSent: true,
+    invitationSent: false,
     internshipCount: 3,
     mentorCount: 2,
   },
@@ -43,7 +48,7 @@ export const initialCompanyApplications: CompanyApplication[] = [
     website: 'https://datacorp.io',
     appliedDate: '2026-08-05',
     status: 'Approved',
-    invitationSent: true,
+    invitationSent: false,
     internshipCount: 2,
     mentorCount: 1,
   },
@@ -61,20 +66,6 @@ export const initialCompanyApplications: CompanyApplication[] = [
     internshipCount: 0,
     mentorCount: 0,
   },
-  {
-    id: 'comp-app-4',
-    companyName: 'CyberShield Systems',
-    industryDomain: 'Information Security & Auditing',
-    contactPerson: 'Sarah Jenkins',
-    email: 'hr@cybershield.net',
-    phone: '+91 97890 12345',
-    website: 'https://cybershield.net',
-    appliedDate: '2026-08-18',
-    status: 'Pending',
-    invitationSent: false,
-    internshipCount: 0,
-    mentorCount: 0,
-  },
 ];
 
 export const AdminCompanies: React.FC = () => {
@@ -82,6 +73,18 @@ export const AdminCompanies: React.FC = () => {
   const [companyApps, setCompanyApps] = useState<CompanyApplication[]>(initialCompanyApplications);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedApp, setSelectedApp] = useState<CompanyApplication | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadBackendData = async () => {
+      const backendCompanies = await fetchCompanyApplicationsBackend();
+      if (backendCompanies && backendCompanies.length > 0) {
+        setCompanyApps(backendCompanies);
+      }
+    };
+    loadBackendData();
+  }, []);
 
   const filteredApps = companyApps.filter((c) => {
     const matchesSearch =
@@ -96,15 +99,53 @@ export const AdminCompanies: React.FC = () => {
     }
   });
 
-  const handleApproveCompany = (id: string) => {
+  const handleApproveCompany = async (comp: CompanyApplication) => {
+    setActionError(null);
+    setLoadingId(comp.id);
+    const res = await approveCompanyBackend(comp.id, comp.companyName, comp.email);
+    setLoadingId(null);
+
+    if (!res.success) {
+      setActionError(res.error || 'Failed to approve company.');
+      return;
+    }
+
     setCompanyApps((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: 'Approved' } : c))
+      prev.map((c) => (c.id === comp.id ? { ...c, status: 'Approved' } : c))
     );
   };
 
-  const handleRejectCompany = (id: string) => {
+  const handleRejectCompany = async (comp: CompanyApplication) => {
+    setActionError(null);
+    setLoadingId(comp.id);
+    const res = await rejectCompanyBackend(comp.id, 'Criteria not met', comp.companyName, comp.email);
+    setLoadingId(null);
+
+    if (!res.success) {
+      setActionError(res.error || 'Failed to reject company.');
+      return;
+    }
+
     setCompanyApps((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: 'Rejected' } : c))
+      prev.map((c) => (c.id === comp.id ? { ...c, status: 'Rejected' } : c))
+    );
+  };
+
+  const handleSendInvite = async (comp: CompanyApplication) => {
+    if (comp.status !== 'Approved') return;
+    setActionError(null);
+    setLoadingId(comp.id);
+
+    const res = await sendCompanyInvitationBackend(comp.id, comp.companyName, comp.email);
+    setLoadingId(null);
+
+    if (!res.success) {
+      setActionError(res.error || 'Failed to send company invitation email.');
+      return;
+    }
+
+    setCompanyApps((prev) =>
+      prev.map((c) => (c.id === comp.id ? { ...c, invitationSent: true } : c))
     );
   };
 
@@ -112,89 +153,111 @@ export const AdminCompanies: React.FC = () => {
     setCompanyApps((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const handleSendInvite = (id: string) => {
-    setCompanyApps((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, invitationSent: true } : c))
-    );
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Industry & Company Management"
-        description="Review corporate registration applications, manage approved industry partners, and send onboarding credentials."
+        description="Review company registrations, approve corporate partnerships, and manage onboarding credentials."
       />
 
-      <div className="flex border-b border-slate-200 gap-6 text-sm font-semibold">
+      {actionError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* Tabs Header */}
+      <div className="flex border-b border-slate-200">
         <button
-          className={`pb-3 transition-all cursor-pointer ${
+          className={`py-3 px-6 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'APPLICATIONS'
-              ? 'border-b-2 border-indigo-600 text-indigo-600'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
-          onClick={() => setActiveTab('APPLICATIONS')}
+          onClick={() => {
+            setActiveTab('APPLICATIONS');
+            setActionError(null);
+          }}
         >
-          Company Applications ({companyApps.filter((c) => c.status !== 'Approved').length})
+          <Building2 className="w-4 h-4" />
+          Company Applications
+          <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-700">
+            {companyApps.filter((c) => c.status === 'Pending').length} Pending
+          </span>
         </button>
+
         <button
-          className={`pb-3 transition-all cursor-pointer ${
+          className={`py-3 px-6 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'APPROVED'
-              ? 'border-b-2 border-indigo-600 text-indigo-600'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
-          onClick={() => setActiveTab('APPROVED')}
+          onClick={() => {
+            setActiveTab('APPROVED');
+            setActionError(null);
+          }}
         >
-          Approved Companies & Credentials ({companyApps.filter((c) => c.status === 'Approved').length})
+          <ShieldCheck className="w-4 h-4" />
+          Approved Partners & Onboarding
+          <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700">
+            {companyApps.filter((c) => c.status === 'Approved').length} Active
+          </span>
         </button>
       </div>
 
-      <Card className="p-6 bg-white border border-slate-200">
-        <div className="mb-6 relative max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+      {/* Search Filter */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
-            placeholder="Search company name, domain, or contact..."
+            placeholder="Search by company name, contact, or domain..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-9 text-xs"
           />
         </div>
+      </div>
 
+      {/* Applications Table */}
+      <Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3 font-semibold">Company Name</th>
-                <th className="p-3 font-semibold">Industry Domain</th>
-                <th className="p-3 font-semibold">Contact Person</th>
-                <th className="p-3 font-semibold">Official Email</th>
-                <th className="p-3 font-semibold">Status</th>
-                <th className="p-3 font-semibold text-right">TPO Actions</th>
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="p-3.5">Company Name</th>
+                <th className="p-3.5">Domain</th>
+                <th className="p-3.5">Contact Person</th>
+                <th className="p-3.5">Official Email</th>
+                <th className="p-3.5">Applied Date</th>
+                <th className="p-3.5">Status</th>
+                <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredApps.map((comp) => (
-                <tr key={comp.id} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>{comp.companyName}</span>
+                <tr key={comp.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3.5 font-bold text-slate-800 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                      {comp.companyName.charAt(0)}
+                    </div>
+                    <div>
+                      <div>{comp.companyName}</div>
+                      <a href={comp.website} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-500 hover:underline">
+                        {comp.website}
+                      </a>
+                    </div>
                   </td>
-                  <td className="p-3 text-slate-600">{comp.industryDomain}</td>
-                  <td className="p-3 text-slate-700 font-medium">{comp.contactPerson}</td>
-                  <td className="p-3 text-slate-500">{comp.email}</td>
-                  <td className="p-3">
-                    <Badge
-                      variant={
-                        comp.status === 'Approved'
-                          ? 'emerald'
-                          : comp.status === 'Rejected'
-                          ? 'rose'
-                          : 'amber'
-                      }
-                    >
-                      {comp.status}
-                    </Badge>
+                  <td className="p-3.5 text-slate-600">{comp.industryDomain}</td>
+                  <td className="p-3.5 text-slate-700 font-medium">{comp.contactPerson}</td>
+                  <td className="p-3.5 text-slate-600">{comp.email}</td>
+                  <td className="p-3.5 text-slate-500">{comp.appliedDate}</td>
+                  <td className="p-3.5">
+                    {comp.status === 'Approved' && <Badge variant="emerald">Approved</Badge>}
+                    {comp.status === 'Pending' && <Badge variant="amber">Pending TPO Review</Badge>}
+                    {comp.status === 'Rejected' && <Badge variant="rose">Rejected</Badge>}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <Button
                         variant="ghost"
@@ -202,7 +265,7 @@ export const AdminCompanies: React.FC = () => {
                         className="text-slate-600 hover:bg-slate-100 text-[11px] p-1.5"
                         onClick={() => setSelectedApp(comp)}
                       >
-                        <Eye className="w-3.5 h-3.5 mr-1" /> View
+                        <Eye className="w-3.5 h-3.5 mr-1" /> View Details
                       </Button>
 
                       {activeTab === 'APPLICATIONS' && comp.status !== 'Approved' && (
@@ -210,9 +273,11 @@ export const AdminCompanies: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           className="text-emerald-600 hover:bg-emerald-50 text-[11px] p-1.5"
-                          onClick={() => handleApproveCompany(comp.id)}
+                          disabled={loadingId === comp.id}
+                          onClick={() => handleApproveCompany(comp)}
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                          {loadingId === comp.id ? 'Approving...' : 'Approve'}
                         </Button>
                       )}
 
@@ -221,9 +286,11 @@ export const AdminCompanies: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           className="text-rose-600 hover:bg-rose-50 text-[11px] p-1.5"
-                          onClick={() => handleRejectCompany(comp.id)}
+                          disabled={loadingId === comp.id}
+                          onClick={() => handleRejectCompany(comp)}
                         >
-                          <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                          <XCircle className="w-3.5 h-3.5 mr-1" />
+                          {loadingId === comp.id ? 'Rejecting...' : 'Reject'}
                         </Button>
                       )}
 
@@ -231,22 +298,27 @@ export const AdminCompanies: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={loadingId === comp.id || comp.invitationSent}
                           className={`${
                             comp.invitationSent
                               ? 'text-slate-400 bg-slate-50 cursor-default'
                               : 'text-indigo-600 hover:bg-indigo-50'
                           } text-[11px] p-1.5`}
-                          onClick={() => !comp.invitationSent && handleSendInvite(comp.id)}
+                          onClick={() => !comp.invitationSent && handleSendInvite(comp)}
                         >
-                          <Send className="w-3.5 h-3.5 mr-1" />
-                          {comp.invitationSent ? 'Invite Sent' : 'Send Invite'}
+                          <Mail className="w-3.5 h-3.5 mr-1" />
+                          {loadingId === comp.id
+                            ? 'Sending...'
+                            : comp.invitationSent
+                            ? 'Invite Sent'
+                            : 'Send Invite'}
                         </Button>
                       )}
 
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5"
+                        className="text-rose-500 hover:bg-rose-50 text-[11px] p-1.5"
                         onClick={() => handleDeleteCompany(comp.id)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -255,62 +327,82 @@ export const AdminCompanies: React.FC = () => {
                   </td>
                 </tr>
               ))}
+
+              {filteredApps.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
+                    No companies found matching the search criteria.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </Card>
 
+      {/* Detail Modal */}
       {selectedApp && (
         <Modal
-          isOpen={true}
+          isOpen={Boolean(selectedApp)}
           onClose={() => setSelectedApp(null)}
-          title={`Company Details — ${selectedApp.companyName}`}
+          title={`Company Details: ${selectedApp.companyName}`}
         >
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Industry Domain:</span>
-                <span className="font-semibold text-slate-800">{selectedApp.industryDomain}</span>
+          <div className="space-y-4 text-xs p-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Company Name</span>
+                <span className="font-bold text-slate-800">{selectedApp.companyName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Contact Person:</span>
-                <span className="font-semibold text-slate-800">{selectedApp.contactPerson}</span>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Industry Domain</span>
+                <span className="font-semibold text-slate-700">{selectedApp.industryDomain}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Official Email:</span>
-                <span className="font-semibold text-slate-800">{selectedApp.email}</span>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Contact Person</span>
+                <span className="font-semibold text-slate-700">{selectedApp.contactPerson}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Phone:</span>
-                <span className="font-semibold text-slate-800">{selectedApp.phone}</span>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Official Email</span>
+                <span className="font-semibold text-indigo-600">{selectedApp.email}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Website:</span>
-                <a href={selectedApp.website} target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Phone</span>
+                <span className="font-semibold text-slate-700">{selectedApp.phone}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Website</span>
+                <a href={selectedApp.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
                   {selectedApp.website}
                 </a>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Application Date:</span>
-                <span className="font-semibold text-slate-800">{selectedApp.appliedDate}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Approval Status:</span>
-                <Badge variant={selectedApp.status === 'Approved' ? 'emerald' : 'amber'}>{selectedApp.status}</Badge>
-              </div>
             </div>
-            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-900">
-              <p className="font-semibold flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-indigo-600" /> Account Provisioning Workflow
-              </p>
-              <p className="mt-1 text-[11px]">
-                Upon TPO Approval, an encrypted invitation token is dispatched to <strong>{selectedApp.email}</strong> allowing the company to configure secure portal credentials.
-              </p>
-            </div>
-            <div className="flex justify-end pt-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedApp(null)}>
-                Close
-              </Button>
+
+            <div className="pt-4 border-t flex justify-end gap-2">
+              {selectedApp.status !== 'Approved' && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    handleApproveCompany(selectedApp);
+                    setSelectedApp(null);
+                  }}
+                >
+                  Approve Registration
+                </Button>
+              )}
+              {selectedApp.status !== 'Rejected' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="text-rose-600"
+                  onClick={() => {
+                    handleRejectCompany(selectedApp);
+                    setSelectedApp(null);
+                  }}
+                >
+                  Reject Registration
+                </Button>
+              )}
             </div>
           </div>
         </Modal>

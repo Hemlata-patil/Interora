@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Compass,
@@ -21,6 +21,7 @@ import {
   FileCheck,
   TrendingUp,
   Building2,
+  Clock,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -42,8 +43,8 @@ export interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   role = 'student',
-  userEmail = 'alex.johnson@student.edu',
-  userName = 'Alex Johnson',
+  userEmail = 'user@interora.app',
+  userName = 'User',
   isOpen = true,
   onClose,
 }) => {
@@ -56,69 +57,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             label: 'Dashboard',
             path: '/student/dashboard',
-            icon: Compass,
-            group: 'Student Journey',
+            icon: LayoutDashboard,
+            group: 'Explore',
           },
           {
-            label: 'Internship Discovery',
+            label: 'Find Opportunities',
             path: '/student/internships',
+            icon: Compass,
+            group: 'Explore',
+          },
+          {
+            label: 'Active Internship',
+            path: '/student/internship',
             icon: Briefcase,
-            group: 'Student Journey',
+            group: 'Core',
           },
           {
             label: 'My Applications',
             path: '/student/applications',
             icon: FileText,
-            group: 'Student Journey',
+            group: 'Core',
           },
           {
-            label: 'Chat',
+            label: 'Student Chat',
             path: '/student/chat',
             icon: MessageCircle,
-            group: 'Student Journey',
+            group: 'Growth',
           },
           {
-            label: 'Attendance',
-            path: '/student/attendance',
-            icon: CheckSquare,
-            group: 'Student Journey',
-          },
-          {
-            label: 'Productivity',
-            path: '/student/tasks',
-            icon: BookOpen,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Milestones & Evaluations',
-            path: '/student/milestones',
-            icon: Target,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Certificates & Graduation',
-            path: '/student/certificates',
-            icon: Award,
-            group: 'Internship Progress',
-          },
-          {
-            label: 'Career Prep',
+            label: 'Career Prep Module',
             path: '/student/career-prep',
-            icon: BookOpen,
-            group: 'Career & Growth',
+            icon: Target,
+            group: 'Growth',
           },
           {
-            label: 'AI & Career',
+            label: 'AI Career Assistant',
             path: '/student/ai-career',
             icon: Sparkles,
-            badge: 'AI',
-            group: 'Career & Growth',
+            group: 'Growth',
           },
           {
-            label: 'Profile',
+            label: 'Profile & Documents',
             path: '/student/profile',
             icon: User,
-            group: 'Career & Growth',
+            group: 'Account',
           },
         ];
 
@@ -127,52 +109,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             label: 'Dashboard',
             path: '/faculty',
-            icon: Compass,
+            icon: LayoutDashboard,
             group: 'Overview',
           },
           {
-            label: 'Approvals',
+            label: 'Application Approvals',
             path: '/faculty/approvals',
             icon: CheckSquare,
-            badge: '3',
-            group: 'Workflows',
+            group: 'Approval',
           },
           {
-            label: 'Student Guidance',
-            path: '/faculty/guidance',
-            icon: Sparkles,
-            group: 'Workflows',
-          },
-          {
-            label: 'Evaluations',
-            path: '/faculty/evaluations',
-            icon: FileCheck,
-            group: 'Workflows',
-          },
-          {
-            label: 'Students',
+            label: 'Assigned Students',
             path: '/faculty/students',
             icon: Users,
             group: 'Monitoring',
           },
           {
+            label: 'Internship Insights',
+            path: '/faculty/insights',
+            icon: TrendingUp,
+            group: 'Monitoring',
+          },
+          {
             label: 'Attendance',
             path: '/faculty/attendance',
-            icon: CheckSquare,
+            icon: Clock,
             group: 'Monitoring',
           },
           {
             label: 'Cross-Verification',
             path: '/faculty/cross-verification',
-            icon: FileCheck,
-            group: 'Monitoring',
+            icon: ShieldCheck,
+            group: 'Verification',
           },
           {
-            label: 'Insights & Risk',
-            path: '/faculty/insights',
-            icon: TrendingUp,
-            badge: 'AI',
-            group: 'Analytics',
+            label: 'Student Guidance',
+            path: '/faculty/guidance',
+            icon: BookOpen,
+            group: 'Support',
+          },
+          {
+            label: 'Evaluations',
+            path: '/faculty/evaluations',
+            icon: FileCheck,
+            group: 'Evaluation',
           },
           {
             label: 'Placement Analytics',
@@ -181,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             group: 'Analytics',
           },
           {
-            label: 'Profile',
+            label: 'Faculty Profile',
             path: '/faculty/profile',
             icon: User,
             group: 'Account',
@@ -193,53 +173,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             label: 'Dashboard',
             path: '/company',
-            icon: Compass,
-            group: 'Overview',
+            icon: LayoutDashboard,
+            group: 'Home',
           },
           {
             label: 'Company Profile',
             path: '/company/profile',
-            icon: User,
+            icon: Building2,
             group: 'Home',
           },
           {
-            label: 'Internships',
+            label: 'Internship Postings',
             path: '/company/listings',
             icon: Briefcase,
-            group: 'Operations',
+            group: 'Hiring',
           },
           {
-            label: 'Applicants',
+            label: 'Applicants & Candidates',
             path: '/company/applicants',
             icon: Users,
-            group: 'Operations',
-          },
-          {
-            label: 'My Interns',
-            path: '/company/interns',
-            icon: GraduationCap,
-            group: 'Monitoring',
+            group: 'Hiring',
           },
           {
             label: 'Mentor Management',
             path: '/company/mentors',
-            icon: Users,
-            group: 'Monitoring',
+            icon: User,
+            group: 'Mentorship',
           },
           {
-            label: 'Milestones',
+            label: 'Active Interns',
+            path: '/company/interns',
+            icon: Users,
+            group: 'Management',
+          },
+          {
+            label: 'Tasks & Projects',
+            path: '/company/tasks',
+            icon: CheckSquare,
+            group: 'Management',
+          },
+          {
+            label: 'Milestone Tracking',
             path: '/company/milestones',
             icon: FileCheck,
-            group: 'Monitoring',
+            group: 'Management',
           },
           {
             label: 'Evaluations',
             path: '/company/evaluations',
-            icon: ShieldCheck,
+            icon: FileCheck,
             group: 'Completion',
           },
           {
-            label: 'PPO / Conversion',
+            label: 'PPO & Offers',
             path: '/company/ppo',
             icon: Award,
             group: 'Completion',
@@ -393,9 +379,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <h1 className="text-base font-bold text-slate-900 leading-none">
                 Interora
               </h1>
-            <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block mt-1">
-              Learn | Intern | Grow
-            </span>
+              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block mt-1">
+                Learn | Intern | Grow
+              </span>
             </div>
           </div>
 
@@ -481,7 +467,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-              {userName.charAt(0).toUpperCase()}
+              {(userName || 'U').charAt(0).toUpperCase()}
             </div>
 
             <div className="truncate">

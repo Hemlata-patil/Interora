@@ -1,13 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { PageHeader, EmptyState } from '@/components';
+import React, { useState, useEffect, useMemo } from 'react';
+import { PageHeader, EmptyState, Alert } from '@/components';
 import { InternshipCard } from './components/InternshipCard';
 import { InternshipSearch } from './components/InternshipSearch';
 import { InternshipFilters, type InternshipFilterState } from './components/InternshipFilters';
-import { mockInternships } from './data/mockInternships';
 import { Compass } from 'lucide-react';
+import {
+  fetchInternshipPostingsBackend,
+  createStudentApplicationBackend,
+  fetchStudentApplicationsBackend,
+  type InternshipPostingRecord,
+} from '@/services/api/backendService';
 
 export const MarketplacePage: React.FC = () => {
+  const [internships, setInternships] = useState<InternshipPostingRecord[]>([]);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [alertMsg, setAlertMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filters, setFilters] = useState<InternshipFilterState>({
     location: 'all',
     workMode: 'all',
@@ -15,6 +23,30 @@ export const MarketplacePage: React.FC = () => {
     duration: 'all',
     stipendOnly: 'all',
   });
+
+  const loadData = async () => {
+    const remoteListings = await fetchInternshipPostingsBackend();
+    setInternships(remoteListings);
+
+    const studentApps = await fetchStudentApplicationsBackend();
+    const appliedSet = new Set(studentApps.map((a) => a.internshipId));
+    setAppliedIds(appliedSet);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleApply = async (internshipId: string, coverLetter?: string) => {
+    setAlertMsg(null);
+    const res = await createStudentApplicationBackend(internshipId, coverLetter);
+    if (!res.success) {
+      setAlertMsg({ type: 'error', text: res.error || 'Failed to submit application.' });
+      return;
+    }
+    setAlertMsg({ type: 'success', text: 'Application submitted successfully!' });
+    setAppliedIds((prev) => new Set(prev).add(internshipId));
+  };
 
   const handleResetFilters = () => {
     setSearchQuery('');
@@ -28,58 +60,17 @@ export const MarketplacePage: React.FC = () => {
   };
 
   const filteredInternships = useMemo(() => {
-    return mockInternships.filter((item) => {
-      // 1. Text Search (Title, Company, Skills)
+    return internships.filter((item) => {
       const q = searchQuery.toLowerCase().trim();
       if (q) {
         const matchesTitle = item.title.toLowerCase().includes(q);
-        const matchesCompany = item.companyName.toLowerCase().includes(q);
-        const matchesSkills = item.skills.some((s) => s.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesCompany && !matchesSkills) {
-          return false;
-        }
+        const matchesCompany = (item.companyName || '').toLowerCase().includes(q);
+        const matchesSkills = (item.skills || []).some((s) => s.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesCompany && !matchesSkills) return false;
       }
-
-      // 2. Location Filter
-      if (filters.location !== 'all') {
-        const locLower = filters.location.toLowerCase();
-        const itemLocLower = item.location.toLowerCase();
-        if (!itemLocLower.includes(locLower)) {
-          return false;
-        }
-      }
-
-      // 3. Work Mode Filter
-      if (filters.workMode !== 'all' && item.workMode !== filters.workMode) {
-        return false;
-      }
-
-      // 4. Internship Type Filter
-      if (filters.internshipType !== 'all' && item.internshipType !== filters.internshipType) {
-        return false;
-      }
-
-      // 5. Duration Filter
-      if (filters.duration !== 'all' && item.duration !== filters.duration) {
-        return false;
-      }
-
-      // 6. Stipend Filter
-      if (filters.stipendOnly === 'paid' && item.stipend.toLowerCase().includes('unpaid')) {
-        return false;
-      }
-
       return true;
     });
-  }, [searchQuery, filters]);
-
-  const hasActiveFilters =
-    Boolean(searchQuery) ||
-    filters.location !== 'all' ||
-    filters.workMode !== 'all' ||
-    filters.internshipType !== 'all' ||
-    filters.duration !== 'all' ||
-    filters.stipendOnly !== 'all';
+  }, [searchQuery, filters, internships]);
 
   return (
     <div className="space-y-6">
@@ -88,7 +79,13 @@ export const MarketplacePage: React.FC = () => {
         description="Discover verified internship opportunities, filter by location, work mode, or skills, and apply directly."
       />
 
-      {/* Search & Filters Controls */}
+      {alertMsg && (
+        <Alert type={alertMsg.type} title={alertMsg.type === 'success' ? 'Success' : 'Notice'}>
+          {alertMsg.text}
+        </Alert>
+      )}
+
+      {/* Controls Bar */}
       <div className="space-y-4">
         <InternshipSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
         <InternshipFilters
@@ -101,28 +98,42 @@ export const MarketplacePage: React.FC = () => {
       {/* Results Header */}
       <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
         <span>Showing <strong className="text-slate-800 font-semibold">{filteredInternships.length}</strong> available opportunities</span>
-        {hasActiveFilters && (
-          <button
-            onClick={handleResetFilters}
-            className="text-indigo-600 hover:text-indigo-700 font-medium underline cursor-pointer"
-          >
-            Clear active filters
-          </button>
-        )}
       </div>
 
-      {/* Internship Listings Grid */}
+      {/* Internship Grid */}
       {filteredInternships.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredInternships.map((internship) => (
-            <InternshipCard key={internship.id} internship={internship} />
+            <InternshipCard
+              key={internship.id}
+              internship={{
+                id: internship.id,
+                title: internship.title,
+                companyName: internship.companyName || 'Company Partner',
+                location: internship.location,
+                workMode: 'Remote',
+                internshipType: (internship.internshipType === 'Part-time' ? 'Part-time' : 'Full-time'),
+                duration: internship.duration,
+                stipend: internship.stipend,
+                postedDate: new Date(internship.createdAt).toISOString().slice(0, 10),
+                deadline: internship.applicationDeadline ? internship.applicationDeadline.slice(0, 10) : 'Open',
+                skills: internship.skills || [],
+                description: internship.description,
+                responsibilities: [internship.description],
+                requirements: [internship.eligibility || 'Standard Eligibility'],
+                learningOutcomes: ['Practical Industry Knowledge'],
+                status: 'Open',
+              }}
+              hasApplied={appliedIds.has(internship.id)}
+              onApply={() => handleApply(internship.id, 'Interested in this role')}
+            />
           ))}
         </div>
       ) : (
         <EmptyState
           icon={<Compass className="w-6 h-6 text-slate-400" />}
           title="No Internships Found"
-          description="No internship listings match your current search query or filter settings. Try clearing active filters."
+          description="No live internship postings match your search query."
           action={
             <button
               onClick={handleResetFilters}

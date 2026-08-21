@@ -1,14 +1,16 @@
 import React from 'react';
 import { Card, Badge, Button } from '@/components';
-import { MapPin, Clock, Briefcase, DollarSign, Calendar, Building2 } from 'lucide-react';
+import { MapPin, Clock, DollarSign, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { InternshipRecord } from '../data/mockInternships';
 
 export interface InternshipCardProps {
   internship: InternshipRecord;
+  hasApplied?: boolean;
+  onApply?: () => void;
 }
 
-export const InternshipCard: React.FC<InternshipCardProps> = ({ internship }) => {
+export const InternshipCard: React.FC<InternshipCardProps> = ({ internship, hasApplied, onApply }) => {
   return (
     <Card className="hover:border-slate-300 transition-all">
       <div className="space-y-4">
@@ -66,16 +68,21 @@ export const InternshipCard: React.FC<InternshipCardProps> = ({ internship }) =>
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
           <span className="text-[11px] text-slate-400">Posted on {internship.postedDate}</span>
           <div className="flex items-center space-x-2">
-            <Link to={`/student/internships/${internship.id}`}>
-              <Button variant="outline" size="sm">
-                View Details
+            {hasApplied ? (
+              <Button variant="secondary" size="sm" disabled className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                Applied
               </Button>
-            </Link>
-            <Link to={`/student/internships/${internship.id}/apply`}>
-              <Button variant="primary" size="sm">
+            ) : onApply ? (
+              <Button variant="primary" size="sm" onClick={onApply}>
                 Apply Now
               </Button>
-            </Link>
+            ) : (
+              <Link to={`/student/internships/${internship.id}/apply`}>
+                <Button variant="primary" size="sm">
+                  Apply Now
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>
