@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Card, Button, Badge } from '@/components';
-import { Compass, GraduationCap, Building2, ShieldCheck, ArrowRight, Sparkles, Lock, Mail } from 'lucide-react';
+import { Card, Button } from '@/components';
+import { Compass, GraduationCap, Building2, ShieldCheck, ArrowRight, Lock, Mail } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
 export const LoginPage: React.FC = () => {
@@ -47,51 +47,44 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        {/* Brand Header */}
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-2xl p-6 space-y-6 shadow-2xl">
         <div className="text-center space-y-2">
-          <Link to="/" className="inline-flex items-center space-x-2">
-            <img src={interoraLogo} alt="Interora Logo" className="h-10 w-auto object-contain mx-auto" />
-          </Link>
-          <h2 className="text-2xl font-bold text-slate-900">Welcome to Interora</h2>
+          <img src={interoraLogo} alt="Interora Logo" className="h-10 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">Sign in to Interora</h2>
           <p className="text-xs text-slate-500">Sign in to access your role-based portal workspace</p>
         </div>
 
         {/* Role Selector Tabs */}
         <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-xl text-xs font-semibold">
           <button
+            type="button"
             onClick={() => handleRoleSelect('student')}
-            className={`py-2 rounded-lg transition-all flex flex-col items-center ${
-              role === 'student' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={role === 'student' ? 'py-2 rounded-lg transition-all flex flex-col items-center bg-white text-indigo-600 shadow-xs' : 'py-2 rounded-lg transition-all flex flex-col items-center text-slate-600 hover:text-slate-900'}
           >
             <Compass className="w-4 h-4 mb-0.5" />
             <span>Student</span>
           </button>
           <button
+            type="button"
             onClick={() => handleRoleSelect('faculty')}
-            className={`py-2 rounded-lg transition-all flex flex-col items-center ${
-              role === 'faculty' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={role === 'faculty' ? 'py-2 rounded-lg transition-all flex flex-col items-center bg-white text-indigo-600 shadow-xs' : 'py-2 rounded-lg transition-all flex flex-col items-center text-slate-600 hover:text-slate-900'}
           >
             <GraduationCap className="w-4 h-4 mb-0.5" />
             <span>Faculty</span>
           </button>
           <button
+            type="button"
             onClick={() => handleRoleSelect('company')}
-            className={`py-2 rounded-lg transition-all flex flex-col items-center ${
-              role === 'company' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={role === 'company' ? 'py-2 rounded-lg transition-all flex flex-col items-center bg-white text-indigo-600 shadow-xs' : 'py-2 rounded-lg transition-all flex flex-col items-center text-slate-600 hover:text-slate-900'}
           >
             <Building2 className="w-4 h-4 mb-0.5" />
             <span>Company</span>
           </button>
           <button
+            type="button"
             onClick={() => handleRoleSelect('admin')}
-            className={`py-2 rounded-lg transition-all flex flex-col items-center ${
-              role === 'admin' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={role === 'admin' ? 'py-2 rounded-lg transition-all flex flex-col items-center bg-white text-indigo-600 shadow-xs' : 'py-2 rounded-lg transition-all flex flex-col items-center text-slate-600 hover:text-slate-900'}
           >
             <ShieldCheck className="w-4 h-4 mb-0.5" />
             <span>Admin</span>
@@ -139,19 +132,20 @@ export const LoginPage: React.FC = () => {
               <ArrowRight className="w-4 h-4 ml-1.5" />
             </Button>
           </form>
+        </Card>
 
         {/* Registration CTA for Students */}
         {role === 'student' && (
           <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-center text-xs space-y-1">
             <span className="text-slate-600">New student to Interora?</span>{' '}
             <Link to="/register" className="font-bold text-indigo-600 hover:underline inline-flex items-center">
-              Register Student Account â†’
+              Register Student Account &rarr;
             </Link>
           </div>
         )}
 
         <div className="text-center text-xs text-slate-400">
-          Interora Platform â€¢ Developer 1 Workspace
+          Interora Platform &bull; Portal Workspace
         </div>
       </div>
     </div>
