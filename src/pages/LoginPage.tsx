@@ -6,8 +6,12 @@ import { Button, Input, Select, Card, Alert } from '@/components';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [isLogin, setIsLogin] = useState(true);
+  const [fullName, setFullName] = useState('');
+  const [institution, setInstitution] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [batch, setBatch] = useState('E1');
   const [role, setRole] = useState<UserRole>('student');
 
   const handleLogin = (e: React.FormEvent) => {
@@ -32,19 +36,47 @@ export const LoginPage: React.FC = () => {
           Select a demo role below to test portal layouts and routing. Real authentication via Supabase Auth will be wired up in the Supabase phase.
         </Alert>
 
-        <Card title="Sign in to your account">
+        <Card title={isLogin ? "Sign in to your account" : "Create a Student Account"}>
           <form onSubmit={handleLogin} className="space-y-4">
-            <Select
-              label="Select Role Workspace"
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              options={[
-                { value: 'student', label: 'Student Workspace' },
-                { value: 'faculty', label: 'Faculty Mentor Workspace' },
-                { value: 'company', label: 'Company / Industry Mentor Workspace' },
-                { value: 'admin', label: 'System Admin Workspace' },
-              ]}
-            />
+
+
+            {!isLogin && (
+              <>
+                <Input
+                  label="Full Name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+                <Input
+                  label="University / Institution"
+                  type="text"
+                  placeholder="University of Technology"
+                  value={institution}
+                  onChange={(e) => setInstitution(e.target.value)}
+                  required
+                />
+                <Select
+                  label="Choose Batch"
+                  value={batch}
+                  onChange={(e) => setBatch(e.target.value)}
+                  options={[
+                    { value: 'E1', label: 'E1' },
+                    { value: 'E2', label: 'E2' },
+                    { value: 'E3', label: 'E3' },
+                    { value: 'E4', label: 'E4' },
+                  ]}
+                />
+                <Input
+                  label="Student ID Card Image"
+                  type="file"
+                  accept="image/*"
+                  required
+                />
+              </>
+            )}
 
             <Input
               label="Email Address"
@@ -65,9 +97,21 @@ export const LoginPage: React.FC = () => {
             />
 
             <Button type="submit" variant="primary" className="w-full">
-              Sign In to {role.charAt(0).toUpperCase() + role.slice(1)} Portal
+              {isLogin ? `Sign In to ${role.charAt(0).toUpperCase() + role.slice(1)} Portal` : 'Create Account'}
             </Button>
           </form>
+          <div className="mt-4 text-center text-sm">
+            <span className="text-slate-500">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+            </span>
+            <button 
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-indigo-600 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
+            >
+              {isLogin ? "Create account" : "Sign in"}
+            </button>
+          </div>
         </Card>
 
         <p className="text-center text-xs text-slate-500">

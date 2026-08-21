@@ -56,11 +56,6 @@ export const LandingPage: React.FC = () => {
                 Explore Portals <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
-            <Link to="/verify/demo-token">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                Verify Certificate
-              </Button>
-            </Link>
           </div>
         </div>
       </section>
