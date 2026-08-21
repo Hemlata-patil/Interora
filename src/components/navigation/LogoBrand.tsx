@@ -26,7 +26,7 @@ export const LogoBrand: React.FC<LogoBrandProps> = ({
   const navTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleLogoClick = (e: React.MouseEvent) => {
-    // Crucial: Stop event propagation & default anchor behavior to prevent instant redirect
+    // Stop event propagation & default anchor behavior to prevent instant redirect
     e.preventDefault();
     e.stopPropagation();
 
@@ -44,8 +44,8 @@ export const LogoBrand: React.FC<LogoBrandProps> = ({
       clearTimeout(timerRef.current);
     }
 
-    if (nextCount === 4) {
-      // 4th Click Triggered: Open Admin/TPO Login directly without landing page redirect
+    if (nextCount === 6) {
+      // 6th Click Triggered: Open Admin Passcode Access Modal directly
       setClickCount(0);
       setShowSubtleFeedback(true);
       setTimeout(() => setShowSubtleFeedback(false), 800);
@@ -56,7 +56,7 @@ export const LogoBrand: React.FC<LogoBrandProps> = ({
         setClickCount(0);
       }, 3000);
 
-      // If normal single-click navigation is explicitly requested, delay it until we know it's not a multi-click sequence
+      // If normal single-click navigation is requested, delay until sequence is clear
       if (enableNormalNavigation && nextCount === 1) {
         navTimerRef.current = setTimeout(() => {
           setClickCount(0);
@@ -65,7 +65,7 @@ export const LogoBrand: React.FC<LogoBrandProps> = ({
           } else {
             navigate('/');
           }
-        }, 1200); // 1.2s delay allows fast 4-click sequence without redirecting
+        }, 1500);
       }
     }
   };
