@@ -14,7 +14,9 @@ import {
   Globe,
   Phone,
   UserCheck,
-  Check
+  Check,
+  KeyRound,
+  EyeOff
 } from 'lucide-react';
 import {
   fetchCompanyApplicationsBackend,
@@ -37,6 +39,7 @@ export interface CompanyApplication {
   invitationSent: boolean;
   internshipCount: number;
   mentorCount: number;
+  tempPassword?: string;
 }
 
 export const initialCompanyApplications: CompanyApplication[] = [
@@ -53,6 +56,7 @@ export const initialCompanyApplications: CompanyApplication[] = [
     invitationSent: false,
     internshipCount: 3,
     mentorCount: 2,
+    tempPassword: 'company@123',
   },
   {
     id: 'comp-app-2',
@@ -67,6 +71,7 @@ export const initialCompanyApplications: CompanyApplication[] = [
     invitationSent: false,
     internshipCount: 2,
     mentorCount: 1,
+    tempPassword: 'company@123',
   },
   {
     id: 'comp-app-3',
@@ -81,6 +86,7 @@ export const initialCompanyApplications: CompanyApplication[] = [
     invitationSent: false,
     internshipCount: 0,
     mentorCount: 0,
+    tempPassword: 'company@123',
   },
 ];
 
@@ -104,7 +110,9 @@ export const AdminCompanies: React.FC = () => {
     phone: '',
     website: '',
     status: 'Approved' as 'Approved' | 'Pending',
+    tempPassword: 'company@123',
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const loadBackendData = async () => {
@@ -216,6 +224,7 @@ export const AdminCompanies: React.FC = () => {
       invitationSent: false,
       internshipCount: 0,
       mentorCount: 0,
+      tempPassword: newCompany.tempPassword || 'company@123',
     };
 
     try {
@@ -247,6 +256,7 @@ export const AdminCompanies: React.FC = () => {
       phone: '',
       website: '',
       status: 'Approved',
+      tempPassword: 'company@123',
     });
   };
 
@@ -550,6 +560,33 @@ export const AdminCompanies: React.FC = () => {
                 value={newCompany.email}
                 onChange={(e) => setNewCompany({ ...newCompany, email: e.target.value })}
               />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                  Temporary Password for Industry Login
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">(Used by company representative to sign in)</span>
+              </label>
+              <div className="relative">
+                <Input
+                  required
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="e.g. company@123"
+                  value={newCompany.tempPassword}
+                  onChange={(e) => setNewCompany({ ...newCompany, tempPassword: e.target.value })}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
