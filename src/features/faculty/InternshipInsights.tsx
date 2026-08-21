@@ -44,17 +44,17 @@ const getRiskLevel = (student: SharedStudentData, _factors: string[]): 'On Track
     : 0;
   const progressPct = student.progressPercentage;
 
-  // 1. High Risk: Attendance < 70% OR (Attendance < 75% AND Progress < 50%) OR (Progress == 0 AND Attendance == 0)
-  if (attendancePct < 70 || (attendancePct < 75 && progressPct < 50) || (progressPct === 0 && attendancePct < 50)) {
+  // 1. High Risk: Severe attendance < 60% OR (Progress == 0 AND Attendance == 0)
+  if (attendancePct < 60 || (progressPct === 0 && attendancePct === 0)) {
     return 'High Risk';
   }
 
-  // 2. On Track: Healthy Attendance >= 85% AND Healthy Progress >= 50%
+  // 2. On Track: Healthy Attendance >= 85% AND Progress >= 50%
   if (attendancePct >= 85 && progressPct >= 50) {
     return 'On Track';
   }
 
-  // 3. Needs Attention: Moderate Attendance (70-84%) or Low Progress (<50%) with Good Attendance
+  // 3. Needs Attention: Moderate attendance (60-84%) or Progress < 50% (e.g. Priya Shah: 45% progress, 66% attendance)
   return 'Needs Attention';
 };
 
