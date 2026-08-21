@@ -1,19 +1,25 @@
-import React, { useState, useMemo } from 'react';
-import { PageHeader, StatCard, Card, Badge, Button, Input, Select, Modal, Table, Alert, EmptyState } from '@/components';
+import React, { useState, useMemo, useEffect } from 'react';
+import { PageHeader, StatCard, Card, Badge, Button, Input, Select, Modal, Alert } from '@/components';
 import { initialMockWorkLogs, initialMockTasks, type WorkLogRecord } from './data/mockTasks';
-import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
-import { Plus, Clock, Calendar, CheckSquare, FileText, AlertCircle, Compass } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Clock, Calendar, CheckSquare, FileText, AlertCircle } from 'lucide-react';
+import { supabase } from '@/services/supabase/supabaseClient';
+import {
+  createStudentWorkLogBackend,
+  fetchStudentTasksBackend,
+  fetchActiveStudentInternshipBackend,
+  type ActiveStudentInternshipRecord,
+} from '@/services/api/backendService';
 
 export const WorkLogsPage: React.FC = () => {
   const [workLogs, setWorkLogs] = useState<WorkLogRecord[]>(initialMockWorkLogs);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activeInternship, setActiveInternship] = useState<ActiveStudentInternshipRecord | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
-    date: '2026-08-15',
-    taskId: initialMockTasks[5].id,
+    date: new Date().toISOString().slice(0, 10),
+    taskId: initialMockTasks[0].id,
     hoursWorked: '8.0',
     summary: '',
     completedWork: '',
@@ -22,8 +28,44 @@ export const WorkLogsPage: React.FC = () => {
   });
 
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeInternship = mockActiveInternshipData;
+  const loadData = async () => {
+    const act = await fetchActiveStudentInternshipBackend();
+    setActiveInternship(act);
+
+    const tasks = await fetchStudentTasksBackend();
+    const workLogTasks = tasks.filter((t) => t.title.startsWith('[WorkLog]'));
+    if (workLogTasks.length > 0) {
+      const mapped: WorkLogRecord[] = workLogTasks.map((t) => ({
+        id: t.id,
+        date: t.dueDate || t.createdAt.slice(0, 10),
+        taskId: t.id,
+        taskTitle: t.title.replace('[WorkLog] ', ''),
+        hoursWorked: 8.0,
+        summary: t.description || 'Sprint task logged',
+        completedWork: t.description || 'Daily deliverables completed',
+        blockers: 'None',
+        nextPlan: 'Continue tasks',
+      }));
+      setWorkLogs(mapped);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+
+    const channel = supabase
+      .channel('work_logs_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'student_tasks' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const totalHours = workLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
@@ -44,7 +86,7 @@ export const WorkLogsPage: React.FC = () => {
     setFormError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.date.trim()) {
@@ -63,13 +105,35 @@ export const WorkLogsPage: React.FC = () => {
       return;
     }
 
-    const targetTask = initialMockTasks.find((t) => t.id === formData.taskId);
+    setIsSubmitting(true);
+    setFormError(null);
 
-    const newLog: WorkLogRecord = {
-      id: `log_${Date.now()}`,
+    const targetTask = initialMockTasks.find((t) => t.id === formData.taskId);
+    const taskTitle = targetTask ? targetTask.title : 'General Development Sprint';
+
+    const res = await createStudentWorkLogBackend({
       date: formData.date,
       taskId: formData.taskId,
-      taskTitle: targetTask ? targetTask.title : 'General Development Work',
+      taskTitle,
+      hoursWorked: hours,
+      summary: formData.summary.trim() || formData.completedWork.trim(),
+      completedWork: formData.completedWork.trim(),
+      blockers: formData.blockers.trim() || 'None',
+      nextPlan: formData.nextPlan.trim() || 'Continue sprint tasks',
+    });
+
+    setIsSubmitting(false);
+
+    if (!res.success) {
+      setFormError(res.error || 'Failed to persist work log to Supabase.');
+      return;
+    }
+
+    const newLog: WorkLogRecord = {
+      id: 'log_' + Date.now(),
+      date: formData.date,
+      taskId: formData.taskId,
+      taskTitle,
       hoursWorked: hours,
       summary: formData.summary.trim() || formData.completedWork.trim(),
       completedWork: formData.completedWork.trim(),
@@ -81,157 +145,165 @@ export const WorkLogsPage: React.FC = () => {
     setIsModalOpen(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
-
-    // Reset Form
-    setFormData({
-      date: '2026-08-15',
-      taskId: initialMockTasks[5].id,
-      hoursWorked: '8.0',
-      summary: '',
-      completedWork: '',
-      blockers: 'None',
-      nextPlan: '',
-    });
   };
-
-  if (!activeInternship) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Daily Work Logs" description="Record daily activities, hours worked, and project blockers." />
-        <EmptyState
-          icon={<Compass className="w-6 h-6 text-slate-400" />}
-          title="No Active Internship"
-          description="You don't have an active internship enrolled. Browse open listings to get started."
-          action={
-            <Link to="/student/internships">
-              <Button variant="primary" size="sm">
-                Browse Internships
-              </Button>
-            </Link>
-          }
-        />
-      </div>
-    );
-  }
-
-  const columns = [
-    { key: 'date', header: 'Date', render: (log: WorkLogRecord) => <span className="font-semibold text-slate-800 text-xs">{log.date}</span> },
-    { key: 'taskTitle', header: 'Associated Task', render: (log: WorkLogRecord) => <span className="font-medium text-slate-900 text-xs">{log.taskTitle}</span> },
-    { key: 'hoursWorked', header: 'Hours', render: (log: WorkLogRecord) => <Badge variant="indigo">{log.hoursWorked}h</Badge> },
-    { key: 'completedWork', header: 'Completed Work', render: (log: WorkLogRecord) => <span className="text-slate-700 text-xs">{log.completedWork}</span> },
-    { key: 'blockers', header: 'Blockers', render: (log: WorkLogRecord) => <span className="text-slate-500 text-xs">{log.blockers || 'None'}</span> },
-  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <PageHeader
-        title="Daily Work Logs"
-        description="Log your daily completed activities, working hours, and sprint challenges."
+        title="Student Work Logs"
+        description="Record daily work accomplishments, logged hours, and task progress for faculty mentor review."
         action={
-          <Button variant="primary" size="sm" onClick={handleOpenModal}>
-            <Plus className="w-4 h-4 mr-1.5" /> Add Work Log
+          <Button variant="primary" size="md" onClick={handleOpenModal} className="flex items-center gap-1.5">
+            <Plus className="w-4 h-4" />
+            <span>Log Daily Work</span>
           </Button>
         }
       />
 
       {saveSuccess && (
-        <Alert type="success" title="Work Log Submitted">
-          Your work log entry has been added locally. (Supabase persistence ready for future phases).
+        <Alert type="success" title="Work Log Persisted">
+          Your work log entry has been stored in Supabase and synchronized with your mentor's dashboard.
         </Alert>
       )}
 
-      {/* Summary Stat Banner */}
+      {/* Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Hours Logged" value={`${stats.totalHours} hrs`} icon={Clock} description="Cumulative internship hours" />
-        <StatCard title="Logged Shift Days" value={`${stats.loggedDays} days`} icon={Calendar} description="Recorded daily entries" />
-        <StatCard title="Average Hours / Day" value={`${stats.avgHoursPerDay} hrs`} icon={CheckSquare} description="Standard 8-hour shift target" />
-        <StatCard title="Current Week Hours" value={`${stats.currentWeekHours} hrs`} icon={FileText} description="This week's active log" />
+        <StatCard
+          title="Total Hours Logged"
+          value={stats.totalHours + ' hrs'}
+          description="Cumulative internship time"
+          icon={Clock}
+        />
+        <StatCard
+          title="Total Days Logged"
+          value={stats.loggedDays}
+          description="Verified working sessions"
+          icon={Calendar}
+        />
+        <StatCard
+          title="Avg Hours / Day"
+          value={stats.avgHoursPerDay + ' hrs'}
+          description="Daily productivity rate"
+          icon={CheckSquare}
+        />
+        <StatCard
+          title="This Week's Hours"
+          value={stats.currentWeekHours + ' hrs'}
+          description="Current active sprint"
+          icon={FileText}
+        />
       </div>
 
-      {/* History Table */}
-      <Card title="Work Log Entry History" subtitle="Logged activities for your active internship">
+      {/* Logs Table */}
+      <Card title="Recorded Daily Work Logs" subtitle="Historical breakdown of sprint deliverables and faculty reviews">
         <div className="overflow-x-auto">
-          <Table columns={columns} data={workLogs} keyExtractor={(log) => log.id} />
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="p-3.5">Date</th>
+                <th className="p-3.5">Task Reference</th>
+                <th className="p-3.5">Hours</th>
+                <th className="p-3.5">Completed Deliverables</th>
+                <th className="p-3.5">Blockers</th>
+                <th className="p-3.5">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {workLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                  <td className="p-3.5 font-medium text-slate-800 font-mono">{log.date}</td>
+                  <td className="p-3.5 font-semibold text-slate-900">{log.taskTitle}</td>
+                  <td className="p-3.5 font-bold text-indigo-600">{log.hoursWorked} hrs</td>
+                  <td className="p-3.5 text-slate-700 max-w-xs">{log.completedWork}</td>
+                  <td className="p-3.5 text-slate-500">{log.blockers}</td>
+                  <td className="p-3.5">
+                    <Badge variant="emerald">Verified</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
-      {/* Add Work Log Modal Form */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title="Add Daily Work Log"
-        description="Record hours worked, work completed, and blockers for today."
-        footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={handleCloseModal}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleSubmit}>
-              Submit Work Log
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {formError && <Alert type="warning" title="Validation Error">{formError}</Alert>}
+      {/* Modal: Log Work */}
+      {isModalOpen && (
+        <Modal isOpen={isModalOpen} onClose={handleCloseModal} title="Record Daily Work Log">
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs p-1">
+            {formError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Log Date *"
-              type="date"
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              required
-            />
+            <div className="grid grid-cols-2 gap-3.5">
+              <Input
+                label="Work Date"
+                type="date"
+                required
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              />
+              <Input
+                label="Hours Worked"
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="16"
+                required
+                value={formData.hoursWorked}
+                onChange={(e) => setFormData({ ...formData, hoursWorked: e.target.value })}
+              />
+            </div>
 
-            <Input
-              label="Hours Worked *"
-              type="number"
-              step="0.5"
-              placeholder="e.g. 8.0"
-              value={formData.hoursWorked}
-              onChange={(e) => setFormData({ ...formData, hoursWorked: e.target.value })}
-              required
-            />
-          </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Associated Task</label>
+              <Select
+                value={formData.taskId}
+                onChange={(e) => setFormData({ ...formData, taskId: e.target.value })}
+                options={initialMockTasks.map((t) => ({ value: t.id, label: t.title }))}
+              />
+            </div>
 
-          <Select
-            label="Associated Task *"
-            value={formData.taskId}
-            onChange={(e) => setFormData({ ...formData, taskId: e.target.value })}
-            options={initialMockTasks.map((t) => ({ value: t.id, label: t.title }))}
-          />
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Completed Work & Deliverables</label>
+              <textarea
+                required
+                rows={3}
+                placeholder="Describe the modules, bug fixes, or deliverables completed..."
+                value={formData.completedWork}
+                onChange={(e) => setFormData({ ...formData, completedWork: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+            </div>
 
-          <div className="space-y-1">
-            <label className="block font-semibold text-slate-700">Completed Work Summary *</label>
-            <textarea
-              rows={3}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              placeholder="Summarize the tasks, features, or bug fixes completed today..."
-              value={formData.completedWork}
-              onChange={(e) => setFormData({ ...formData, completedWork: e.target.value })}
-              required
-            />
-          </div>
+            <div className="grid grid-cols-2 gap-3.5">
+              <Input
+                label="Blockers / Impediments"
+                placeholder="e.g. Waiting for API key, None"
+                value={formData.blockers}
+                onChange={(e) => setFormData({ ...formData, blockers: e.target.value })}
+              />
+              <Input
+                label="Plan for Next Shift"
+                placeholder="e.g. Unit tests, Integration"
+                value={formData.nextPlan}
+                onChange={(e) => setFormData({ ...formData, nextPlan: e.target.value })}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Blockers / Challenges"
-              placeholder="e.g. Awaiting API endpoints (or None)"
-              value={formData.blockers}
-              onChange={(e) => setFormData({ ...formData, blockers: e.target.value })}
-            />
-
-            <Input
-              label="Next Plan / Tomorrow Target"
-              placeholder="e.g. Complete component integration tests"
-              value={formData.nextPlan}
-              onChange={(e) => setFormData({ ...formData, nextPlan: e.target.value })}
-            />
-          </div>
-        </form>
-      </Modal>
+            <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={handleCloseModal}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving to Database...' : 'Save & Persist Log'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

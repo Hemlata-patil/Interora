@@ -13,7 +13,7 @@ import { AttendanceHistory } from './components/AttendanceHistory';
 import { CheckSquare, FileText, LogIn, LogOut, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/services/supabase/supabaseClient';
-import { fetchStudentAttendanceBackend, createAttendanceRecordBackend } from '@/services/api/backendService';
+import { fetchStudentAttendanceBackend, createAttendanceRecordBackend, checkoutAttendanceRecordBackend } from '@/services/api/backendService';
 
 export const AttendancePage: React.FC = () => {
   const activeInternship = mockActiveInternshipData;
