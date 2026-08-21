@@ -28,7 +28,7 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     switch (role) {
       case 'student':
@@ -139,7 +139,6 @@ export const LoginPage: React.FC = () => {
               <ArrowRight className="w-4 h-4 ml-1.5" />
             </Button>
           </form>
-        </Card>
 
         {/* Registration CTA for Students */}
         {role === 'student' && (

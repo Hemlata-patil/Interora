@@ -45,6 +45,8 @@ export const ActiveInternshipPage: React.FC = () => {
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Industry Mentor</span>
               <span className="font-bold text-slate-800 text-xs">{active.industryMentor}</span>
             </div>
+            <ProgressBar progress={activeData.progressPercentage} color="emerald" showPercent={false} />
+            <span className="text-[11px] text-indigo-200 block text-right">Status: {activeData.status}</span>
           </div>
         </div>
       </Card>

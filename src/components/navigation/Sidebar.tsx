@@ -8,12 +8,10 @@ import {
   GraduationCap,
   Award,
   Users,
-  Building2,
   BarChart3,
   ShieldCheck,
   CheckSquare,
   Sparkles,
-  ChevronRight,
   LogOut,
   X,
   Target,
@@ -31,7 +29,7 @@ export interface NavItem {
 }
 
 export interface SidebarProps {
-  role?: 'student' | 'faculty' | 'company' | 'admin';
+  role?: 'student' | 'faculty' | 'company' | 'mentor' | 'admin';
   userEmail?: string;
   userName?: string;
   isOpen?: boolean;
@@ -40,8 +38,8 @@ export interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   role = 'student',
-  userEmail = 'alex.johnson@student.edu',
-  userName = 'Alex Johnson',
+  userEmail = 'user@interora.app',
+  userName = 'User',
   isOpen = true,
   onClose,
 }) => {
@@ -66,33 +64,253 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       case 'faculty':
         return [
-          { label: 'Overview', path: '/faculty', icon: Compass, group: 'Overview' },
-          { label: 'Approvals', path: '/faculty/approvals', icon: CheckSquare, badge: '3', group: 'Workflows' },
-          { label: 'Students', path: '/faculty/students', icon: Users, group: 'Monitoring' },
-          { label: 'Insights & Risk', path: '/faculty/insights', icon: BarChart3, badge: 'AI', group: 'Analytics' },
-          { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
+          {
+            label: 'Dashboard',
+            path: '/faculty',
+            icon: LayoutDashboard,
+            group: 'Overview',
+          },
+          {
+            label: 'Application Approvals',
+            path: '/faculty/approvals',
+            icon: CheckSquare,
+            group: 'Approval',
+          },
+          {
+            label: 'Assigned Students',
+            path: '/faculty/students',
+            icon: Users,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Internship Insights',
+            path: '/faculty/insights',
+            icon: TrendingUp,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Attendance',
+            path: '/faculty/attendance',
+            icon: Clock,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Cross-Verification',
+            path: '/faculty/cross-verification',
+            icon: ShieldCheck,
+            group: 'Verification',
+          },
+          {
+            label: 'Student Guidance',
+            path: '/faculty/guidance',
+            icon: BookOpen,
+            group: 'Support',
+          },
+          {
+            label: 'Evaluations',
+            path: '/faculty/evaluations',
+            icon: FileCheck,
+            group: 'Evaluation',
+          },
+          {
+            label: 'Placement Analytics',
+            path: '/faculty/placement-analytics',
+            icon: BarChart3,
+            group: 'Analytics',
+          },
+          {
+            label: 'Faculty Profile',
+            path: '/faculty/profile',
+            icon: User,
+            group: 'Account',
+          },
         ];
 
       case 'company':
         return [
-          { label: 'Overview', path: '/company', icon: Compass, group: 'Overview' },
-          { label: 'Listings', path: '/company/listings', icon: Briefcase, group: 'Operations' },
-          { label: 'Applicants', path: '/company/applicants', icon: Users, group: 'Operations' },
-          { label: 'Active Interns', path: '/company/interns', icon: GraduationCap, group: 'Monitoring' },
-          { label: 'Evaluations', path: '/company/evaluations', icon: ShieldCheck, group: 'Completion' },
-          { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
+          {
+            label: 'Dashboard',
+            path: '/company',
+            icon: LayoutDashboard,
+            group: 'Home',
+          },
+          {
+            label: 'Company Profile',
+            path: '/company/profile',
+            icon: Building2,
+            group: 'Home',
+          },
+          {
+            label: 'Internship Postings',
+            path: '/company/listings',
+            icon: Briefcase,
+            group: 'Hiring',
+          },
+          {
+            label: 'Applicants & Candidates',
+            path: '/company/applicants',
+            icon: Users,
+            group: 'Hiring',
+          },
+          {
+            label: 'Mentor Management',
+            path: '/company/mentors',
+            icon: User,
+            group: 'Mentorship',
+          },
+          {
+            label: 'Active Interns',
+            path: '/company/interns',
+            icon: Users,
+            group: 'Management',
+          },
+          {
+            label: 'Tasks & Projects',
+            path: '/company/tasks',
+            icon: CheckSquare,
+            group: 'Management',
+          },
+          {
+            label: 'Milestone Tracking',
+            path: '/company/milestones',
+            icon: FileCheck,
+            group: 'Management',
+          },
+          {
+            label: 'Evaluations',
+            path: '/company/evaluations',
+            icon: FileCheck,
+            group: 'Completion',
+          },
+          {
+            label: 'PPO & Offers',
+            path: '/company/ppo',
+            icon: Award,
+            group: 'Completion',
+          },
+          {
+            label: 'Certificates',
+            path: '/company/certificates',
+            icon: Award,
+            group: 'Completion',
+          },
+          {
+            label: 'Notifications',
+            path: '/company/notifications',
+            icon: Sparkles,
+            group: 'Home',
+          },
+        ];
+
+      case 'mentor':
+        return [
+          {
+            label: 'Dashboard',
+            path: '/mentor',
+            icon: LayoutDashboard,
+            group: 'Home',
+          },
+          {
+            label: 'My Interns',
+            path: '/mentor/interns',
+            icon: Users,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Tasks & Proof',
+            path: '/mentor/tasks',
+            icon: CheckSquare,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Milestones',
+            path: '/mentor/milestones',
+            icon: FileCheck,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Evaluations',
+            path: '/mentor/evaluations',
+            icon: FileCheck,
+            group: 'Completion',
+          },
+          {
+            label: 'Notifications',
+            path: '/mentor/notifications',
+            icon: Sparkles,
+            group: 'Home',
+          },
+          {
+            label: 'Profile',
+            path: '/student/profile',
+            icon: User,
+            group: 'Account',
+          },
         ];
 
       case 'admin':
         return [
-          { label: 'Overview', path: '/admin', icon: Compass, group: 'Overview' },
-          { label: 'User Management', path: '/admin/users', icon: Users, group: 'Administration' },
-          { label: 'Internships', path: '/admin/internships', icon: Briefcase, group: 'Administration' },
-          { label: 'Certificates', path: '/admin/certificates', icon: Award, group: 'Oversight' },
-          { label: 'System Analytics', path: '/admin/analytics', icon: BarChart3, group: 'Oversight' },
-          { label: 'Profile', path: '/student/profile', icon: User, group: 'Account' },
+          {
+            label: 'Dashboard',
+            path: '/admin',
+            icon: LayoutDashboard,
+            group: 'Overview',
+          },
+          {
+            label: 'Student Applications',
+            path: '/admin/applications',
+            icon: FileText,
+            group: 'Administration',
+          },
+          {
+            label: 'User Management',
+            path: '/admin/users',
+            icon: Users,
+            group: 'Administration',
+          },
+          {
+            label: 'Internships',
+            path: '/admin/internships',
+            icon: Briefcase,
+            group: 'Administration',
+          },
+          {
+            label: 'Industry & Company Management',
+            path: '/admin/companies',
+            icon: Building2,
+            group: 'Administration',
+          },
+          {
+            label: 'Faculty Mentor Management',
+            path: '/admin/faculty-mentors',
+            icon: GraduationCap,
+            group: 'Administration',
+          },
+          {
+            label: 'PPO Approvals',
+            path: '/admin/ppos',
+            icon: CheckSquare,
+            group: 'Oversight',
+          },
+          {
+            label: 'Certificates',
+            path: '/admin/certificates',
+            icon: Award,
+            group: 'Oversight',
+          },
+          {
+            label: 'System Analytics',
+            path: '/admin/analytics',
+            icon: BarChart3,
+            group: 'Oversight',
+          },
+          {
+            label: 'Profile',
+            path: '/admin/profile',
+            icon: User,
+            group: 'Account',
+          },
         ];
-
       default:
         return [];
     }
@@ -110,16 +328,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Brand Logo & Platform Title */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <img src={interoraLogo} alt="Interora Logo" className="h-9 w-auto object-contain" />
+            <img
+              src={interoraLogo}
+              alt="Interora Logo"
+              className="h-9 w-auto object-contain"
+            />
             <div>
-              <h1 className="text-base font-bold text-slate-900 leading-none">Interora</h1>
-              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
-                Learn â€¢ Intern â€¢ Grow
+              <h1 className="text-base font-bold text-slate-900 leading-none">
+                Interora
+              </h1>
+              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block mt-1">
+                Learn | Intern | Grow
               </span>
             </div>
           </div>
+
           {onClose && (
-            <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600 p-1">
+            <button
+              onClick={onClose}
+              className="md:hidden text-slate-400 hover:text-slate-600 p-1"
+              aria-label="Close navigation"
+            >
               <X className="w-5 h-5" />
             </button>
           )}
@@ -128,9 +357,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Role Identity Banner */}
         <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
           <div className="text-xs">
-            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Active Role</span>
-            <span className="font-bold text-slate-800 capitalize">{role} Portal</span>
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+              Active Role
+            </span>
+            <span className="font-bold text-slate-800 capitalize">
+              {role} Portal
+            </span>
           </div>
+
           <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded uppercase">
             AlphaStack
           </span>
@@ -169,7 +403,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {item.badge && (
                   <span
                     className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
-                      isActive ? 'bg-white text-indigo-700' : 'bg-indigo-100 text-indigo-700'
+                      isActive
+                        ? 'bg-white text-indigo-700'
+                        : 'bg-indigo-100 text-indigo-700'
                     }`}
                   >
                     {item.badge}
@@ -186,14 +422,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-              {userName.charAt(0)}
+              {(userName || 'U').charAt(0).toUpperCase()}
             </div>
+
             <div className="truncate">
-              <span className="text-xs font-bold text-slate-800 block truncate">{userName}</span>
-              <span className="text-[10px] text-slate-400 block truncate">{userEmail}</span>
+              <span className="text-xs font-bold text-slate-800 block truncate">
+                {userName}
+              </span>
+              <span className="text-[10px] text-slate-400 block truncate">
+                {userEmail}
+              </span>
             </div>
           </div>
-          <NavLink to="/login" className="text-slate-400 hover:text-rose-600 p-1 transition-colors" title="Log Out">
+
+          <NavLink
+            to="/login"
+            className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+            title="Log Out"
+          >
             <LogOut className="w-4 h-4" />
           </NavLink>
         </div>

@@ -6,7 +6,7 @@ import { calculateInternshipCountdown } from '@/features/internships/utils/inter
 import { FileText, Search, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export const ApplicationsPage: React.FC = () => {
-  const [applications] = useState<ApplicationRecord[]>(mockApplications);
+  const [applications, setApplications] = useState<StudentApplicationRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
@@ -24,7 +24,7 @@ export const ApplicationsPage: React.FC = () => {
     });
   }, [applications, searchQuery, statusFilter]);
 
-  const getStatusBadge = (status: ApplicationStatus) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Selected':
         return <Badge variant="emerald">Selected</Badge>;
@@ -36,7 +36,7 @@ export const ApplicationsPage: React.FC = () => {
       case 'Rejected':
         return <Badge variant="rose">Rejected</Badge>;
       default:
-        return <Badge variant="neutral">{status}</Badge>;
+        return <Badge variant="amber">Submitted</Badge>;
     }
   };
 

@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/Button';
 import type { UserRole } from '@/types';
 import { useNavigate } from 'react-router-dom';
 
+import { mockCompanyNotifications } from '@/features/faculty/mockData';
+
 export interface HeaderProps {
   role: UserRole;
   onMenuToggle: () => void;
@@ -11,6 +13,16 @@ export interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
   const navigate = useNavigate();
+  
+  const unreadCount = role === 'company' 
+    ? mockCompanyNotifications.filter(n => !n.read).length
+    : 0;
+
+  const handleNotificationClick = () => {
+    if (role === 'company') {
+      navigate('/company/notifications');
+    }
+  };
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
@@ -29,11 +41,14 @@ export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
 
       <div className="flex items-center space-x-3">
         <button
+          onClick={handleNotificationClick}
           className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg relative"
           aria-label="Notifications"
         >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full" />
+          {unreadCount > 0 && (
+            <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full border-2 border-white box-content" />
+          )}
         </button>
 
         <div className="h-5 w-px bg-slate-200" />
