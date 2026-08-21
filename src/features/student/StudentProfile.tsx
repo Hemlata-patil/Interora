@@ -230,22 +230,23 @@ export const StudentProfile: React.FC = () => {
       if (userData?.user) {
         const userId = userData.user.id;
 
-        // 1. Update Profiles table
+        // 1. Update Profiles table (full_name)
         await supabase
           .from('profiles')
           .update({
             full_name: formData.fullName,
-            phone: formData.phone,
-            department: formData.department,
             updated_at: new Date().toISOString(),
           })
           .eq('id', userId);
 
-        // 2. Update Student Profiles table
+        // 2. Update Student Profiles table (phone, department, course, year_semester, bio)
         await supabase
           .from('student_profiles')
           .update({
-            cgpa: formData.cgpa,
+            phone: formData.phone,
+            department: formData.department,
+            course: formData.degree,
+            year_semester: formData.yearSemester,
             bio: formData.resumeHeadline,
             updated_at: new Date().toISOString(),
           })
