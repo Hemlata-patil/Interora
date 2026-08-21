@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { APP_INFO } from '@/constants';
 import { LogoBrand } from '@/components/navigation/LogoBrand';
 import type { UserRole } from '@/types';
-import { Button, Input, Select, Card } from '@/components';
+import { Button, Input, Card } from '@/components';
 import { loginUserBackend } from '@/services/api/backendService';
 import { ShieldAlert } from 'lucide-react';
 
@@ -11,7 +11,6 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('student');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +19,7 @@ export const LoginPage: React.FC = () => {
     setErrorMsg(null);
 
     setLoading(true);
-    const res = await loginUserBackend(email, password, role);
+    const res = await loginUserBackend(email, password, 'student');
     setLoading(false);
 
     if (!res.success) {
@@ -28,7 +27,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const activeRole = res.role || role;
+    const activeRole = res.role || 'student';
     navigate(`/${activeRole}`);
   };
 
@@ -49,22 +48,6 @@ export const LoginPage: React.FC = () => {
 
         <Card title="Sign in to your account">
           <form onSubmit={handleLogin} className="space-y-4 text-xs">
-            <Select
-              label="Select Role Workspace"
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value as UserRole);
-                setErrorMsg(null);
-              }}
-              options={[
-                { value: 'student', label: 'Student Workspace' },
-                { value: 'faculty', label: 'Faculty Mentor Workspace' },
-                { value: 'company', label: 'Company Workspace' },
-                { value: 'mentor', label: 'Industry Mentor Workspace' },
-                { value: 'admin', label: 'Training & Placement Officer (TPO)' },
-              ]}
-            />
-
             <Input
               label="Email Address"
               type="email"
@@ -84,9 +67,18 @@ export const LoginPage: React.FC = () => {
             />
 
             <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-              {loading ? 'Authenticating...' : `Sign In to ${role.charAt(0).toUpperCase() + role.slice(1)} Portal`}
+              {loading ? 'Authenticating...' : 'Sign In'}
             </Button>
           </form>
+
+          <div className="text-center pt-4 text-xs text-slate-500 border-t mt-4 space-y-2">
+            <div>
+              New student?{' '}
+              <Link to="/register" className="text-indigo-600 font-bold hover:underline">
+                Create Student Account
+              </Link>
+            </div>
+          </div>
         </Card>
       </div>
     </div>
