@@ -23,6 +23,7 @@ export const ApplicationApprovals: React.FC = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<SharedStudentData | null>(null);
+  const [rating, setRating] = useState<number>(0);
 
   // Derived stats
   const total = applications.length;
@@ -43,11 +44,22 @@ export const ApplicationApprovals: React.FC = () => {
 
   const handleApprove = (id: string) => {
     setApplications(prev => prev.map(app => 
-      app.id === id ? { ...app, applicationStatus: 'Approved' } : app
+      app.id === id ? { ...app, applicationStatus: 'Approved', facultyRating: rating } : app
     ));
     if (selectedApp && selectedApp.id === id) {
-      setSelectedApp({ ...selectedApp, applicationStatus: 'Approved' });
+      setSelectedApp({ ...selectedApp, applicationStatus: 'Approved', facultyRating: rating });
     }
+    
+    // Also update mockCompanyApplications so the company sees it
+    const updatedMockApps = mockCompanyApplications.map(app => {
+      // Find matching mock application by student ID
+      if (selectedApp && app.studentId === selectedApp.id) {
+        return { ...app, facultyRating: rating };
+      }
+      return app;
+    });
+    setMockCompanyApplications(updatedMockApps);
+    setRating(0);
   };
 
   const handleReject = (id: string) => {
@@ -103,6 +115,7 @@ export const ApplicationApprovals: React.FC = () => {
             size="sm" 
             onClick={() => {
               setSelectedApp(row);
+              setRating(row.facultyRating || 0);
               setIsModalOpen(true);
             }}
           >
@@ -239,21 +252,54 @@ export const ApplicationApprovals: React.FC = () => {
             </div>
 
             {selectedApp.applicationStatus === 'Pending' && (
-              <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
-                <Button 
-                  variant="outline"
-                  className="text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => handleReject(selectedApp.id)}
-                >
-                  Reject Application
-                </Button>
-                <Button 
-                  variant="primary"
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => handleApprove(selectedApp.id)}
-                >
-                  Approve Application
-                </Button>
+              <div className="pt-4 border-t border-slate-100 flex flex-col space-y-4">
+                <div>
+                  <p className="text-slate-500 font-semibold mb-2 text-sm">Faculty Rating</p>
+                  <div className="flex items-center space-x-1 mb-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        className={`text-2xl focus:outline-none transition-colors ${
+                          rating >= star ? 'text-amber-400' : 'text-slate-200 hover:text-slate-300'
+                        }`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                    <span className="ml-3 text-sm font-medium text-slate-600">
+                      {rating > 0 ? `${rating} / 5` : 'Select a rating'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end space-x-3 pt-2">
+                  <Button 
+                    variant="outline"
+                    className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                    onClick={() => handleReject(selectedApp.id)}
+                  >
+                    Reject Application
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => handleApprove(selectedApp.id)}
+                    disabled={rating === 0}
+                  >
+                    Approve Application
+                  </Button>
+                </div>
+              </div>
+            )}
+            {selectedApp.applicationStatus !== 'Pending' && selectedApp.facultyRating && (
+              <div className="pt-4 border-t border-slate-100">
+                <p className="text-slate-500 font-semibold mb-2 text-sm">Faculty Rating</p>
+                <div className="flex items-center">
+                  <span className="text-amber-400 text-lg mr-2">{'★'.repeat(selectedApp.facultyRating)}{'☆'.repeat(5 - selectedApp.facultyRating)}</span>
+                  <span className="text-sm font-medium text-slate-700">{selectedApp.facultyRating} / 5</span>
+                </div>
               </div>
             )}
           </div>

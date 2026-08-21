@@ -16,6 +16,38 @@ export const CompanyProfile: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Password State
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  const handlePasswordSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+    
+    if (!oldPassword) {
+      setPasswordError('Old Password is required');
+      return;
+    }
+    if (!newPassword) {
+      setPasswordError('New Password is required');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New Passwords do not match');
+      return;
+    }
+    
+    setPasswordSuccess('Password updated successfully');
+    setOldPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setTimeout(() => setPasswordSuccess(''), 4000);
+  };
+
   // Sync state on mount just in case
   useEffect(() => {
     setProfile(mockCompanyProfile);
@@ -215,6 +247,56 @@ export const CompanyProfile: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </Card>
+
+            {/* Security / Password Card */}
+            <Card title="Security" className="shadow-sm">
+              <form onSubmit={handlePasswordSave} className="space-y-4 max-w-sm">
+                {passwordSuccess && (
+                  <div className="p-2 bg-emerald-50 text-emerald-600 text-xs rounded border border-emerald-100 font-medium">
+                    {passwordSuccess}
+                  </div>
+                )}
+                <Input
+                  type="password"
+                  label="Old Password"
+                  placeholder="********"
+                  value={oldPassword}
+                  onChange={(e) => {
+                    setOldPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  error={passwordError && !oldPassword ? passwordError : undefined}
+                />
+                <Input
+                  type="password"
+                  label="New Password"
+                  placeholder="********"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  error={passwordError && !newPassword ? passwordError : undefined}
+                />
+                <Input
+                  type="password"
+                  label="Confirm New Password"
+                  placeholder="********"
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  error={passwordError && newPassword !== confirmPassword ? passwordError : undefined}
+                />
+                {passwordError && newPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-red-600">{passwordError}</p>
+                )}
+                <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs">
+                  Save Password
+                </Button>
+              </form>
             </Card>
           </div>
           
