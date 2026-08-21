@@ -44,8 +44,8 @@ export const LogoBrand: React.FC<LogoBrandProps> = ({
       clearTimeout(timerRef.current);
     }
 
-    if (nextCount === 6) {
-      // 6th Click Triggered: Open Admin Passcode Access Modal directly
+    if (nextCount === 4) {
+      // 4th Click Triggered: Open Admin Passcode Access Modal directly
       setClickCount(0);
       setShowSubtleFeedback(true);
       setTimeout(() => setShowSubtleFeedback(false), 800);
