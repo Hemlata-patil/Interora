@@ -7,7 +7,7 @@ import {
   type StudentSkill,
 } from './data/mockStudentData';
 import { supabase } from '@/services/supabase/supabaseClient';
-import { uploadStudentResumeBackend } from '@/services/api/backendService';
+import { uploadStudentResumeBackend, fetchStudentProfileBackend, updateStudentProfileBackend } from '@/services/api/backendService';
 
 export const StudentProfile: React.FC = () => {
   const [profile, setProfile] = useState<StudentProfileData>(initialStudentProfileData);
@@ -16,41 +16,48 @@ export const StudentProfile: React.FC = () => {
   const [newSkillName, setNewSkillName] = useState('');
   const [newSkillLevel, setNewSkillLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
   const [saveNotification, setSaveNotification] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Resume Upload State
   const [uploadingResume, setUploadingResume] = useState(false);
   const [resumeUploadError, setResumeUploadError] = useState<string | null>(null);
   const [resumeUploadSuccess, setResumeUploadSuccess] = useState<string | null>(null);
 
-  // Fetch initial student profile data from Supabase
+  // Load real student profile from Supabase
   useEffect(() => {
-    const loadStudentProfile = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData?.user) return;
+    const loadRealProfile = async () => {
+      setLoading(true);
+      const data = await fetchStudentProfileBackend();
+      setLoading(false);
 
-      const { data: sp } = await supabase
-        .from('student_profiles')
-        .select('resume_url, resume_filename, department, course, year_semester')
-        .eq('id', authData.user.id)
-        .single();
+      if (data) {
+        const initials = data.fullName
+          ? data.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+          : 'ST';
 
-      if (sp) {
-        setProfile((prev) => ({
-          ...prev,
-          department: sp.department || prev.department,
-          resumeUrl: sp.resume_url || undefined,
-          resumeFileName: sp.resume_filename || prev.resumeFileName,
-        }));
-        setFormData((prev) => ({
-          ...prev,
-          department: sp.department || prev.department,
-          resumeUrl: sp.resume_url || undefined,
-          resumeFileName: sp.resume_filename || prev.resumeFileName,
-        }));
+        const mappedSkills: StudentSkill[] = data.skills && data.skills.length > 0
+          ? data.skills.map((s, idx) => ({ id: `sk_${idx}`, name: s, category: 'technical', level: 'intermediate' }))
+          : initialStudentProfileData.skills;
+
+        const realData: StudentProfileData = {
+          ...initialStudentProfileData,
+          fullName: data.fullName,
+          email: data.email,
+          phone: data.phone,
+          department: data.department,
+          degree: data.course,
+          yearSemester: data.yearSemester,
+          skills: mappedSkills,
+          resumeUrl: data.resumeUrl,
+          resumeFileName: data.resumeFileName || (data.resumeUrl ? 'Uploaded_Resume.pdf' : initialStudentProfileData.resumeFileName),
+        };
+
+        setProfile(realData);
+        setFormData(realData);
       }
     };
 
-    loadStudentProfile();
+    loadRealProfile();
   }, []);
 
   const handleEdit = () => {
@@ -63,8 +70,20 @@ export const StudentProfile: React.FC = () => {
     setIsEditing(false);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const skillNames = formData.skills.map((s) => s.name);
+
+    await updateStudentProfileBackend({
+      fullName: formData.fullName,
+      phone: formData.phone,
+      department: formData.department,
+      course: formData.degree,
+      yearSemester: formData.yearSemester,
+      skills: skillNames,
+    });
+
     setProfile({ ...formData });
     setIsEditing(false);
     setSaveNotification(true);
@@ -137,6 +156,10 @@ export const StudentProfile: React.FC = () => {
     }
   };
 
+  const userInitials = profile.fullName
+    ? profile.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'ST';
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -163,7 +186,7 @@ export const StudentProfile: React.FC = () => {
       {saveNotification && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center space-x-2">
           <Check className="w-4 h-4 text-emerald-600" />
-          <span>Profile saved successfully.</span>
+          <span>Profile saved and updated in Supabase database.</span>
         </div>
       )}
 
@@ -186,7 +209,7 @@ export const StudentProfile: React.FC = () => {
         <Card>
           <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6 p-2">
             <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md shrink-0">
-              AJ
+              {userInitials}
             </div>
 
             <div className="flex-1 text-center sm:text-left space-y-3 w-full">
@@ -195,7 +218,7 @@ export const StudentProfile: React.FC = () => {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">{profile.fullName}</h2>
-                      <p className="text-xs text-indigo-600 font-semibold">CS-2026-0842</p>
+                      <p className="text-xs text-indigo-600 font-semibold">Registered Student</p>
                     </div>
                     <Badge variant="emerald">Verified Student</Badge>
                   </div>
