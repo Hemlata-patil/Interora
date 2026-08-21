@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
-import { Search, Compass, Eye } from 'lucide-react';
+import { Search, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/services/supabase/supabaseClient';
 import {
   fetchStudentApplicationsBackend,
   type StudentApplicationRecord,
@@ -12,12 +13,33 @@ export const ApplicationsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const loadApps = async () => {
+    const remoteApps = await fetchStudentApplicationsBackend();
+    setApplications(remoteApps);
+  };
+
   useEffect(() => {
-    const loadApps = async () => {
-      const remoteApps = await fetchStudentApplicationsBackend();
-      setApplications(remoteApps);
-    };
     loadApps();
+
+    // Realtime channel listener for instant status updates (Shortlisted / Selected / Rejected)
+    const channel = supabase
+      .channel('student_applications_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'student_applications',
+        },
+        () => {
+          loadApps();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const counts = useMemo(() => {
@@ -146,7 +168,7 @@ export const ApplicationsPage: React.FC = () => {
           title="No Applications Found"
           description="You have not submitted any internship applications yet."
           action={
-            <Link to="/student/opportunities">
+            <Link to="/student/internships">
               <Button variant="primary" size="sm">
                 Browse Internships
               </Button>

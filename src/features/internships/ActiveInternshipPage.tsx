@@ -1,13 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, ProgressBar, Button, EmptyState } from '@/components';
 import { mockActiveInternshipData, type ActiveInternshipDetails } from './data/mockActiveInternship';
 import { initialMockTasks, initialMockWorkLogs } from '@/features/tasks/data/mockTasks';
 import { mockAttendanceHistory, calculateAttendanceMetrics } from '@/features/attendance/data/mockAttendance';
-import { Compass, Calendar, Clock, MapPin, UserCheck, Mail, ArrowRight, CheckCircle2, AlertCircle, CheckSquare, FileText } from 'lucide-react';
+import { Compass, Calendar, Clock, MapPin, UserCheck, Mail, ArrowRight, CheckCircle2, CheckSquare, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/services/supabase/supabaseClient';
+import { fetchActiveStudentInternshipBackend } from '@/services/api/backendService';
 
 export const ActiveInternshipPage: React.FC = () => {
-  const [activeData] = useState<ActiveInternshipDetails | null>(mockActiveInternshipData);
+  const [activeData, setActiveData] = useState<ActiveInternshipDetails | null>(mockActiveInternshipData);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadActiveInternship = async () => {
+    const remoteRecord = await fetchActiveStudentInternshipBackend();
+    if (remoteRecord) {
+      const liveDetails: ActiveInternshipDetails = {
+        internshipId: remoteRecord.internshipId,
+        internshipTitle: remoteRecord.title,
+        companyName: remoteRecord.companyName,
+        location: remoteRecord.location,
+        workMode: 'Remote',
+        internshipType: 'Full-time',
+        duration: remoteRecord.duration,
+        startDate: remoteRecord.appliedAt ? remoteRecord.appliedAt.slice(0, 10) : '2026-08-01',
+        endDate: '2026-11-30',
+        mentorName: 'TPO Assigned Lead',
+        mentorRole: 'Technical Lead',
+        mentorEmail: 'mentor@interora.app',
+        status: 'Active',
+        progressPercentage: 75,
+        currentPhase: 'Phase 2: Project Development & Sprint Execution',
+        totalMilestones: 4,
+        completedMilestones: 2,
+        nextMilestone: 'Sprint Evaluation & Code Review',
+        nextMilestoneDate: '2026-08-31',
+        journeyPhases: [
+          { title: 'Phase 1: Onboarding & Setup', description: 'Access granted & dev environment verified.', status: 'completed' },
+          { title: 'Phase 2: Core Development', description: 'Core features and backend API integration.', status: 'current' },
+          { title: 'Phase 3: Final Project Review & PPO Evaluation', description: 'TPO & Company final evaluation.', status: 'upcoming' },
+        ],
+      };
+      setActiveData(liveDetails);
+    }
+  };
+
+  useEffect(() => {
+    loadActiveInternship();
+
+    // Subscribe to Realtime postgres changes on student_applications table
+    const channel = supabase
+      .channel('active_internship_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'student_applications' },
+        () => {
+          loadActiveInternship();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   if (!activeData) {
     return (
@@ -32,7 +88,6 @@ export const ActiveInternshipPage: React.FC = () => {
     );
   }
 
-  // Calculate summary metrics from existing Phase 5 and Phase 6 data
   const totalTasks = initialMockTasks.length;
   const inProgressTasks = initialMockTasks.filter((t) => t.status === 'In Progress').length;
   const completedTasks = initialMockTasks.filter((t) => t.status === 'Completed').length;
@@ -44,81 +99,92 @@ export const ActiveInternshipPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Page Header */}
       <PageHeader
-        title="My Internship"
-        description="Track your current active internship, mentor details, and progression journey."
-        action={<Badge variant="emerald" className="px-3 py-1 text-xs font-semibold">Active Enrollment</Badge>}
+        title="My Active Internship"
+        description="Monitor your ongoing internship milestones, attendance, tasks, and mentor contact."
+        action={
+          <Link to="/student/attendance">
+            <Button variant="primary" size="sm">
+              <Clock className="w-4 h-4 mr-1.5" /> Check-in Today
+            </Button>
+          </Link>
+        }
       />
 
-      {/* 2. Overview Banner Card */}
-      <Card>
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+      <Card className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white p-6 sm:p-8 rounded-2xl border-none shadow-lg">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="emerald">ACTIVE ENROLLMENT</Badge>
+              <span className="text-xs text-indigo-200">ID: {activeData.internshipId}</span>
+            </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-bold text-slate-900">{activeData.internshipTitle}</h2>
-                <Badge variant="emerald">Active</Badge>
-              </div>
-              <p className="text-sm font-semibold text-indigo-600 mt-0.5">{activeData.companyName}</p>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                {activeData.internshipTitle}
+              </h2>
+              <p className="text-sm text-indigo-200 mt-1 font-medium">
+                {activeData.companyName}
+              </p>
             </div>
 
-            <div className="flex items-center space-x-2 text-xs">
-              <Badge variant={activeData.workMode === 'Remote' ? 'emerald' : activeData.workMode === 'Hybrid' ? 'indigo' : 'neutral'}>
-                {activeData.workMode}
-              </Badge>
-              <Badge variant="neutral">{activeData.internshipType}</Badge>
+            <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-indigo-100 pt-1">
+              <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-indigo-400" /> {activeData.location}</span>
+              <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-400" /> {activeData.duration} ({activeData.startDate} to {activeData.endDate})</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-            <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">LOCATION</span>
-              <span className="font-semibold text-slate-800">{activeData.location}</span>
+          <div className="w-full lg:w-72 bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/10 space-y-2.5">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-indigo-200 font-semibold uppercase text-[10px]">OVERALL PROGRESS</span>
+              <span className="font-bold text-emerald-400">{activeData.progressPercentage}%</span>
             </div>
-            <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">DURATION</span>
-              <span className="font-semibold text-slate-800">{activeData.duration}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">START DATE</span>
-              <span className="font-semibold text-slate-800">{activeData.startDate}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">END DATE</span>
-              <span className="font-semibold text-slate-800">{activeData.endDate}</span>
-            </div>
+            <ProgressBar progress={activeData.progressPercentage} color="emerald" showPercent={false} />
+            <span className="text-[11px] text-indigo-200 block text-right">Status: {activeData.status}</span>
           </div>
         </div>
       </Card>
 
-      {/* 3. Progress Section */}
-      <Card title="Internship Completion Progress">
-        <div className="space-y-4">
-          <div className="flex justify-between items-center text-xs">
-            <span className="font-semibold text-slate-700">Overall Progress</span>
-            <span className="font-bold text-indigo-600 text-sm">{activeData.progressPercentage}%</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">ATTENDANCE RATE</span>
+            <span className="text-xl font-extrabold text-slate-800">{attendanceMetrics.attendancePercentage}%</span>
+            <span className="text-[10px] text-emerald-600 font-semibold block">Compliant</span>
           </div>
-          <ProgressBar progress={activeData.progressPercentage} label="Milestone Progression" color="indigo" />
-
-          <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-              <span className="text-slate-400 block text-[11px]">Current Phase</span>
-              <span className="font-bold text-slate-800 leading-tight block mt-0.5">{activeData.currentPhase}</span>
-            </div>
-            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg">
-              <span className="text-slate-400 block text-[11px]">Completed Milestones</span>
-              <span className="font-bold text-slate-800 text-sm block mt-0.5">{`${activeData.completedMilestones} / ${activeData.totalMilestones} Milestones`}</span>
-            </div>
-          </div>
+          <Calendar className="w-8 h-8 text-emerald-500 bg-emerald-50 p-1.5 rounded-lg" />
         </div>
-      </Card>
 
-      {/* 4. NEW SECTION: Internship Productivity Cards */}
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">TASKS COMPLETED</span>
+            <span className="text-xl font-extrabold text-slate-800">{completedTasks} / {totalTasks}</span>
+            <span className="text-[10px] text-indigo-600 font-semibold block">{inProgressTasks} In Progress</span>
+          </div>
+          <CheckSquare className="w-8 h-8 text-indigo-500 bg-indigo-50 p-1.5 rounded-lg" />
+        </div>
+
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">TOTAL WORK LOGGED</span>
+            <span className="text-xl font-extrabold text-slate-800">{totalHoursLogged} hrs</span>
+            <span className="text-[10px] text-slate-500 block">{currentWeekHours} hrs this week</span>
+          </div>
+          <FileText className="w-8 h-8 text-sky-500 bg-sky-50 p-1.5 rounded-lg" />
+        </div>
+
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-slate-400 block text-[10px] uppercase font-semibold">MENTOR CONTACT</span>
+            <span className="text-sm font-bold text-slate-800 truncate block max-w-[130px]">{activeData.mentorName}</span>
+            <span className="text-[10px] text-indigo-600 font-semibold block">Assigned Lead</span>
+          </div>
+          <UserCheck className="w-8 h-8 text-indigo-500 bg-indigo-50 p-1.5 rounded-lg" />
+        </div>
+      </div>
+
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Internship Productivity</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Card 1: Daily Tasks */}
+        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Quick Actions & Shortcuts</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -126,13 +192,13 @@ export const ActiveInternshipPage: React.FC = () => {
                   <CheckSquare className="w-4 h-4 text-indigo-600" />
                   <h4 className="font-bold text-slate-900 text-sm">Daily Tasks</h4>
                 </div>
-                <Badge variant="indigo">{totalTasks} Total</Badge>
+                <Badge variant="indigo">{inProgressTasks} Active</Badge>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
-                  <span className="text-slate-400 block text-[10px]">IN PROGRESS</span>
-                  <span className="text-base font-bold text-indigo-600">{inProgressTasks}</span>
+                  <span className="text-slate-400 block text-[10px]">TOTAL TASKS</span>
+                  <span className="text-base font-bold text-slate-800">{totalTasks}</span>
                 </div>
                 <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg">
                   <span className="text-emerald-600 block text-[10px]">COMPLETED</span>
@@ -151,7 +217,6 @@ export const ActiveInternshipPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* Card 2: Work Logs */}
           <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -184,7 +249,6 @@ export const ActiveInternshipPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* Card 3: Attendance */}
           <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -219,9 +283,7 @@ export const ActiveInternshipPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Main Content Grid (Journey & Focus/Mentor) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Columns: Journey */}
         <div className="lg:col-span-2 space-y-6">
           <Card title="Internship Journey & Phases" subtitle="Structured phases for host internship program">
             <div className="space-y-5 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
@@ -259,7 +321,6 @@ export const ActiveInternshipPage: React.FC = () => {
           </Card>
         </div>
 
-        {/* Right 1 Column: Current Focus & Mentor Contact */}
         <div className="space-y-6">
           <Card title="Current Focus">
             <div className="space-y-3 text-xs">

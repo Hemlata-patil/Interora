@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input, Select, Modal, Alert } from '@/components';
-import { Users, Search, CheckCircle2, XCircle, Clock, Eye, ShieldCheck, Mail, ShieldAlert, Award } from 'lucide-react';
+import { Search, CheckCircle2, XCircle, Eye, Award } from 'lucide-react';
 import {
   fetchCompanyApplicantsBackend,
   updateApplicationStatusBackend,
@@ -15,17 +15,38 @@ export const ApplicantManagement: React.FC = () => {
   const [selectedApp, setSelectedApp] = useState<StudentApplicationRecord | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const loadApplicants = async () => {
-    const { data } = await supabase.auth.getUser();
-    if (data?.user) {
-      const remoteApps = await fetchCompanyApplicantsBackend(data.user.id);
-      setApplicants(remoteApps);
+    setLoading(true);
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !userData?.user) {
+      console.error('[ApplicantManagement] Auth user error:', userError);
+      setLoading(false);
+      return;
     }
+
+    const companyId = userData.user.id;
+    console.log('[ApplicantManagement] Authenticated company ID:', companyId);
+
+    const remoteApps = await fetchCompanyApplicantsBackend(companyId);
+    console.log('[ApplicantManagement] Mapped applicants:', remoteApps);
+
+    setApplicants(remoteApps);
+    setLoading(false);
   };
 
   useEffect(() => {
     loadApplicants();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      loadApplicants();
+    });
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
   }, []);
 
   const handleUpdateStatus = async (appId: string, newStatus: string) => {
@@ -55,6 +76,8 @@ export const ApplicantManagement: React.FC = () => {
     if (statusFilter !== 'all' && a.status !== statusFilter) return false;
     return matchesSearch;
   });
+
+  console.log('[ApplicantManagement] Filtered applicants for render:', filteredApplicants);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -187,7 +210,7 @@ export const ApplicantManagement: React.FC = () => {
               {filteredApplicants.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-400 text-xs">
-                    No student applications found.
+                    {loading ? 'Loading applications from database...' : 'No student applications found.'}
                   </td>
                 </tr>
               )}

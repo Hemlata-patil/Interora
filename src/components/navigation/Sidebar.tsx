@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Building2,
   Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 
@@ -58,49 +59,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: 'Dashboard',
             path: '/student/dashboard',
             icon: LayoutDashboard,
-            group: 'Explore',
           },
           {
-            label: 'Find Opportunities',
+            label: 'Discover Internships',
             path: '/student/internships',
             icon: Compass,
-            group: 'Explore',
-          },
-          {
-            label: 'Active Internship',
-            path: '/student/internship',
-            icon: Briefcase,
-            group: 'Core',
           },
           {
             label: 'My Applications',
             path: '/student/applications',
             icon: FileText,
-            group: 'Core',
           },
           {
-            label: 'Student Chat',
+            label: 'Attendance',
+            path: '/student/attendance',
+            icon: Clock,
+          },
+          {
+            label: 'Chat',
             path: '/student/chat',
             icon: MessageCircle,
-            group: 'Growth',
+            badge: '1',
           },
           {
-            label: 'Career Prep Module',
+            label: 'Career Prep',
             path: '/student/career-prep',
             icon: Target,
-            group: 'Growth',
           },
           {
-            label: 'AI Career Assistant',
+            label: 'AI & Career',
             path: '/student/ai-career',
             icon: Sparkles,
-            group: 'Growth',
+            badge: 'AI',
           },
           {
-            label: 'Profile & Documents',
+            label: 'Profile',
             path: '/student/profile',
             icon: User,
-            group: 'Account',
+          },
+          {
+            label: 'Productivity',
+            path: '/student/tasks',
+            icon: CheckSquare,
+          },
+          {
+            label: 'Milestones & Evaluations',
+            path: '/student/milestones',
+            icon: FileCheck,
+          },
+          {
+            label: 'Certificates & Graduation',
+            path: '/student/certificates',
+            icon: Award,
           },
         ];
 

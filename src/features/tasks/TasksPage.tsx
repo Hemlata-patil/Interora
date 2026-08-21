@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, StatCard, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
 import { initialMockTasks, type TaskRecord, type TaskStatus, type TaskPriority } from './data/mockTasks';
 import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
-import { Search, CheckSquare, Clock, AlertCircle, PlayCircle, CheckCircle2, ArrowRight, Eye, Filter, Compass } from 'lucide-react';
+import { Search, CheckSquare, Clock, AlertCircle, PlayCircle, CheckCircle2, ArrowRight, Eye, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/services/supabase/supabaseClient';
+import { fetchStudentTasksBackend, updateStudentTaskBackend } from '@/services/api/backendService';
 
 export const TasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<TaskRecord[]>(initialMockTasks);
@@ -12,6 +14,48 @@ export const TasksPage: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
 
   const activeInternship = mockActiveInternshipData;
+
+  const loadTasks = async () => {
+    const remoteTasks = await fetchStudentTasksBackend();
+    if (remoteTasks.length > 0) {
+      const mapped: TaskRecord[] = remoteTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || 'Sprint task item',
+        status: t.completed ? 'Completed' : 'In Progress',
+        priority: 'Medium',
+        category: 'Development',
+        assignedDate: t.createdAt ? t.createdAt.slice(0, 10) : '2026-08-01',
+        dueDate: t.dueDate || '2026-08-31',
+        estimatedHours: 4,
+        actualHours: t.completed ? 4 : 0,
+        internshipId: 'int_2026_01',
+        assignedBy: 'Mentor',
+        completedAt: t.completed ? 'Recently' : undefined,
+      }));
+      setTasks(mapped);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+
+    // Subscribe to Realtime postgres changes on student_tasks table
+    const channel = supabase
+      .channel('student_tasks_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'student_tasks' },
+        () => {
+          loadTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -29,9 +73,29 @@ export const TasksPage: React.FC = () => {
     setPriorityFilter('all');
   };
 
+  const handleStartTask = (taskId: string) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, status: 'In Progress' as TaskStatus } : t))
+    );
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: 'Completed' as TaskStatus,
+              completedAt: new Date().toLocaleDateString(),
+            }
+          : t
+      )
+    );
+    await updateStudentTaskBackend(taskId, true);
+  };
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      // 1. Text Search (Title or Category)
       const q = searchQuery.toLowerCase().trim();
       if (q) {
         const matchTitle = task.title.toLowerCase().includes(q);
@@ -39,39 +103,12 @@ export const TasksPage: React.FC = () => {
         if (!matchTitle && !matchCategory) return false;
       }
 
-      // 2. Status Filter
-      if (statusFilter !== 'all' && task.status !== statusFilter) {
-        return false;
-      }
-
-      // 3. Priority Filter
-      if (priorityFilter !== 'all' && task.priority !== priorityFilter) {
-        return false;
-      }
+      if (statusFilter !== 'all' && task.status !== statusFilter) return false;
+      if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
 
       return true;
     });
   }, [tasks, searchQuery, statusFilter, priorityFilter]);
-
-  const handleStartTask = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: 'In Progress' as TaskStatus } : t))
-    );
-  };
-
-  const handleCompleteTask = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              status: 'Completed' as TaskStatus,
-              completedAt: 'Today, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            }
-          : t
-      )
-    );
-  };
 
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
@@ -213,13 +250,13 @@ export const TasksPage: React.FC = () => {
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-1">
                     <span>Category: <strong className="text-slate-700 font-semibold">{task.category}</strong></span>
-                    <span>â€¢</span>
+                    <span>•</span>
                     <span>Due: <strong className="text-amber-600 font-semibold">{task.dueDate}</strong></span>
-                    <span>â€¢</span>
+                    <span>•</span>
                     <span>Est. Hours: <strong className="text-slate-700 font-semibold">{task.estimatedHours}h</strong></span>
                     {task.completedAt && (
                       <>
-                        <span>â€¢</span>
+                        <span>•</span>
                         <span className="text-emerald-600 font-semibold">Completed: {task.completedAt}</span>
                       </>
                     )}

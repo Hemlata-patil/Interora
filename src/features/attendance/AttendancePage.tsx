@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { PageHeader, Card, Badge, Button, EmptyState } from '@/components';
+import React, { useState, useMemo, useEffect } from 'react';
+import { PageHeader, Card, Badge, Button } from '@/components';
 import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
 import {
   mockAttendanceHistory,
@@ -10,21 +10,76 @@ import { initialMockTasks, initialMockWorkLogs } from '@/features/tasks/data/moc
 import { AttendanceSummary } from './components/AttendanceSummary';
 import { AttendanceCalendar } from './components/AttendanceCalendar';
 import { AttendanceHistory } from './components/AttendanceHistory';
-import { Compass, CheckSquare, FileText, Calendar, LogIn, LogOut, CheckCircle2, ArrowRight, Clock, AlertCircle } from 'lucide-react';
+import { CheckSquare, FileText, LogIn, LogOut, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/services/supabase/supabaseClient';
+import { fetchStudentAttendanceBackend, createAttendanceRecordBackend } from '@/services/api/backendService';
 
 export const AttendancePage: React.FC = () => {
-  const activeInternship = mockActiveInternshipData; // Active enrollment
+  const activeInternship = mockActiveInternshipData;
 
   const [history, setHistory] = useState<AttendanceRecord[]>(mockAttendanceHistory);
   const [todayState, setTodayState] = useState<'not_checked_in' | 'checked_in' | 'completed'>('not_checked_in');
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
 
-  // 1. Calculate Attendance Metrics
+  const loadAttendance = async () => {
+    const remoteRecords = await fetchStudentAttendanceBackend();
+    if (remoteRecords.length > 0) {
+      const mapped: AttendanceRecord[] = remoteRecords.map((r) => {
+        const d = new Date(r.attendanceDate);
+        return {
+          id: r.id,
+          date: r.attendanceDate,
+          day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          status: r.status as any,
+          checkIn: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
+          checkOut: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '05:00 PM',
+          workingHours: '8.0 hrs',
+          notes: 'Standard Working Shift',
+          location: 'Office / Remote',
+        };
+      });
+      setHistory(mapped);
+    }
+  };
+
+  useEffect(() => {
+    loadAttendance();
+
+    // Subscribe to Realtime postgres changes on attendance_records table
+    const channel = supabase
+      .channel('attendance_records_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_records' },
+        () => {
+          loadAttendance();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleCheckIn = async () => {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setCheckInTime(timeNow);
+    setTodayState('checked_in');
+    await createAttendanceRecordBackend('present');
+    await loadAttendance();
+  };
+
+  const handleCheckOut = () => {
+    const timeOut = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setCheckOutTime(timeOut);
+    setTodayState('completed');
+  };
+
   const attendanceMetrics = useMemo(() => calculateAttendanceMetrics(history), [history]);
 
-  // 2. Calculate Daily Tasks Metrics from Phase 6 Data
   const taskMetrics = useMemo(() => {
     const total = initialMockTasks.length;
     const inProgress = initialMockTasks.filter((t) => t.status === 'In Progress').length;
@@ -33,102 +88,47 @@ export const AttendancePage: React.FC = () => {
     return { total, inProgress, completed, pendingBlocked };
   }, []);
 
-  // 3. Calculate Work Logs Metrics from Phase 6 Data
   const workLogMetrics = useMemo(() => {
     const totalHours = initialMockWorkLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
     const loggedDays = initialMockWorkLogs.length;
     const currentWeekHours = initialMockWorkLogs.slice(0, 5).reduce((acc, curr) => acc + curr.hoursWorked, 0);
     const avgHoursPerDay = loggedDays > 0 ? (totalHours / loggedDays).toFixed(1) : '0';
-    return { totalHours, loggedDays, currentWeekHours, avgHoursPerDay };
+
+    return { totalHours, currentWeekHours, avgHoursPerDay, loggedDays };
   }, []);
-
-  const handleCheckIn = () => {
-    const timeNow = '09:05 AM';
-    setCheckInTime(timeNow);
-    setTodayState('checked_in');
-  };
-
-  const handleCheckOut = () => {
-    const timeOut = '05:30 PM';
-    setCheckOutTime(timeOut);
-    setTodayState('completed');
-
-    // Dynamically append today's completed attendance to history logs
-    const todayRecord: AttendanceRecord = {
-      id: `att_${Date.now()}`,
-      date: '2026-08-14',
-      day: 'Fri',
-      status: 'present',
-      checkIn: checkInTime || '09:05 AM',
-      checkOut: timeOut,
-      workingHours: '8h 25m',
-    };
-
-    setHistory((prev) => {
-      const filtered = prev.filter((r) => r.date !== '2026-08-14');
-      return [todayRecord, ...filtered];
-    });
-  };
-
-  if (!activeInternship) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Productivity"
-          description="Manage your attendance, daily tasks, and work logs during your active internship."
-        />
-        <EmptyState
-          icon={<Compass className="w-6 h-6 text-slate-400" />}
-          title="No Active Internship"
-          description="You don't have an active internship yet. Browse verified opportunities to get started."
-          action={
-            <Link to="/student/internships">
-              <Button variant="primary" size="sm">
-                Browse Internships â†’
-              </Button>
-            </Link>
-          }
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
-      {/* 1. Header */}
       <PageHeader
-        title="Productivity"
-        description="Manage your attendance, daily tasks, and work logs during your active internship."
+        title="Attendance & Check-in Tracker"
+        description="Log daily check-ins, verify shift hours, and monitor cumulative internship attendance compliance."
       />
 
-      {/* 2. Active Internship Context Banner Card */}
-      <Card>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div>
+      <Card className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white p-6 rounded-2xl border-none shadow-md">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <h3 className="text-base font-bold text-slate-900">{activeInternship.internshipTitle}</h3>
-              <Badge variant="emerald">Active Enrollment</Badge>
+              <Badge variant="emerald">ACTIVE ENROLLMENT</Badge>
+              <span className="text-xs text-indigo-200">ID: {activeInternship.internshipId}</span>
             </div>
-            <p className="text-slate-600 font-semibold mt-0.5">
-              {activeInternship.companyName} â€¢ <span className="text-slate-500 font-normal">{activeInternship.duration} ({activeInternship.workMode})</span>
-            </p>
+            <h2 className="text-xl font-bold text-white">{activeInternship.internshipTitle}</h2>
+            <p className="text-xs text-indigo-200">{activeInternship.companyName} • Mentor: {activeInternship.mentorName}</p>
           </div>
 
-          <div className="flex items-center space-x-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-semibold">ATTENDANCE RATE</span>
-              <span className="font-bold text-indigo-600 text-sm">{attendanceMetrics.attendancePercentage}%</span>
+          <div className="flex items-center space-x-4 bg-white/10 p-3 rounded-xl backdrop-blur-xs border border-white/10 shrink-0">
+            <div className="text-center">
+              <span className="text-[10px] text-indigo-200 uppercase font-semibold block">CUMULATIVE ATTENDANCE</span>
+              <span className="text-xl font-extrabold text-emerald-400">{attendanceMetrics.attendancePercentage}%</span>
             </div>
-            <div className="h-6 w-px bg-slate-200"></div>
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-semibold">HEALTH STATUS</span>
+            <div className="w-px h-8 bg-white/20" />
+            <div className="text-center">
+              <span className="text-[10px] text-indigo-200 uppercase font-semibold block">COMPLIANCE STATUS</span>
               <span className="font-bold text-emerald-600 text-xs">{attendanceMetrics.healthStatus}</span>
             </div>
           </div>
         </div>
       </Card>
 
-      {/* 3. CARD 1: ATTENDANCE OVERVIEW & CHECK IN/OUT */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Attendance Tracking</h3>
@@ -137,8 +137,7 @@ export const AttendancePage: React.FC = () => {
 
         <AttendanceSummary metrics={attendanceMetrics} />
 
-        {/* Today's Attendance Check-in Widget */}
-        <Card title="Today's Attendance Action" subtitle="Friday, 14 August 2026">
+        <Card title="Today's Attendance Action" subtitle={new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1 text-xs">
               <div className="flex items-center space-x-2">
@@ -150,7 +149,7 @@ export const AttendancePage: React.FC = () => {
 
               <div className="flex items-center space-x-4 text-slate-600 pt-1">
                 <span>Check In: <strong className="text-slate-900 font-mono">{checkInTime || '-'}</strong></span>
-                <span>â€¢</span>
+                <span>•</span>
                 <span>Check Out: <strong className="text-slate-900 font-mono">{checkOutTime || '-'}</strong></span>
               </div>
             </div>
@@ -179,9 +178,7 @@ export const AttendancePage: React.FC = () => {
         </Card>
       </div>
 
-      {/* 4. PRODUCTIVITY CARDS GRID: DAILY TASKS & WORK LOGS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* CARD 2: DAILY TASKS */}
         <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -224,7 +221,6 @@ export const AttendancePage: React.FC = () => {
           </div>
         </Card>
 
-        {/* CARD 3: WORK LOGS */}
         <Card className="hover:border-slate-300 transition-all flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -268,7 +264,6 @@ export const AttendancePage: React.FC = () => {
         </Card>
       </div>
 
-      {/* 5. Attendance Calendar & History */}
       <AttendanceCalendar records={history} />
       <AttendanceHistory records={history} />
     </div>

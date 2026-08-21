@@ -1,40 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { PageHeader, Card, Button, Badge } from '@/components';
-import { Send, User, Clock, CheckCircle2 } from 'lucide-react';
-
-interface Message {
-  id: string;
-  sender: 'student' | 'faculty';
-  text: string;
-  timestamp: string;
-  isRead?: boolean;
-}
-
-const mockMessages: Message[] = [
-  {
-    id: 'm1',
-    sender: 'faculty',
-    text: 'Hello! I am Dr. Priya Sharma, your Faculty Mentor. How is your preparation for the Frontend Developer Internship at TechCorp going?',
-    timestamp: '10:00 AM',
-  },
-  {
-    id: 'm2',
-    sender: 'student',
-    text: 'Hi Dr. Sharma! It is going well. I have been brushing up on React and completing the assignments.',
-    timestamp: '10:15 AM',
-    isRead: true,
-  },
-  {
-    id: 'm3',
-    sender: 'faculty',
-    text: 'That is excellent. Please let me know if you need any guidance or have questions regarding the technical interview round.',
-    timestamp: '10:30 AM',
-  }
-];
+import React, { useState, useEffect, useRef } from 'react';
+import { PageHeader, Card, Badge, Button } from '@/components';
+import { User, Clock, CheckCircle2, Send } from 'lucide-react';
+import { supabase } from '@/services/supabase/supabaseClient';
+import {
+  fetchStudentConversationsBackend,
+  fetchChatMessagesBackend,
+  sendChatMessageBackend,
+  type ChatConversationRecord,
+  type ChatMessageRecord,
+} from '@/services/api/backendService';
 
 export const StudentChat: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const [conversations, setConversations] = useState<ChatConversationRecord[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -45,41 +27,97 @@ export const StudentChat: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
+  // Load user and conversations on mount
+  useEffect(() => {
+    const loadChatData = async () => {
+      setLoading(true);
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) {
+        setCurrentUserId(userData.user.id);
+      }
 
-    const msg: Message = {
-      id: `m${Date.now()}`,
-      sender: 'student',
-      text: newMessage.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isRead: false
+      const convs = await fetchStudentConversationsBackend();
+      setConversations(convs);
+      if (convs.length > 0) {
+        setActiveConvId(convs[0].id);
+      }
+      setLoading(false);
     };
 
-    setMessages([...messages, msg]);
+    loadChatData();
+  }, []);
+
+  // Fetch messages for active conversation & subscribe to Realtime updates
+  useEffect(() => {
+    if (!activeConvId) return;
+
+    const loadMessages = async () => {
+      const msgs = await fetchChatMessagesBackend(activeConvId);
+      setMessages(msgs);
+    };
+
+    loadMessages();
+
+    // Subscribe to real-time chat_messages inserts for active conversation
+    const channel = supabase
+      .channel(`chat_messages:${activeConvId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `conversation_id=eq.${activeConvId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as any;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [
+              ...prev,
+              {
+                id: newMsg.id,
+                conversationId: newMsg.conversation_id,
+                senderId: newMsg.sender_id,
+                message: newMsg.message,
+                createdAt: newMsg.created_at,
+                senderName: newMsg.sender_id === currentUserId ? 'Me' : 'Support / Mentor',
+              },
+            ];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeConvId, currentUserId]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !activeConvId) return;
+
+    const msgText = newMessage.trim();
     setNewMessage('');
-    
-    setTimeout(() => {
-      const reply: Message = {
-        id: `m${Date.now() + 1}`,
-        sender: 'faculty',
-        text: 'Noted. Keep up the good work!',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, reply]);
-    }, 2000);
+
+    const res = await sendChatMessageBackend(activeConvId, msgText);
+    if (res.success && res.data) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === res.data!.id)) return prev;
+        return [...prev, res.data!];
+      });
+    }
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Mentor Chat"
-        description="Communicate with your assigned faculty mentor regarding your internship."
+        title="Faculty & Mentor Chat"
+        description="Communicate with your assigned faculty mentor and internship coordinators."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[600px]">
-        
         {/* Mentor Info Panel */}
         <div className="lg:col-span-1 space-y-4">
           <Card className="h-full">
@@ -88,22 +126,16 @@ export const StudentChat: React.FC = () => {
                 <User className="w-10 h-10" />
               </div>
               <h3 className="text-lg font-bold text-slate-900">Dr. Priya Sharma</h3>
-              <p className="text-sm text-slate-500 font-medium">Internship Coordinator</p>
-              
+              <p className="text-sm text-slate-500 font-medium">Faculty Mentor / Coordinator</p>
+
               <div className="w-full h-px bg-slate-100 my-4" />
-              
+
               <div className="w-full text-left space-y-3">
                 <div>
-                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Related Application</p>
-                  <p className="text-sm font-medium text-slate-800">Frontend Developer Intern</p>
-                  <p className="text-sm text-slate-600">TechCorp</p>
-                </div>
-                
-                <div>
-                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Status</p>
-                  <Badge variant="amber" className="text-xs">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pending Faculty Approval
+                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Live Sync</p>
+                  <Badge variant="emerald" className="text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Supabase Realtime Active
                   </Badge>
                 </div>
               </div>
@@ -132,7 +164,7 @@ export const StudentChat: React.FC = () => {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
             {messages.map((msg) => {
-              const isStudent = msg.sender === 'student';
+              const isStudent = msg.senderId === currentUserId;
               return (
                 <div
                   key={msg.id}
@@ -146,7 +178,7 @@ export const StudentChat: React.FC = () => {
                         <User className="w-4 h-4 text-slate-500" />
                       )}
                     </div>
-                    
+
                     <div className={`flex flex-col ${isStudent ? 'items-end' : 'items-start'}`}>
                       <div
                         className={`px-4 py-2.5 rounded-2xl shadow-sm ${
@@ -155,13 +187,10 @@ export const StudentChat: React.FC = () => {
                             : 'bg-white border border-slate-100 text-slate-800 rounded-bl-sm'
                         }`}
                       >
-                        <p className="text-sm">{msg.text}</p>
+                        <p className="text-sm">{msg.message}</p>
                       </div>
                       <div className="flex items-center space-x-1 mt-1 text-[11px] text-slate-400 font-medium">
-                        <span>{msg.timestamp}</span>
-                        {isStudent && msg.isRead && (
-                          <CheckCircle2 className="w-3 h-3 text-indigo-500 ml-1" />
-                        )}
+                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
                   </div>
