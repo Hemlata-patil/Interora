@@ -16,6 +16,7 @@ export interface StudentProfileData {
   cgpa: string;
   skills: StudentSkill[];
   resumeFileName: string;
+  resumeUrl?: string;
   resumeHeadline: string;
   interests: string[];
   preferredRoles: string[];
