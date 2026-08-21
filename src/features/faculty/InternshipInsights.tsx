@@ -20,43 +20,42 @@ import {
 } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
 
-// Transparent & logically aligned rule-based logic for Risk Level
+// Pure, transparent rule-based logic derived ONLY from Progress % and Attendance %
 const getRiskFactors = (student: SharedStudentData): string[] => {
   const factors: string[] = [];
-  const attendancePct = Math.round((student.attendance.present / student.attendance.workingDays) * 100);
+  const attendancePct = student.attendance.workingDays > 0 
+    ? Math.round((student.attendance.present / student.attendance.workingDays) * 100)
+    : 0;
 
   if (attendancePct < 70) {
     factors.push('Low attendance (<70%)');
   }
 
-  // Active internships progress & activity risk checks
-  if (student.internshipStatus === 'Active' || student.internshipStatus === 'At Risk') {
-    if (student.progressPercentage < 30) {
-      factors.push('Low progress (<30%)');
-    }
-    if (student.lastActivity.includes('days') || student.lastActivity.includes('month') || student.lastActivity === 'Never') {
-      factors.push('Low recent activity');
-    }
-  }
-
-  if (student.riskIndicator && student.riskIndicator !== 'None' && !factors.includes(student.riskIndicator)) {
-    factors.push(student.riskIndicator);
+  if (student.progressPercentage < 50) {
+    factors.push('Low progress (<50%)');
   }
 
   return factors;
 };
 
-const getRiskLevel = (student: SharedStudentData, factors: string[]): 'On Track' | 'Needs Attention' | 'High Risk' => {
+const getRiskLevel = (student: SharedStudentData, _factors: string[]): 'On Track' | 'Needs Attention' | 'High Risk' => {
   const attendancePct = student.attendance.workingDays > 0 
     ? Math.round((student.attendance.present / student.attendance.workingDays) * 100)
     : 0;
+  const progressPct = student.progressPercentage;
 
-  if (attendancePct === 0 || student.progressPercentage === 0) return 'High Risk';
-  if (student.internshipStatus === 'Completed') return 'On Track';
-  if (attendancePct >= 85 && student.progressPercentage >= 60) return 'On Track';
-  if (factors.length >= 2 || attendancePct < 70) return 'High Risk';
-  if (factors.length === 1) return 'Needs Attention';
-  return 'On Track';
+  // 1. High Risk: Attendance < 70% OR (Attendance < 75% AND Progress < 50%) OR (Progress == 0 AND Attendance == 0)
+  if (attendancePct < 70 || (attendancePct < 75 && progressPct < 50) || (progressPct === 0 && attendancePct < 50)) {
+    return 'High Risk';
+  }
+
+  // 2. On Track: Healthy Attendance >= 85% AND Healthy Progress >= 50%
+  if (attendancePct >= 85 && progressPct >= 50) {
+    return 'On Track';
+  }
+
+  // 3. Needs Attention: Moderate Attendance (70-84%) or Low Progress (<50%) with Good Attendance
+  return 'Needs Attention';
 };
 
 export const InternshipInsights: React.FC = () => {
