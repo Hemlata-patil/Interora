@@ -25,6 +25,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
+import { LogoBrand } from './LogoBrand';
 
 export interface NavItem {
   label: string;
