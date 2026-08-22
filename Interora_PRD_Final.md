@@ -28,7 +28,8 @@ Interora is a platform that connects students, faculty mentors, and companies to
 
 ### Authentication & Access
 - Role-based signup/login for Student, Faculty, Company Mentor, and Admin.
-- Role-based routing and access control.
+- **Admin Mentor Provisioning & Temporary Passwords**: Admin can register Faculty Mentors and Industry Mentors using their email address and assign a temporary password for initial login authentication.
+- Role-based routing, Supabase auth token verification, and access control.
 
 ### Student Profile & Resume
 - Profile containing education, skills, interests, projects, and resume.
@@ -61,10 +62,12 @@ Interora is a platform that connects students, faculty mentors, and companies to
 - Record includes student, company, mentors, dates, status, and internship details.
 - Internship progresses through Upcoming, Active, and Completed states.
 
-### Attendance
-- Daily student attendance submission.
-- Basic check-in/check-out or present/absent tracking.
-- Attendance percentage is available for monitoring and health scoring.
+### Geo-Tagged Photo Attendance System
+- **Webcam & GPS Capture Modal**: HTML5 device webcam capture (`getUserMedia`) and GPS location capture (`geolocation`) upon daily Check-In and Check-Out.
+- **Real-Time Photo Watermarking**: Live canvas rendering of exact GPS coordinates (latitude/longitude), timestamp, and Check-In / Check-Out badge directly onto the captured photo image.
+- **Supabase Storage Persistence**: Captured photo proofs are uploaded to the public `attendance-photos` bucket in Supabase Storage.
+- **Database Persistence**: Stores `check_in_photo_url`, `check_in_lat`, `check_in_lng`, `check_out_photo_url`, `check_out_lat`, `check_out_lng`, and `location_address` in the `attendance_records` Supabase database table.
+- **Multi-Portal Inspection Modal**: Interactive photo & GPS proof inspection modal available for Students, Faculty Supervisors, and Industry Mentors to verify attendance authenticity.
 
 ### Tasks
 - Faculty/company mentors assign tasks.
@@ -94,9 +97,12 @@ Interora is a platform that connects students, faculty mentors, and companies to
 - Calculate a transparent score using defined signals such as attendance percentage, task completion, milestone adherence, and work-log consistency.
 - Display the current health status and contributing factors.
 
-### At-Risk Student Detection
-- Identify students/internships at risk using transparent threshold/rule-based signals such as low attendance, overdue tasks, delayed milestones, and low activity.
-- No predictive ML model is required for V1.
+### At-Risk Student Detection & Health Overview
+- Identify students/internships at risk using transparent threshold/rule-based signals based strictly on Progress % and Attendance %:
+  - **High Risk** (Red Badge): Progress = 0% OR Severe Attendance < 60%.
+  - **Needs Attention** (Amber Badge): Attendance between 60% and 84% OR Progress < 50% (e.g., Priya Shah: 45% progress, 66% attendance).
+  - **On Track** (Green Badge): Attendance >= 85% AND Progress >= 50%.
+- Real-time PostgreSQL subscription channels (`postgres_changes`) automatically refresh Student Health Overview tables across Faculty and Admin portals upon student activity.
 
 ### AI Skill-Gap Analysis
 - Compare student skills against required skills for target/applied internships.
@@ -186,6 +192,7 @@ Interora is a platform that connects students, faculty mentors, and companies to
 
 ## 6. Key Business Rules
 
+- Admins can provision Faculty Mentor and Industry Mentor accounts by specifying their official email and assigning a temporary password for login authentication.
 - Only Company Mentors and Admins acting on their behalf can create internship listings.
 - Only Students can apply for internships.
 - The standard V1 application flow is: **Student applies → Faculty review → Company review → Company selection → Internship activated**.
@@ -194,7 +201,8 @@ Interora is a platform that connects students, faculty mentors, and companies to
 - Only the assigned Faculty Mentor or Company Mentor can assign tasks and milestones for that internship.
 - Only the enrolled Student can submit their own attendance and work logs.
 - Internship Health Score uses a fixed, transparent formula based on defined indicators; it is not a black-box model.
-- Risk levels (Low/Medium/High) are determined using transparent rule-based thresholds for V1.
+- Risk levels (On Track / Needs Attention / High Risk) are determined using transparent rule-based thresholds where Progress = 0% or Attendance < 60% triggers High Risk, and moderate progress/attendance triggers Needs Attention.
+- Geo-Tagged check-in and check-out photos are stored in Supabase Storage with watermarked GPS coordinates to prevent fraudulent attendance logging.
 - AI recommendations, skill-gap analysis, weekly reports, and dashboard insights must be presented as assistance, not as guaranteed decisions.
 - AI Weekly Reports are drafts; students must review/edit them before submission.
 - Placement Readiness Score must show understandable contributing factors rather than being presented as an unexplained AI judgment.
@@ -214,7 +222,9 @@ Interora is a platform that connects students, faculty mentors, and companies to
 - A student can search, view, and apply for an internship.
 - Faculty can review and approve/reject an application.
 - A company can review approved applicants, select a candidate, and activate the internship.
-- Students can record attendance, complete tasks, submit work logs, and track milestones.
+- Students can record geo-tagged attendance with live webcam photo capture and GPS location overlay.
+- Faculty mentors and company supervisors can inspect live attendance photo proofs and GPS coordinates.
+- Admins can create Faculty and Industry Mentors with temporary passwords for login.
 - Faculty and company mentors can monitor assigned students and provide feedback/evaluations.
 - The system calculates an Internship Health Score using defined transparent rules.
 - The system flags at-risk students/internships using defined threshold signals.
