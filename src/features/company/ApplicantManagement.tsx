@@ -7,6 +7,7 @@ import {
   type StudentApplicationRecord,
 } from '@/services/api/backendService';
 import { supabase } from '@/services/supabase/supabaseClient';
+import { mockCompanyApplications } from '../faculty/mockData';
 
 export const ApplicantManagement: React.FC = () => {
   const [applicants, setApplicants] = useState<StudentApplicationRecord[]>([]);
@@ -237,6 +238,34 @@ export const ApplicantManagement: React.FC = () => {
                 {selectedApp.coverLetter || 'No cover letter provided.'}
               </p>
             </div>
+            
+            {(() => {
+              // Find the mock application data to get the allocator score and faculty rating
+              const mockData = mockCompanyApplications.find(a => 
+                (a.studentId === selectedApp.studentId && a.internshipId === selectedApp.internshipId) ||
+                a.id === selectedApp.id
+              );
+              
+              if (!mockData || (!mockData.allocatorMatchScore && !mockData.facultyRating)) return null;
+              
+              return (
+                <div className="flex flex-col sm:flex-row gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200 mt-2">
+                  {mockData.allocatorMatchScore !== undefined && (
+                    <div className="flex-1">
+                      <span className="text-slate-500 block text-[10px] uppercase font-semibold">AI Allocator Score</span>
+                      <span className="font-bold text-indigo-600 text-base">{mockData.allocatorMatchScore}%</span>
+                    </div>
+                  )}
+                  {mockData.facultyRating !== undefined && (
+                    <div className="flex-1">
+                      <span className="text-slate-500 block text-[10px] uppercase font-semibold">Faculty Rating</span>
+                      <span className="font-bold text-amber-500 text-base">⭐ {mockData.facultyRating}/5</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="pt-3 border-t flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => handleUpdateStatus(selectedApp.id, 'Shortlisted')}>
                 Shortlist Candidate

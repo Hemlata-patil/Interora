@@ -68,6 +68,7 @@ export interface SharedStudentData {
   appliedDate: string;
   applicationStatus: ApplicationStatus;
   coverMessage: string;
+  facultyRating?: number;
   
   // Internship fields
   internshipStatus: InternshipStatus;
@@ -592,6 +593,7 @@ export interface CompanyApplicationData {
   facultyApprovalStatus: 'approved' | 'pending' | 'rejected';
   applicationStatus: CompanyApplicationStatus;
   allocatorMatchScore?: number;
+  facultyRating?: number;
   allocatorScoreBreakdown?: {
     skillsMatch: number;
     academicPerformance: number;

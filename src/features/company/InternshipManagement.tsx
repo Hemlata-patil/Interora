@@ -4,6 +4,7 @@ import { Plus, Building2, Search, Calendar, MapPin, DollarSign, Clock, Users, Ed
 import {
   createInternshipPostingBackend,
   fetchInternshipPostingsBackend,
+  deleteInternshipPostingBackend,
   type InternshipPostingRecord,
 } from '@/services/api/backendService';
 import { supabase } from '@/services/supabase/supabaseClient';
@@ -23,7 +24,8 @@ export interface InternshipItem {
   location?: string;
   internshipType?: string;
   positions?: string;
-  taskPlan?: { id: string; title: string; description: string }[];
+  tasks?: { id: string; title: string; description: string; dueDate: string; priority: string }[];
+  milestones?: { id: string; title: string; goal: string; targetDate: string }[];
 }
 
 export const initialCompanyInternships: InternshipItem[] = [
@@ -57,6 +59,11 @@ export const InternshipManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
 
+  const [expandedTasksId, setExpandedTasksId] = useState<string | null>(null);
+  const [expandedMilestonesId, setExpandedMilestonesId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState({
     title: '',
@@ -70,6 +77,8 @@ export const InternshipManagement: React.FC = () => {
     positions: '2',
     location: 'Remote / On-site',
     internshipType: 'Full-time',
+    tasks: [] as { id: string; title: string; description: string; dueDate: string; priority: string }[],
+    milestones: [] as { id: string; title: string; goal: string; targetDate: string }[],
   });
 
   useEffect(() => {
@@ -114,6 +123,8 @@ export const InternshipManagement: React.FC = () => {
       positions: '2',
       location: 'Remote / On-site',
       internshipType: 'Full-time',
+      tasks: [],
+      milestones: [],
     });
   };
 
@@ -131,6 +142,7 @@ export const InternshipManagement: React.FC = () => {
       return;
     }
 
+    setIsSaving(true);
     setErrorMessage(null);
     const skillArray = formData.requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -149,6 +161,7 @@ export const InternshipManagement: React.FC = () => {
 
     if (!res.success || !res.data) {
       setErrorMessage(res.error || 'Failed to create internship posting.');
+      setIsSaving(false);
       return;
     }
 
@@ -167,10 +180,13 @@ export const InternshipManagement: React.FC = () => {
       location: res.data.location,
       internshipType: res.data.internshipType,
       positions: formData.positions + ' Positions',
+      tasks: formData.tasks,
+      milestones: formData.milestones,
     };
 
     setInternships((prev) => [newItem, ...prev]);
     setSuccessMessage(`Internship posting created successfully!`);
+    setIsSaving(false);
     setViewState('LIST');
   };
 
@@ -179,6 +195,23 @@ export const InternshipManagement: React.FC = () => {
     setCurrentInternship(null);
     setSuccessMessage(null);
     setErrorMessage(null);
+  };
+
+  const confirmDelete = async (id: string) => {
+    if (id.startsWith('int-comp-')) {
+      // Local mock item, just remove from state
+      setInternships((prev) => prev.filter(item => item.id !== id));
+      setDeletingId(null);
+      return;
+    }
+    
+    const res = await deleteInternshipPostingBackend(id);
+    if (res.success) {
+      setInternships((prev) => prev.filter(item => item.id !== id));
+    } else {
+      setErrorMessage(res.error || 'Failed to delete internship posting.');
+    }
+    setDeletingId(null);
   };
 
   return (
@@ -255,22 +288,101 @@ export const InternshipManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-                <span className="text-xs text-slate-500">
-                  <strong className="text-indigo-600 font-bold">{item.applicationCount}</strong> Applications
-                </span>
+              <div className="pt-4 border-t border-slate-100 flex flex-col gap-3 mt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    <strong className="text-indigo-600 font-bold">{item.applicationCount}</strong> Applications
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setExpandedTasksId(expandedTasksId === item.id ? null : item.id);
+                        setExpandedMilestonesId(null);
+                      }}
+                    >
+                      View Tasks
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setExpandedMilestonesId(expandedMilestonesId === item.id ? null : item.id);
+                        setExpandedTasksId(null);
+                      }}
+                    >
+                      View Milestones
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  {deletingId === item.id ? (
+                    <div className="flex items-center gap-2 bg-red-50 p-2 rounded w-full justify-between">
+                      <span className="text-xs text-red-600 font-medium">Are you sure you want to delete this internship?</span>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="text-xs py-1" onClick={() => setDeletingId(null)}>Cancel</Button>
+                        <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white text-xs py-1" onClick={() => confirmDelete(item.id)}>Delete</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => setDeletingId(item.id)}
+                      >
+                        Delete Internship
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => {
+                          setCurrentInternship(item);
+                          setViewState('VIEW');
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5 mr-1" /> View Details
+                      </Button>
+                    </>
+                  )}
+                </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => {
-                    setCurrentInternship(item);
-                    setViewState('VIEW');
-                  }}
-                >
-                  <Eye className="w-3.5 h-3.5 mr-1" /> View Details
-                </Button>
+                {expandedTasksId === item.id && (
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <h4 className="font-bold text-xs text-slate-800 mb-2">Tasks — {item.title}</h4>
+                    {item.tasks && item.tasks.length > 0 ? (
+                      <ul className="list-disc pl-4 space-y-1 text-xs text-slate-700">
+                        {item.tasks.map(t => (
+                          <li key={t.id}>{t.title}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No tasks assigned.</p>
+                    )}
+                  </div>
+                )}
+
+                {expandedMilestonesId === item.id && (
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <h4 className="font-bold text-xs text-slate-800 mb-2">Milestones — {item.title}</h4>
+                    {item.milestones && item.milestones.length > 0 ? (
+                      <ul className="list-disc pl-4 space-y-1 text-xs text-slate-700">
+                        {item.milestones.map(m => (
+                          <li key={m.id}>{m.title}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No milestones assigned.</p>
+                    )}
+                  </div>
+                )}
+
               </div>
             </Card>
           ))}
@@ -339,12 +451,164 @@ export const InternshipManagement: React.FC = () => {
               />
             </div>
 
+            {/* Task Plan */}
+            <div className="pt-6 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-slate-800 text-sm">Task Plan</h3>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs py-1 px-3"
+                  onClick={() => setFormData({...formData, tasks: [...formData.tasks, { id: Date.now().toString(), title: '', description: '', dueDate: '', priority: 'Medium' }]})}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Task
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {formData.tasks.map((task, index) => (
+                  <div key={task.id} className="p-4 border border-slate-200 rounded-lg space-y-3 relative bg-slate-50">
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({...formData, tasks: formData.tasks.filter(t => t.id !== task.id)})}
+                      className="absolute top-2 right-2 text-slate-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div className="font-medium text-slate-700 text-xs">Task {index + 1}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input
+                        label="Title"
+                        required
+                        placeholder="e.g. Build Authentication Module"
+                        value={task.title}
+                        onChange={(e) => {
+                          const newTasks = [...formData.tasks];
+                          newTasks[index].title = e.target.value;
+                          setFormData({...formData, tasks: newTasks});
+                        }}
+                      />
+                      <Select
+                        label="Priority"
+                        value={task.priority}
+                        onChange={(e) => {
+                          const newTasks = [...formData.tasks];
+                          newTasks[index].priority = e.target.value;
+                          setFormData({...formData, tasks: newTasks});
+                        }}
+                        options={[
+                          { value: 'Low', label: 'Low' },
+                          { value: 'Medium', label: 'Medium' },
+                          { value: 'High', label: 'High' }
+                        ]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input
+                        label="Description"
+                        required
+                        placeholder="e.g. Implement login and registration"
+                        value={task.description}
+                        onChange={(e) => {
+                          const newTasks = [...formData.tasks];
+                          newTasks[index].description = e.target.value;
+                          setFormData({...formData, tasks: newTasks});
+                        }}
+                      />
+                      <Input
+                        label="Due Date / Target Date"
+                        placeholder="e.g. Week 2"
+                        value={task.dueDate}
+                        onChange={(e) => {
+                          const newTasks = [...formData.tasks];
+                          newTasks[index].dueDate = e.target.value;
+                          setFormData({...formData, tasks: newTasks});
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {formData.tasks.length === 0 && (
+                  <p className="text-slate-500 text-xs italic">No tasks added yet.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Milestone Plan */}
+            <div className="pt-6 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-slate-800 text-sm">Milestone Plan</h3>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm"
+                  className="text-xs py-1 px-3" 
+                  onClick={() => setFormData({...formData, milestones: [...formData.milestones, { id: Date.now().toString(), title: '', goal: '', targetDate: '' }]})}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Milestone
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {formData.milestones.map((milestone, index) => (
+                  <div key={milestone.id} className="p-4 border border-slate-200 rounded-lg space-y-3 relative bg-slate-50">
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({...formData, milestones: formData.milestones.filter(m => m.id !== milestone.id)})}
+                      className="absolute top-2 right-2 text-slate-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div className="font-medium text-slate-700 text-xs">Milestone {index + 1}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input
+                        label="Title"
+                        required
+                        placeholder="e.g. Authentication Complete"
+                        value={milestone.title}
+                        onChange={(e) => {
+                          const newMilestones = [...formData.milestones];
+                          newMilestones[index].title = e.target.value;
+                          setFormData({...formData, milestones: newMilestones});
+                        }}
+                      />
+                      <Input
+                        label="Target Date"
+                        placeholder="e.g. Week 2"
+                        value={milestone.targetDate}
+                        onChange={(e) => {
+                          const newMilestones = [...formData.milestones];
+                          newMilestones[index].targetDate = e.target.value;
+                          setFormData({...formData, milestones: newMilestones});
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        label="Goal / Description"
+                        required
+                        placeholder="e.g. Complete login, registration and authentication"
+                        value={milestone.goal}
+                        onChange={(e) => {
+                          const newMilestones = [...formData.milestones];
+                          newMilestones[index].goal = e.target.value;
+                          setFormData({...formData, milestones: newMilestones});
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {formData.milestones.length === 0 && (
+                  <p className="text-slate-500 text-xs italic">No milestones added yet.</p>
+                )}
+              </div>
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={handleBackToList}>
+              <Button type="button" variant="outline" onClick={handleBackToList} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary">
-                Publish Internship Posting
+              <Button type="submit" variant="primary" disabled={isSaving}>
+                {isSaving ? 'Publishing...' : 'Publish Internship Posting'}
               </Button>
             </div>
           </form>
