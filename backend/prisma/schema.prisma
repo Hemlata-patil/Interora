@@ -1,0 +1,518 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// prisma/schema.prisma
+//
+// This schema mirrors the existing Supabase PostgreSQL schema defined in the
+// 17 SQL migration files under supabase/migrations/.
+//
+// IMPORTANT:
+//   - Do NOT run `prisma migrate reset` against the Supabase production DB.
+//   - Do NOT run `prisma db push` against the Supabase production DB.
+//   - This schema targets a SEPARATE local PostgreSQL instance for the new backend.
+//   - Generate the Prisma client with:  npx prisma generate
+//   - Apply to a local DB with:         npx prisma migrate dev
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS (mirrors supabase/migrations/20260820000001_create_enums.sql)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.app_role
+enum AppRole {
+  student
+  company
+  faculty
+  industry_mentor
+  admin
+}
+
+/// Maps to: public.account_status
+enum AccountStatus {
+  pending
+  active
+  inactive
+}
+
+/// Maps to: public.company_status
+enum CompanyStatus {
+  pending
+  approved
+  rejected
+  inactive
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORE IDENTITY TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Central identity table for ALL roles.
+/// Maps to: public.profiles
+/// Source:  20260820000002_create_profiles.sql
+model Profile {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String        @unique @db.VarChar(255)
+  fullName      String        @map("full_name")
+  role          AppRole       @default(student)
+  accountStatus AccountStatus @default(active) @map("account_status")
+  phone         String?
+  department    String?
+  /// bcrypt hash of the user's password.
+  /// Nullable: Supabase-migrated accounts will have NULL until a password-reset
+  /// flow is completed.  New registrations via this backend always populate it.
+  passwordHash  String?       @map("password_hash")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  studentProfile            StudentProfile?
+  companyProfile            CompanyProfile?
+  attendanceRecords         AttendanceRecord[]
+  careerProgress            CareerProgress[]
+  studentTasks              StudentTask[]
+  studentMilestones         StudentMilestone[]
+  studentEvaluations        StudentEvaluation[]   @relation("EvaluatedStudent")
+  givenEvaluations          StudentEvaluation[]   @relation("Evaluator")
+  studentCertificates       StudentCertificate[]
+  chatParticipants          ChatParticipant[]
+  sentMessages              ChatMessage[]
+  facultyAssignmentsAsFaculty FacultyStudentAssignment[] @relation("Faculty")
+  facultyAssignmentsAsStudent FacultyStudentAssignment[] @relation("AssignedStudent")
+  facultyGuidanceNotesFaculty FacultyGuidanceNote[]     @relation("GuidanceFaculty")
+  facultyGuidanceNotesStudent FacultyGuidanceNote[]     @relation("GuidanceStudent")
+  mentorAssignmentsAsMentor   CompanyMentorAssignment[] @relation("Mentor")
+  mentorAssignmentsAsStudent  CompanyMentorAssignment[] @relation("MentoredStudent")
+  companyTaskReviews          CompanyTaskReview[]
+
+  @@map("profiles")
+}
+
+/// Student-specific extended profile.
+/// Maps to: public.student_profiles
+/// Source:  20260820000003_create_student_profiles.sql
+model StudentProfile {
+  id               String   @id @db.Uuid
+  studentId        String   @unique @map("student_id")
+  phone            String?
+  department       String   @default("CSE")
+  course           String   @default("B.Tech Computer Science")
+  yearSemester     String   @default("3rd Year / 6th Sem") @map("year_semester")
+  assignedFacultyId String?  @map("assigned_faculty_id") @db.Uuid
+  skills           String[] @default([])
+  resumePath       String?  @map("resume_path")
+  bio              String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  profile      Profile @relation(fields: [id], references: [id], onDelete: Cascade)
+  applications StudentApplication[]
+
+  @@map("student_profiles")
+}
+
+/// Company-specific extended profile.
+/// Maps to: public.company_profiles
+/// Source:  20260820000004_create_company_profiles.sql
+model CompanyProfile {
+  id              String        @id @db.Uuid
+  companyName     String        @map("company_name")
+  contactPerson   String        @map("contact_person")
+  officialEmail   String        @map("official_email")
+  phone           String?
+  industryDomain  String        @map("industry_domain")
+  website         String?
+  companyAddress  String?       @map("company_address")
+  approvalStatus  CompanyStatus @default(pending) @map("approval_status")
+  rejectionReason String?       @map("rejection_reason")
+  approvedAt      DateTime?     @map("approved_at")
+  verified        Boolean       @default(false)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  profile              Profile @relation(fields: [id], references: [id], onDelete: Cascade)
+  internshipPostings   InternshipPosting[]
+  mentorAssignments    CompanyMentorAssignment[]
+
+  @@map("company_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNSHIP & APPLICATION TABLES
+// Source: 20260821000001_phase2_internships_and_applications.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.internship_postings
+model InternshipPosting {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String    @map("company_id") @db.Uuid
+  title               String
+  description         String
+  industryDomain      String    @map("industry_domain")
+  location            String?   @default("Remote / On-site")
+  internshipType      String?   @default("Full-time") @map("internship_type")
+  duration            String?   @default("3 Months")
+  stipend             String?   @default("Unpaid / Paid")
+  eligibility         String?   @default("All Eligible")
+  skills              String[]
+  applicationDeadline DateTime? @map("application_deadline")
+  status              String    @default("open")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  company           CompanyProfile     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applications      StudentApplication[]
+  attendanceRecords AttendanceRecord[]
+  studentMilestones StudentMilestone[]
+  studentEvaluations StudentEvaluation[]
+  studentCertificates StudentCertificate[]
+  internshipTasks   InternshipTask[]
+  internshipMilestones InternshipMilestone[]
+
+  @@index([companyId], name: "idx_internship_postings_company")
+  @@index([status], name: "idx_internship_postings_status")
+  @@map("internship_postings")
+}
+
+/// Maps to: public.student_applications
+model StudentApplication {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  internshipId String    @map("internship_id") @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  status       String    @default("Submitted")
+  coverLetter  String?   @map("cover_letter")
+  facultyRating Decimal? @map("faculty_rating") @db.Decimal(3, 1)
+  appliedAt    DateTime  @default(now()) @map("applied_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  internship InternshipPosting @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  student    StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([internshipId, studentId], name: "unique_student_internship_application")
+  @@index([internshipId], name: "idx_student_applications_internship")
+  @@index([studentId], name: "idx_student_applications_student")
+  @@index([status], name: "idx_student_applications_status")
+  @@map("student_applications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STUDENT LIFECYCLE TABLES
+// Source: 20260821000002_phase4_foundation_tables.sql
+//         20260821000009_add_geotagged_attendance.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.attendance_records
+model AttendanceRecord {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String   @map("student_id") @db.Uuid
+  internshipId    String?  @map("internship_id") @db.Uuid
+  attendanceDate  DateTime @default(dbgenerated("CURRENT_DATE")) @map("attendance_date") @db.Date
+  /// Allowed: 'present' | 'absent' | 'late' | 'leave'
+  status          String
+  checkInTime     DateTime? @map("check_in_time")
+  checkOutTime    DateTime? @map("check_out_time")
+  // Geo-tagged columns (added in 20260821000009)
+  checkInPhotoUrl String?   @map("check_in_photo_url")
+  checkInLat      Float?    @map("check_in_lat")
+  checkInLng      Float?    @map("check_in_lng")
+  checkOutPhotoUrl String?  @map("check_out_photo_url")
+  checkOutLat     Float?    @map("check_out_lat")
+  checkOutLng     Float?    @map("check_out_lng")
+  locationAddress String?   @map("location_address")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  student    Profile           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internship InternshipPosting? @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+
+  @@index([studentId], name: "idx_attendance_student")
+  @@index([attendanceDate], name: "idx_attendance_date")
+  @@map("attendance_records")
+}
+
+/// Maps to: public.career_progress
+model CareerProgress {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String   @map("student_id") @db.Uuid
+  moduleKey       String   @map("module_key")
+  progressPercent Int      @default(0) @map("progress_percent")
+  completed       Boolean  @default(false)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  student Profile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleKey])
+  @@map("career_progress")
+}
+
+/// Maps to: public.student_tasks
+model StudentTask {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId   String    @map("student_id") @db.Uuid
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date") @db.Date
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  student       Profile            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  taskReviews   CompanyTaskReview[]
+
+  @@index([studentId], name: "idx_tasks_student")
+  @@map("student_tasks")
+}
+
+/// Maps to: public.student_milestones
+model StudentMilestone {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  internshipId String?   @map("internship_id") @db.Uuid
+  title        String
+  description  String?
+  status       String    @default("pending")
+  dueDate      DateTime? @map("due_date") @db.Date
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  student    Profile            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internship InternshipPosting? @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+
+  @@index([studentId], name: "idx_milestones_student")
+  @@map("student_milestones")
+}
+
+/// Maps to: public.student_evaluations (read-only for students)
+model StudentEvaluation {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  internshipId String?   @map("internship_id") @db.Uuid
+  evaluatorId  String?   @map("evaluator_id") @db.Uuid
+  rating       Decimal?  @db.Decimal(3, 2)
+  feedback     String?
+  /// Additional score field used by company evaluations
+  score        Decimal?  @db.Decimal(5, 2)
+  remarks      String?
+  submittedAt  DateTime  @default(now()) @map("submitted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  student    Profile            @relation("EvaluatedStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  evaluator  Profile?           @relation("Evaluator", fields: [evaluatorId], references: [id], onDelete: SetNull)
+  internship InternshipPosting? @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+
+  @@index([studentId], name: "idx_evaluations_student")
+  @@map("student_evaluations")
+}
+
+/// Maps to: public.student_certificates (read-only for students)
+model StudentCertificate {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId         String    @map("student_id") @db.Uuid
+  internshipId      String?   @map("internship_id") @db.Uuid
+  certificateNumber String    @unique @map("certificate_number")
+  certificateUrl    String?   @map("certificate_url")
+  issuedAt          DateTime  @default(now()) @map("issued_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  student    Profile            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  internship InternshipPosting? @relation(fields: [internshipId], references: [id], onDelete: SetNull)
+
+  @@index([studentId], name: "idx_certificates_student")
+  @@map("student_certificates")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHAT TABLES
+// Source: 20260821000002 + 20260821000006_phase19_chat_tables.sql
+//         20260821000008_fix_chat_rls_and_storage.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.chat_conversations
+model ChatConversation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@map("chat_conversations")
+}
+
+/// Maps to: public.chat_participants
+model ChatParticipant {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  joinedAt       DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId], name: "idx_chat_participants_user")
+  @@map("chat_participants")
+}
+
+/// Maps to: public.chat_messages
+model ChatMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  senderId       String   @map("sender_id") @db.Uuid
+  /// The message field — 'message' in older migration, 'content' in later one.
+  /// We use 'message' as canonical, but store as TEXT.
+  message        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       Profile          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId], name: "idx_chat_messages_conv")
+  @@map("chat_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACULTY TABLES
+// Source: 20260821000003_phase13_faculty_tables.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.faculty_student_assignments
+model FacultyStudentAssignment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  facultyId  String   @map("faculty_id") @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  status     String   @default("Active")
+
+  // Relations
+  faculty Profile @relation("Faculty", fields: [facultyId], references: [id], onDelete: Cascade)
+  student Profile @relation("AssignedStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([facultyId, studentId])
+  @@index([facultyId], name: "idx_faculty_assignments_faculty")
+  @@index([studentId], name: "idx_faculty_assignments_student")
+  @@map("faculty_student_assignments")
+}
+
+/// Maps to: public.faculty_guidance_notes
+model FacultyGuidanceNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  facultyId String   @map("faculty_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  category  String   @default("General")
+  note      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  faculty Profile @relation("GuidanceFaculty", fields: [facultyId], references: [id], onDelete: Cascade)
+  student Profile @relation("GuidanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId], name: "idx_faculty_notes_faculty")
+  @@index([studentId], name: "idx_faculty_notes_student")
+  @@map("faculty_guidance_notes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPANY MENTOR TABLES
+// Source: 20260821000004_phase14_company_mentor_tables.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.company_mentor_assignments
+model CompanyMentorAssignment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mentorId   String   @map("mentor_id") @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  status     String   @default("Active")
+
+  // Relations
+  mentor  Profile        @relation("Mentor", fields: [mentorId], references: [id], onDelete: Cascade)
+  student Profile        @relation("MentoredStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  company CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([mentorId, studentId])
+  @@index([mentorId], name: "idx_company_mentor_assignments_mentor")
+  @@index([studentId], name: "idx_company_mentor_assignments_student")
+  @@map("company_mentor_assignments")
+}
+
+/// Maps to: public.company_task_reviews
+model CompanyTaskReview {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId       String   @map("task_id") @db.Uuid
+  mentorId     String   @map("mentor_id") @db.Uuid
+  /// Allowed: 'Verified' | 'Correction Required' | 'Rejected'
+  reviewStatus String   @default("Verified") @map("review_status")
+  feedback     String?
+  reviewedAt   DateTime @default(now()) @map("reviewed_at")
+
+  // Relations
+  task   StudentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  mentor Profile     @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId], name: "idx_company_task_reviews_task")
+  @@index([mentorId], name: "idx_company_task_reviews_mentor")
+  @@map("company_task_reviews")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNSHIP TASKS & MILESTONES (company-level)
+// Source: 20260821000007_internship_tasks_milestones.sql
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps to: public.internship_tasks
+model InternshipTask {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  internshipId String    @map("internship_id") @db.Uuid
+  title        String
+  description  String?
+  priority     String?
+  dueDate      DateTime? @map("due_date")
+  status       String    @default("Pending")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  internship InternshipPosting @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+
+  @@index([internshipId], name: "idx_internship_tasks_internship")
+  @@map("internship_tasks")
+}
+
+/// Maps to: public.internship_milestones
+model InternshipMilestone {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  internshipId String    @map("internship_id") @db.Uuid
+  title        String
+  description  String?
+  targetDate   DateTime? @map("target_date")
+  status       String    @default("Pending")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  internship InternshipPosting @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+
+  @@index([internshipId], name: "idx_internship_milestones_internship")
+  @@map("internship_milestones")
+}
