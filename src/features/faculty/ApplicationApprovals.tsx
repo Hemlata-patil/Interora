@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   PageHeader, 
   StatCard, 
@@ -10,20 +10,45 @@ import {
   Select, 
   EmptyState 
 } from '@/components';
-import { mockFacultyStudents, mockCompanyApplications, setMockCompanyApplications } from './mockData';
-import type { SharedStudentData, ApplicationStatus } from './mockData';
-import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
+import {
+  fetchFacultyApplicationsBackend,
+  decideFacultyApplicationBackend,
+  type FacultyApplicationItem,
+} from '@/services/api/backendService';
 
 export const ApplicationApprovals: React.FC = () => {
-  const [applications, setApplications] = useState<SharedStudentData[]>(mockFacultyStudents);
+  const [applications, setApplications] = useState<FacultyApplicationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedApp, setSelectedApp] = useState<SharedStudentData | null>(null);
+  const [selectedApp, setSelectedApp] = useState<FacultyApplicationItem | null>(null);
   const [rating, setRating] = useState<number>(0);
+
+  const loadApplications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchFacultyApplicationsBackend();
+      setApplications(data);
+    } catch (err: any) {
+      console.error('Failed to load faculty applications:', err);
+      setError(err?.message || 'Failed to load applications. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadApplications();
+  }, [loadApplications]);
 
   // Derived stats
   const total = applications.length;
@@ -34,44 +59,57 @@ export const ApplicationApprovals: React.FC = () => {
   // Filtering
   const filteredApps = useMemo(() => {
     return applications.filter(app => {
-      const matchesSearch = app.studentName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            app.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            app.company.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = 
+        app.studentName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        app.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.company.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || app.applicationStatus === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [applications, searchTerm, statusFilter]);
 
-  const handleApprove = (id: string) => {
-    setApplications(prev => prev.map(app => 
-      app.id === id ? { ...app, applicationStatus: 'Approved', facultyRating: rating } : app
-    ));
-    if (selectedApp && selectedApp.id === id) {
-      setSelectedApp({ ...selectedApp, applicationStatus: 'Approved', facultyRating: rating });
-    }
-    
-    // Also update mockCompanyApplications so the company sees it
-    const updatedMockApps = mockCompanyApplications.map(app => {
-      // Find matching mock application by student ID
-      if (selectedApp && app.studentId === selectedApp.id) {
-        return { ...app, facultyRating: rating };
+  const handleApprove = async (id: string) => {
+    try {
+      setActionLoading(id);
+      await decideFacultyApplicationBackend(id, 'approve', rating > 0 ? rating : undefined);
+      
+      setApplications(prev => prev.map(app => 
+        app.id === id ? { ...app, applicationStatus: 'Approved', facultyRating: rating > 0 ? rating : app.facultyRating } : app
+      ));
+      if (selectedApp && selectedApp.id === id) {
+        setSelectedApp({ ...selectedApp, applicationStatus: 'Approved', facultyRating: rating > 0 ? rating : selectedApp.facultyRating });
       }
-      return app;
-    });
-    setMockCompanyApplications(updatedMockApps);
-    setRating(0);
-  };
-
-  const handleReject = (id: string) => {
-    setApplications(prev => prev.map(app => 
-      app.id === id ? { ...app, applicationStatus: 'Rejected' } : app
-    ));
-    if (selectedApp && selectedApp.id === id) {
-      setSelectedApp({ ...selectedApp, applicationStatus: 'Rejected' });
+      setIsModalOpen(false);
+      setRating(0);
+    } catch (err: any) {
+      console.error('Error approving application:', err);
+      alert(err?.message || 'Failed to approve application.');
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const getStatusBadgeVariant = (status: ApplicationStatus) => {
+  const handleReject = async (id: string) => {
+    try {
+      setActionLoading(id);
+      await decideFacultyApplicationBackend(id, 'reject');
+      
+      setApplications(prev => prev.map(app => 
+        app.id === id ? { ...app, applicationStatus: 'Rejected' } : app
+      ));
+      if (selectedApp && selectedApp.id === id) {
+        setSelectedApp({ ...selectedApp, applicationStatus: 'Rejected' });
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Error rejecting application:', err);
+      alert(err?.message || 'Failed to reject application.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getStatusBadgeVariant = (status: 'Pending' | 'Approved' | 'Rejected') => {
     switch (status) {
       case 'Pending': return 'amber';
       case 'Approved': return 'emerald';
@@ -80,7 +118,7 @@ export const ApplicationApprovals: React.FC = () => {
     }
   };
 
-  const columns: Column<SharedStudentData>[] = [
+  const columns: Column<FacultyApplicationItem>[] = [
     {
       header: 'Student',
       accessorKey: 'studentName',
@@ -128,16 +166,18 @@ export const ApplicationApprovals: React.FC = () => {
                 size="sm" 
                 className="bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 border-transparent"
                 onClick={() => handleApprove(row.id)}
+                disabled={actionLoading === row.id}
               >
-                Approve
+                {actionLoading === row.id ? 'Processing...' : 'Approve'}
               </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
                 className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300"
                 onClick={() => handleReject(row.id)}
+                disabled={actionLoading === row.id}
               >
-                Reject
+                {actionLoading === row.id ? 'Processing...' : 'Reject'}
               </Button>
             </>
           )}
@@ -186,7 +226,20 @@ export const ApplicationApprovals: React.FC = () => {
         </div>
 
         <div className="p-4">
-          {filteredApps.length > 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+              <p className="text-sm">Loading applications...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-rose-600">
+              <AlertCircle className="w-8 h-8 mb-2" />
+              <p className="text-sm font-medium">{error}</p>
+              <Button variant="outline" size="sm" onClick={loadApplications} className="mt-4">
+                Retry
+              </Button>
+            </div>
+          ) : filteredApps.length > 0 ? (
             <Table 
               columns={columns} 
               data={filteredApps} 
@@ -195,7 +248,7 @@ export const ApplicationApprovals: React.FC = () => {
           ) : (
             <EmptyState 
               title="No applications found" 
-              description="Try adjusting your search or filter criteria to find what you are looking for."
+              description="No applications found matching your criteria."
             />
           )}
         </div>
@@ -238,16 +291,20 @@ export const ApplicationApprovals: React.FC = () => {
             <div>
               <p className="text-slate-500 font-semibold mb-2 text-sm">Skills Match</p>
               <div className="flex flex-wrap gap-2">
-                {selectedApp.skills.map((skill, i) => (
-                  <Badge key={i} variant="indigo">{skill}</Badge>
-                ))}
+                {selectedApp.skills && selectedApp.skills.length > 0 ? (
+                  selectedApp.skills.map((skill, i) => (
+                    <Badge key={i} variant="indigo">{skill}</Badge>
+                  ))
+                ) : (
+                  <span className="text-xs text-slate-400">No skills specified</span>
+                )}
               </div>
             </div>
 
             <div>
               <p className="text-slate-500 font-semibold mb-2 text-sm">Cover Message</p>
               <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-700 border border-slate-100">
-                {selectedApp.coverMessage}
+                {selectedApp.coverMessage || 'No cover message provided.'}
               </div>
             </div>
 
@@ -279,16 +336,17 @@ export const ApplicationApprovals: React.FC = () => {
                     variant="outline"
                     className="text-rose-600 border-rose-200 hover:bg-rose-50"
                     onClick={() => handleReject(selectedApp.id)}
+                    disabled={actionLoading === selectedApp.id}
                   >
-                    Reject Application
+                    {actionLoading === selectedApp.id ? 'Processing...' : 'Reject Application'}
                   </Button>
                   <Button 
                     variant="primary"
                     className="bg-emerald-600 hover:bg-emerald-700"
                     onClick={() => handleApprove(selectedApp.id)}
-                    disabled={rating === 0}
+                    disabled={rating === 0 || actionLoading === selectedApp.id}
                   >
-                    Approve Application
+                    {actionLoading === selectedApp.id ? 'Processing...' : 'Approve Application'}
                   </Button>
                 </div>
               </div>

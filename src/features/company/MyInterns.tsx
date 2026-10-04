@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { PageHeader, Card, Button, Badge, StatCard } from '@/components';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { PageHeader, Card, Button, Badge, StatCard, Alert } from '@/components';
 import { 
   Users, CheckCircle2, Clock, Search, Filter, 
   Activity, User, ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
-import { fetchCompanyActiveInternsBackend, type CompanyActiveInternRecord } from '@/services/api/backendService';
+import {
+  getCurrentUserBackend,
+  fetchCompanyActiveInternsBackend,
+  type CompanyActiveInternRecord,
+} from '@/services/api/backendService';
 
 export const MyInterns: React.FC = () => {
   const navigate = useNavigate();
@@ -15,40 +18,39 @@ export const MyInterns: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [interns, setInterns] = useState<CompanyActiveInternRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadActiveInterns = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user) {
-      const remoteInterns = await fetchCompanyActiveInternsBackend(userData.user.id);
+  const loadActiveInterns = useCallback(async () => {
+    try {
+      setError(null);
+      const user = await getCurrentUserBackend();
+      if (!user) {
+        setInterns([]);
+        return;
+      }
+      const remoteInterns = await fetchCompanyActiveInternsBackend(user.id);
       setInterns(remoteInterns);
+    } catch (err: any) {
+      console.error('[MyInterns] Failed to load active interns:', err);
+      setError(err?.message || 'Failed to load active interns.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    const initMyInterns = async () => {
-      setLoading(true);
-      await loadActiveInterns();
-      setLoading(false);
+    loadActiveInterns();
+
+    // Targeted refresh on window focus (refreshes data when returning from detail page or applicant pipeline)
+    const handleFocus = () => {
+      loadActiveInterns();
     };
 
-    initMyInterns();
-
-    // Subscribe to Realtime changes on student_applications table
-    const channel = supabase
-      .channel('company_my_interns_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_applications' },
-        () => {
-          loadActiveInterns();
-        }
-      )
-      .subscribe();
-
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [loadActiveInterns]);
 
   const totalCount = interns.length;
   const activeCount = interns.filter((i) => i.status === 'Selected' || i.status === 'Active').length;
@@ -81,6 +83,12 @@ export const MyInterns: React.FC = () => {
         title="My Interns"
         description="Monitor your selected interns and track their internship progress."
       />
+
+      {error && (
+        <Alert type="error" title="Error Loading Interns">
+          {error}
+        </Alert>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

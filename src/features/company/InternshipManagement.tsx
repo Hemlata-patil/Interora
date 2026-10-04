@@ -5,9 +5,9 @@ import {
   createInternshipPostingBackend,
   fetchInternshipPostingsBackend,
   deleteInternshipPostingBackend,
+  getCurrentUserBackend,
   type InternshipPostingRecord,
 } from '@/services/api/backendService';
-import { supabase } from '@/services/supabase/supabaseClient';
 
 export interface InternshipItem {
   id: string;
@@ -51,7 +51,7 @@ type ViewState = 'LIST' | 'CREATE' | 'EDIT' | 'VIEW';
 
 export const InternshipManagement: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>('LIST');
-  const [internships, setInternships] = useState<InternshipItem[]>(initialCompanyInternships);
+  const [internships, setInternships] = useState<InternshipItem[]>([]);
   const [currentInternship, setCurrentInternship] = useState<InternshipItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -83,11 +83,11 @@ export const InternshipManagement: React.FC = () => {
 
   useEffect(() => {
     const initCompanyAndFetch = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        setCurrentCompanyId(data.user.id);
-        const remotePostings = await fetchInternshipPostingsBackend(data.user.id);
-        if (remotePostings && remotePostings.length > 0) {
+      const user = await getCurrentUserBackend();
+      if (user) {
+        setCurrentCompanyId(user.id);
+        const remotePostings = await fetchInternshipPostingsBackend(user.id);
+        if (remotePostings) {
           const mapped: InternshipItem[] = remotePostings.map((p) => ({
             id: p.id,
             title: p.title,
@@ -97,11 +97,13 @@ export const InternshipManagement: React.FC = () => {
             requiredSkills: p.skills ? p.skills.join(', ') : '',
             description: p.description,
             eligibility: p.eligibility,
-            status: p.status === 'open' ? 'published' : 'closed',
+            status: p.status === 'open' ? 'published' : p.status === 'draft' ? 'draft' : 'closed',
             applicationDeadline: p.applicationDeadline ? p.applicationDeadline.slice(0, 10) : '',
-            applicationCount: 0,
+            applicationCount: p.applicationCount || 0,
             location: p.location,
             internshipType: p.internshipType,
+            tasks: p.tasks || [],
+            milestones: p.milestones || [],
           }));
           setInternships(mapped);
         }
@@ -157,6 +159,10 @@ export const InternshipManagement: React.FC = () => {
       eligibility: formData.eligibility,
       skills: skillArray,
       applicationDeadline: formData.applicationDeadline ? new Date(formData.applicationDeadline).toISOString() : undefined,
+      status: targetStatus === 'published' ? 'open' : 'draft',
+      vacancies: parseInt(formData.positions) || 2,
+      tasks: formData.tasks,
+      milestones: formData.milestones,
     });
 
     if (!res.success || !res.data) {
@@ -214,6 +220,16 @@ export const InternshipManagement: React.FC = () => {
     setDeletingId(null);
   };
 
+  const filteredInternships = internships.filter((item) => {
+    const matchesSearch =
+      searchTerm.trim() === '' ||
+      item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.requiredSkills.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -265,8 +281,23 @@ export const InternshipManagement: React.FC = () => {
 
       {/* Postings Grid / List */}
       {viewState === 'LIST' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {internships.map((item) => (
+        filteredInternships.length === 0 ? (
+          <EmptyState
+            title="No internship listings found"
+            description={
+              searchTerm || filterStatus !== 'all'
+                ? 'Try adjusting your search query or filter to find postings.'
+                : 'Post your first internship listing to begin receiving applications.'
+            }
+            action={
+              <Button onClick={handleStartCreate} size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs">
+                <Plus className="w-4 h-4 mr-1.5" /> Post New Internship
+              </Button>
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredInternships.map((item) => (
             <Card key={item.id} className="p-5 hover:border-slate-300 transition-all flex flex-col justify-between">
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -387,6 +418,7 @@ export const InternshipManagement: React.FC = () => {
             </Card>
           ))}
         </div>
+        )
       )}
 
       {/* Form State CREATE / EDIT */}

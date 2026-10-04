@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Lock, AlertCircle, X, RefreshCw, Mail } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/services/supabase/supabaseClient';
+import { ShieldCheck, Lock, AlertCircle, X, RefreshCw } from 'lucide-react';
+import { loginUserBackend, logoutUserBackend } from '@/services/api/backendService';
 
 export interface AdminAuthModalProps {
   onClose: () => void;
@@ -9,8 +9,8 @@ export interface AdminAuthModalProps {
 
 export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose }) => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@interora.app');
-  const [password, setPassword] = useState('admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -32,32 +32,22 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose }) => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      if (isSupabaseConfigured()) {
-        const { data: authData } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
+      // Authenticate directly against the Express backend
+      const res = await loginUserBackend(cleanEmail, password, 'admin');
 
-        if (authData?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', authData.user.id)
-            .single();
-
-          if (profile && profile.role !== 'admin') {
-            await supabase.auth.signOut();
-            setLoading(false);
-            setErrorMsg('Access Denied: Your account role is "' + profile.role + '". Administrator privileges are required.');
-            return;
-          }
-        }
+      if (!res.success) {
+        setLoading(false);
+        setErrorMsg(res.error || 'Administrator authentication failed.');
+        return;
       }
 
-      if (cleanEmail === 'admin@interora.app' && password === 'admin@123') {
+      // Enforce authoritative role verification returned by the backend
+      if (res.role !== 'admin') {
+        await logoutUserBackend();
         setLoading(false);
-        onClose();
-        navigate('/admin');
+        setErrorMsg(
+          `Access Denied: Your account role is "${res.role}". Administrator privileges are required.`
+        );
         return;
       }
 
@@ -66,12 +56,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose }) => {
       navigate('/admin');
     } catch (err: any) {
       setLoading(false);
-      if (cleanEmail === 'admin@interora.app' && password === 'admin@123') {
-        onClose();
-        navigate('/admin');
-      } else {
-        setErrorMsg(err.message || 'Administrator authentication failed.');
-      }
+      setErrorMsg(err.message || 'Administrator authentication failed.');
     }
   };
 
@@ -139,14 +124,14 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
+                className="px-5 py-2.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <>

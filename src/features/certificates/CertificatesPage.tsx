@@ -1,13 +1,122 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, EmptyState } from '@/components';
-import { calculateCertificateData, type CertificateRecord } from './data/mockCertificates';
+import { type CertificateRecord, type CertificateRequirement, type CertificateStatus } from './data/mockCertificates';
 import { CertificateEligibility } from './components/CertificateEligibility';
 import { CertificatePreview } from './components/CertificatePreview';
-import { Compass, Download, Printer, Award, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Compass, Download, Printer } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  fetchActiveStudentInternshipBackend,
+  fetchStudentCertificatesBackend,
+  fetchStudentActiveInternshipMetricsBackend,
+  type ActiveStudentInternshipRecord,
+} from '@/services/api/backendService';
 
 export const CertificatesPage: React.FC = () => {
-  const [certificate] = useState<CertificateRecord | null>(calculateCertificateData());
+  const [certificate, setCertificate] = useState<CertificateRecord | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadCertificate = async () => {
+    try {
+      const [act, certs] = await Promise.all([
+        fetchActiveStudentInternshipBackend(),
+        fetchStudentCertificatesBackend(),
+      ]);
+
+      if (!act) {
+        setCertificate(null);
+        return;
+      }
+
+      // If an issued certificate exists in PostgreSQL
+      const issuedCert = certs.find((c: any) => c.status === 'issued') || certs[0];
+      const metrics = await fetchStudentActiveInternshipMetricsBackend(act.assignmentId);
+
+      const totalTasks = metrics.totalTasks;
+      const completedTasks = metrics.completedTasks;
+      const taskCompletionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      const attendancePercentage = metrics.attendancePercentage;
+
+      const requirements: CertificateRequirement[] = [
+        {
+          id: 'req_01',
+          name: 'Attendance Requirement',
+          currentValue: `${attendancePercentage}%`,
+          requiredValue: '>= 75%',
+          isMet: attendancePercentage >= 75,
+        },
+        {
+          id: 'req_02',
+          name: 'Required Tasks Completion',
+          currentValue: `${completedTasks} / ${totalTasks} tasks (${taskCompletionPercentage}%)`,
+          requiredValue: '100% Tasks',
+          isMet: taskCompletionPercentage === 100 || (totalTasks === 0 && Boolean(issuedCert)),
+        },
+        {
+          id: 'req_03',
+          name: 'Milestone Progression',
+          currentValue: issuedCert ? '100% Milestones' : 'In Progress',
+          requiredValue: '100% Milestones',
+          isMet: Boolean(issuedCert) || taskCompletionPercentage === 100,
+        },
+        {
+          id: 'req_04',
+          name: 'Final Mentor Evaluation',
+          currentValue: issuedCert ? 'Completed' : 'Pending Mentor Review',
+          requiredValue: 'Completed Evaluation',
+          isMet: Boolean(issuedCert),
+        },
+      ];
+
+      const isEligible = Boolean(issuedCert) || requirements.every((r) => r.isMet);
+      const status: CertificateStatus = issuedCert ? 'Issued' : isEligible ? 'Eligible' : 'Not Eligible';
+
+      const certRecord: CertificateRecord = {
+        id: issuedCert?.id || 'cert_' + act.assignmentId,
+        certificateNumber: issuedCert?.certificateNumber || 'CERT-PENDING',
+        studentName: (issuedCert as any)?.student?.profile?.fullName || 'Student Intern',
+        internshipId: act.internshipId || act.assignmentId,
+        internshipTitle: act.title,
+        companyName: act.companyName,
+        startDate: act.startDate || '2026-08-01',
+        endDate: act.endDate || '2026-11-30',
+        issueDate: issuedCert?.issuedAt
+          ? issuedCert.issuedAt.slice(0, 10)
+          : isEligible
+          ? new Date().toISOString().slice(0, 10)
+          : undefined,
+        status,
+        isEligible,
+        attendancePercentage,
+        milestoneCompletionPercentage: issuedCert ? 100 : 75,
+        taskCompletionPercentage,
+        evaluationCompleted: Boolean(issuedCert),
+        evaluationScore: 9.0,
+        skills: ['React.js', 'TypeScript', 'Tailwind CSS', 'REST API'],
+        requirements,
+      };
+
+      setCertificate(certRecord);
+    } catch (err) {
+      console.error('[CertificatesPage] Error loading certificate:', err);
+      setCertificate(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCertificate();
+
+    const handleFocus = () => {
+      loadCertificate();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   const handlePrint = () => {
     window.print();
@@ -52,6 +161,21 @@ export const CertificatesPage: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Certificates & Graduation"
+          description="View certificate eligibility, completion criteria, and verified credentials."
+        />
+        <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-medium">Checking certificate records & eligibility...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!certificate) {
     return (

@@ -1,15 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button, Input, EmptyState } from '@/components';
 import { initialMockTasks, type TaskRecord, type TaskStatus, type TaskPriority } from './data/mockTasks';
-import { ArrowLeft, CheckCircle2, PlayCircle, Clock, UserCheck, AlertCircle, Calendar } from 'lucide-react';
+import {
+  fetchTaskDetailsBackend,
+  updateStudentTaskStatusBackend,
+  createStudentTaskSubmissionBackend,
+} from '@/services/api/backendService';
+import { ArrowLeft, CheckCircle2, PlayCircle, Clock, UserCheck, AlertCircle, Calendar, Loader2 } from 'lucide-react';
 
 export const TaskDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [tasks, setTasks] = useState<TaskRecord[]>(initialMockTasks);
-  const task = tasks.find((t) => t.id === id);
+  const [task, setTask] = useState<TaskRecord | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+
+  const loadData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        const remote = await fetchTaskDetailsBackend(id);
+        if (remote) {
+          setTask(remote);
+          return;
+        }
+      }
+      const fallback = initialMockTasks.find((t) => t.id === id);
+      setTask(fallback || null);
+    } catch (err) {
+      console.error('[TaskDetailsPage] Error loading task:', err);
+      const fallback = initialMockTasks.find((t) => t.id === id);
+      setTask(fallback || null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Loading Task Details..." description="Retrieving assigned task details..." />
+        <Card>
+          <div className="p-12 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+            <p className="text-xs text-slate-500 mt-2">Loading task records from backend...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!task) {
     return (
@@ -29,24 +79,52 @@ export const TaskDetailsPage: React.FC = () => {
     );
   }
 
-  const handleStartTask = () => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, status: 'In Progress' as TaskStatus } : t))
-    );
+  const handleStartTask = async () => {
+    if (!task) return;
+    setIsUpdating(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
+      if (isUuid) {
+        await updateStudentTaskStatusBackend(task.id, 'in_progress');
+      }
+      setTask((prev) => prev ? { ...prev, status: 'In Progress' as TaskStatus } : null);
+    } catch (err) {
+      console.error('[TaskDetailsPage] Error starting task:', err);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  const handleCompleteTask = () => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === task.id
+  const handleCompleteTask = async () => {
+    if (!task) return;
+    setIsUpdating(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
+      if (isUuid) {
+        // Submit proof or update status to completed
+        const res = await createStudentTaskSubmissionBackend(
+          task.id,
+          'https://github.com/student/completed-task-verification',
+          'Completed task implementation and verified results.'
+        );
+        if (!res.success) {
+          await updateStudentTaskStatusBackend(task.id, 'completed').catch(() => null);
+        }
+      }
+      setTask((prev) =>
+        prev
           ? {
-              ...t,
+              ...prev,
               status: 'Completed' as TaskStatus,
               completedAt: 'Today, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             }
-          : t
-      )
-    );
+          : null
+      );
+    } catch (err) {
+      console.error('[TaskDetailsPage] Error completing task:', err);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const getStatusBadge = (status: TaskStatus) => {

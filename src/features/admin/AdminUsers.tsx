@@ -1,57 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Select } from '@/components';
-import { Users, Search, ShieldCheck } from 'lucide-react';
-import { mockFacultyStudents, mockCompanyMentors } from '@/features/faculty/mockData';
+import { Search, ShieldCheck, Loader2 } from 'lucide-react';
+import { fetchAdminUsersBackend, type AdminUserRecord } from '@/services/api/backendService';
 
 export const AdminUsers: React.FC = () => {
+  const [users, setUsers] = useState<AdminUserRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
 
-  const studentUsers = mockFacultyStudents.map((s) => ({
-    id: s.id,
-    name: s.studentName,
-    email: s.email,
-    role: 'STUDENT',
-    organization: `Dept: ${s.department}`,
-    status: s.internshipStatus,
-  }));
+  useEffect(() => {
+    let isMounted = true;
+    const loadUsers = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchAdminUsersBackend();
+        if (isMounted) {
+          setUsers(data);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err?.message || 'Failed to fetch users');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-  const mentorUsers = mockCompanyMentors.map((m) => ({
-    id: m.id,
-    name: m.name,
-    email: m.email,
-    role: 'INDUSTRY_MENTOR',
-    organization: `Dept: ${m.department} â€¢ ${m.designation}`,
-    status: m.status,
-  }));
+    loadUsers();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  const facultyUsers = [
-    {
-      id: 'fac-1',
-      name: 'Dr. Rajesh Sharma',
-      email: 'rajesh.sharma@college.edu',
-      role: 'FACULTY_MENTOR',
-      organization: 'Dept: CSE â€¢ Professor',
-      status: 'Active',
-    },
-    {
-      id: 'fac-2',
-      name: 'Dr. Anita Verma',
-      email: 'anita.verma@college.edu',
-      role: 'FACULTY_MENTOR',
-      organization: 'Dept: IT â€¢ Assoc Professor',
-      status: 'Active',
-    },
-  ];
-
-  const allUsers = [...studentUsers, ...mentorUsers, ...facultyUsers];
-
-  const filteredUsers = allUsers.filter((u) => {
+  const filteredUsers = users.filter((u) => {
     const matchesSearch =
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.organization.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+      (u.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.organization || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole =
+      roleFilter === 'ALL' ||
+      u.role === roleFilter ||
+      (roleFilter === 'FACULTY_MENTOR' && (u.role === 'FACULTY' || u.role === 'FACULTY_MENTOR')) ||
+      (roleFilter === 'INDUSTRY_MENTOR' && (u.role === 'MENTOR' || u.role === 'INDUSTRY_MENTOR'));
     return matchesSearch && matchesRole;
   });
 
@@ -82,46 +78,79 @@ export const AdminUsers: React.FC = () => {
                 { value: 'STUDENT', label: 'Students' },
                 { value: 'FACULTY_MENTOR', label: 'Faculty Advisors' },
                 { value: 'INDUSTRY_MENTOR', label: 'Industry Mentors' },
+                { value: 'COMPANY', label: 'Company Users' },
+                { value: 'ADMIN', label: 'Administrators' },
               ]}
             />
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3 font-semibold">User Name</th>
-                <th className="p-3 font-semibold">Email Address</th>
-                <th className="p-3 font-semibold">Role</th>
-                <th className="p-3 font-semibold">Organization / Dept</th>
-                <th className="p-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>{u.name}</span>
-                  </td>
-                  <td className="p-3 text-slate-600">{u.email}</td>
-                  <td className="p-3">
-                    <Badge variant={u.role === 'STUDENT' ? 'indigo' : u.role === 'FACULTY_MENTOR' ? 'emerald' : 'sky'}>
-                      {u.role.replace('_', ' ')}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-slate-600">{u.organization}</td>
-                  <td className="p-3">
-                    <Badge variant={u.status === 'Active' || u.status === 'Completed' ? 'emerald' : 'amber'}>
-                      {u.status}
-                    </Badge>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-slate-400 text-sm">
+            <Loader2 className="w-5 h-5 mr-2 animate-spin text-indigo-600" />
+            Loading user directory...
+          </div>
+        ) : error ? (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+            {error}
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">
+            No users found matching your search.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                  <th className="p-3 font-semibold">User Name</th>
+                  <th className="p-3 font-semibold">Email Address</th>
+                  <th className="p-3 font-semibold">Role</th>
+                  <th className="p-3 font-semibold">Organization / Dept</th>
+                  <th className="p-3 font-semibold">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50/50">
+                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>{u.name}</span>
+                    </td>
+                    <td className="p-3 text-slate-600">{u.email}</td>
+                    <td className="p-3">
+                      <Badge
+                        variant={
+                          u.role === 'STUDENT'
+                            ? 'indigo'
+                            : u.role === 'FACULTY' || u.role === 'FACULTY_MENTOR'
+                            ? 'emerald'
+                            : u.role === 'ADMIN'
+                            ? 'amber'
+                            : 'sky'
+                        }
+                      >
+                        {u.role.replace(/_/g, ' ')}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-slate-600">{u.organization}</td>
+                    <td className="p-3">
+                      <Badge
+                        variant={
+                          u.status === 'Active' || u.status === 'Completed'
+                            ? 'emerald'
+                            : 'amber'
+                        }
+                      >
+                        {u.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

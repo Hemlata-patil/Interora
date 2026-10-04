@@ -142,31 +142,4 @@ export const initialApplicationSummaryData: ApplicationSummaryData = {
       status: 'rejected',
     },
   ],
-};
-
-export const initialUpcomingActionsData: UpcomingActionItem[] = [
-  {
-    id: 'act_01',
-    title: 'Submit Daily Work Log',
-    description: 'Log progress for component integration sprint',
-    dueDate: 'Today, 6:00 PM',
-    type: 'log',
-    linkPath: '/student/attendance',
-  },
-  {
-    id: 'act_02',
-    title: 'Complete Profile Details',
-    description: 'Add GitHub profile and project links to reach 100% completion',
-    dueDate: 'In 2 days',
-    type: 'profile',
-    linkPath: '/student/profile',
-  },
-  {
-    id: 'act_03',
-    title: 'Review Application Status',
-    description: 'Check faculty review status for InnovateX Labs application',
-    dueDate: 'Tomorrow, 5:00 PM',
-    type: 'application',
-    linkPath: '/student/applications',
-  },
-];
+};

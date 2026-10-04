@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Button, ProgressBar, Badge } from '@/components';
 import { BookOpen, Code, Terminal, MessageSquare, PlayCircle, FileText, CheckCircle2, Target, Video, Briefcase, Zap } from 'lucide-react';
+import { fetchStudentPlacementReadinessBackend } from '@/services/api/backendService';
 
 const mockSkills = [
   { name: 'JavaScript', level: 'Advanced', progress: 85, icon: Terminal, color: 'text-yellow-600', bg: 'bg-yellow-100', description: 'Master advanced concepts and asynchronous programming.', isFree: true, resourceType: 'Video Course', linkText: 'Watch Free Course', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript' },
@@ -72,6 +73,36 @@ const roadmapSteps = [
 ];
 
 export const StudentCareerPrep: React.FC = () => {
+  const [readinessScore, setReadinessScore] = useState<number>(78);
+  const [skillsProgress, setSkillsProgress] = useState<number>(85);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadReadiness = async () => {
+      try {
+        const snap = await fetchStudentPlacementReadinessBackend();
+        if (isMounted && snap) {
+          if (snap.readinessScore || snap.overallScore) {
+            setReadinessScore(snap.readinessScore || snap.overallScore);
+          }
+          if (snap.skillScore) {
+            setSkillsProgress(snap.skillScore);
+          }
+        }
+      } catch (err) {
+        console.error('[StudentCareerPrep] Could not fetch placement readiness:', err);
+      }
+    };
+
+    loadReadiness();
+    const handleFocus = () => loadReadiness();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   return (
     <div className="space-y-8 pb-10">
       <PageHeader
@@ -85,7 +116,7 @@ export const StudentCareerPrep: React.FC = () => {
           <Card title="Career Readiness Overview" className="h-full">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="bg-indigo-50 rounded-xl p-5 border border-indigo-100 flex flex-col items-center justify-center text-center">
-                <div className="text-4xl font-black text-indigo-700 mb-1">78%</div>
+                <div className="text-4xl font-black text-indigo-700 mb-1">{readinessScore}%</div>
                 <div className="text-sm font-semibold text-indigo-900">Overall Readiness</div>
                 <p className="text-xs text-indigo-600 mt-1">You are on track!</p>
               </div>
@@ -93,9 +124,9 @@ export const StudentCareerPrep: React.FC = () => {
                 <div>
                   <div className="flex justify-between text-sm font-medium mb-1">
                     <span className="text-slate-700">Skills Progress</span>
-                    <span className="text-slate-900 font-bold">85%</span>
+                    <span className="text-slate-900 font-bold">{skillsProgress}%</span>
                   </div>
-                  <ProgressBar progress={85} color="indigo" />
+                  <ProgressBar progress={skillsProgress} color="indigo" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm font-medium mb-1">

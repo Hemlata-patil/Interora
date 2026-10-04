@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input, Select, EmptyState } from '@/components';
 import { Search, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
 import {
   fetchStudentApplicationsBackend,
   type StudentApplicationRecord,
@@ -10,37 +9,24 @@ import {
 
 export const ApplicationsPage: React.FC = () => {
   const [applications, setApplications] = useState<StudentApplicationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const loadApps = async () => {
-    const remoteApps = await fetchStudentApplicationsBackend();
-    setApplications(remoteApps);
+    setLoading(true);
+    try {
+      const remoteApps = await fetchStudentApplicationsBackend();
+      setApplications(remoteApps);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadApps();
-
-    // Realtime channel listener for instant status updates (Shortlisted / Selected / Rejected)
-    const channel = supabase
-      .channel('student_applications_realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'student_applications',
-        },
-        () => {
-          loadApps();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
 
   const counts = useMemo(() => {
     return {
@@ -137,7 +123,14 @@ export const ApplicationsPage: React.FC = () => {
       </div>
 
       {/* Applications List */}
-      {filteredApplications.length > 0 ? (
+      {loading ? (
+        <Card className="py-12 text-center">
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-slate-500 font-medium">Loading your applications...</span>
+          </div>
+        </Card>
+      ) : filteredApplications.length > 0 ? (
         <div className="space-y-3">
           {filteredApplications.map((app) => (
             <Card key={app.id} className="hover:border-slate-300 transition-all">

@@ -16,8 +16,11 @@ import {
   Upload,
   AlertCircle
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/services/supabase/supabaseClient';
-import { uploadStudentResumeBackend } from '@/services/api/backendService';
+import {
+  getCurrentUserBackend,
+  uploadStudentResumeBackend,
+  updateStudentProfileBackend,
+} from '@/services/api/backendService';
 
 export interface StudentSkill {
   id: string;
@@ -89,48 +92,41 @@ export const StudentProfile: React.FC = () => {
 
   const loadProfile = async () => {
     setLoading(true);
-    if (!isSupabaseConfigured()) {
-      setLoading(false);
-      return;
-    }
-
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user) {
+      const user = await getCurrentUserBackend();
+      if (!user) {
         setLoading(false);
         return;
       }
 
-      const userId = userData.user.id;
-      const userMeta = userData.user.user_metadata || {};
-
-      // 1. Fetch Profile
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      // 2. Fetch Student Profile
-      const { data: studentProf } = await supabase
-        .from('student_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const sp = user.studentProfile;
+      let mappedSkills: StudentSkill[] = defaultStudentProfile.skills;
+      if (Array.isArray(sp?.skills) && sp.skills.length > 0) {
+        mappedSkills = sp.skills.map((s: any, idx: number) => {
+          if (typeof s === 'string') {
+            return { id: `sk_${idx}`, name: s, level: 'intermediate' as const };
+          }
+          return {
+            id: s.id || `sk_${idx}`,
+            name: s.name || String(s),
+            level: s.level || 'intermediate',
+          };
+        });
+      }
 
       const mergedProfile: StudentProfileData = {
-        fullName: prof?.full_name || userMeta.full_name || defaultStudentProfile.fullName,
-        email: prof?.email || userData.user.email || defaultStudentProfile.email,
-        phone: prof?.phone || userMeta.phone || defaultStudentProfile.phone,
-        rollNo: userMeta.student_id || defaultStudentProfile.rollNo,
-        department: prof?.department || userMeta.department || defaultStudentProfile.department,
+        fullName: user.fullName || defaultStudentProfile.fullName,
+        email: user.email || defaultStudentProfile.email,
+        phone: user.phone || defaultStudentProfile.phone,
+        rollNo: sp?.studentId || defaultStudentProfile.rollNo,
+        department: defaultStudentProfile.department,
         institution: defaultStudentProfile.institution,
-        degree: userMeta.course || defaultStudentProfile.degree,
-        yearSemester: userMeta.year_semester || defaultStudentProfile.yearSemester,
-        cgpa: studentProf?.cgpa || defaultStudentProfile.cgpa,
-        resumeHeadline: studentProf?.bio || defaultStudentProfile.resumeHeadline,
-        resumeFileName: defaultStudentProfile.resumeFileName,
-        skills: defaultStudentProfile.skills,
+        degree: sp?.course || defaultStudentProfile.degree,
+        yearSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : defaultStudentProfile.yearSemester,
+        cgpa: sp?.cgpa ? `${sp.cgpa} / 10.0` : defaultStudentProfile.cgpa,
+        resumeHeadline: defaultStudentProfile.resumeHeadline,
+        resumeFileName: sp?.resumeUrl ? sp.resumeUrl.split('/').pop() || 'Resume_Uploaded.pdf' : defaultStudentProfile.resumeFileName,
+        skills: mappedSkills,
         interests: defaultStudentProfile.interests,
         preferredRoles: defaultStudentProfile.preferredRoles,
         preferredLocations: defaultStudentProfile.preferredLocations,
@@ -140,7 +136,7 @@ export const StudentProfile: React.FC = () => {
       setProfile(mergedProfile);
       setFormData(mergedProfile);
     } catch (err: any) {
-      console.warn('[StudentProfile] Note loading profile:', err.message);
+      console.warn('[StudentProfile] Note loading profile:', err?.message || err);
     } finally {
       setLoading(false);
     }
@@ -207,6 +203,9 @@ export const StudentProfile: React.FC = () => {
     setResumeUploading(false);
 
     if (res.success) {
+      if (res.resumeUrl) {
+        await updateStudentProfileBackend({ resumeUrl: res.resumeUrl });
+      }
       setFormData((prev: StudentProfileData) => ({
         ...prev,
         resumeFileName: res.fileName || file.name,
@@ -215,51 +214,44 @@ export const StudentProfile: React.FC = () => {
         ...prev,
         resumeFileName: res.fileName || file.name,
       }));
-      setResumeUploadSuccess('Resume ' + file.name + ' uploaded and saved to Supabase Storage.');
+      setResumeUploadSuccess('Resume ' + file.name + ' uploaded successfully.');
     } else {
-      setResumeUploadError(res.error || 'Failed to upload resume to Supabase Storage.');
+      setResumeUploadError(res.error || 'Failed to upload resume.');
     }
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveSuccess(false);
     setSaveError(null);
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        const userId = userData.user.id;
-
-        // 1. Update Profiles table (full_name)
-        await supabase
-          .from('profiles')
-          .update({
-            full_name: formData.fullName,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
-
-        // 2. Update Student Profiles table (phone, department, course, year_semester, bio)
-        await supabase
-          .from('student_profiles')
-          .update({
-            phone: formData.phone,
-            department: formData.department,
-            course: formData.degree,
-            year_semester: formData.yearSemester,
-            bio: formData.resumeHeadline,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
+      let semesterNum: number | undefined;
+      const semMatch = formData.yearSemester.match(/(\d+)/);
+      if (semMatch) {
+        const parsed = parseInt(semMatch[1], 10);
+        if (parsed >= 1 && parsed <= 12) {
+          semesterNum = parsed;
+        }
       }
 
-      setProfile(formData);
-      setIsEditing(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 5000);
+      const res = await updateStudentProfileBackend({
+        fullName: formData.fullName,
+        phone: formData.phone,
+        course: formData.degree,
+        currentSemester: semesterNum,
+        skills: formData.skills.map((s) => s.name),
+      });
+
+      if (res.success) {
+        setProfile(formData);
+        setIsEditing(false);
+        setSaveSuccess(true);
+      } else {
+        setSaveError(res.error || 'Failed to update profile.');
+      }
     } catch (err: any) {
-      console.error('[StudentProfile] Save Error:', err);
-      setSaveError(err.message || 'Failed to save student profile.');
+      setSaveError(err.message || 'An error occurred while saving profile.');
     }
   };
 
@@ -288,12 +280,12 @@ export const StudentProfile: React.FC = () => {
 
       {saveSuccess && (
         <Alert type="success" title="Profile Saved">
-          Your student profile and academic records have been persisted to the Supabase database.
+          Your student profile and academic records have been saved.
         </Alert>
       )}
 
       {saveError && (
-        <Alert type="error" title="Save Failed">
+        <Alert type="error" title="Profile Update Notice">
           {saveError}
         </Alert>
       )}
@@ -441,7 +433,7 @@ export const StudentProfile: React.FC = () => {
         </Card>
 
         {/* 4. Resume Section */}
-        <Card title="Resume and Professional Summary" subtitle="Primary PDF attachment for internship applications (persisted in Supabase Storage)">
+        <Card title="Resume and Professional Summary" subtitle="Primary PDF attachment for internship applications (securely persisted)">
           <div className="space-y-4">
             {resumeUploadSuccess && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
@@ -502,7 +494,7 @@ export const StudentProfile: React.FC = () => {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Upload className="w-3.5 h-3.5 mr-1.5" />
-                    {resumeUploading ? 'Uploading to Supabase...' : 'Choose PDF File'}
+                    {resumeUploading ? 'Uploading Resume...' : 'Choose PDF File'}
                   </Button>
                 </div>
               </div>

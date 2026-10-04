@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Input, Button, Badge, Alert } from '@/components';
 import { mockInternships } from '@/features/internships/data/mockInternships';
 import { initialStudentProfileData } from '@/features/student/data/mockStudentData';
-import { ArrowLeft, CheckCircle2, FileText, Send, Building2 } from 'lucide-react';
+import {
+  fetchInternshipPostingByIdBackend,
+  createStudentApplicationBackend,
+  getCurrentUserBackend,
+} from '@/services/api/backendService';
+import { ArrowLeft, CheckCircle2, FileText, Send, Building2, Loader2 } from 'lucide-react';
 
 export const ApplyInternshipPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const internship = mockInternships.find((item) => item.id === id);
+  const [internship, setInternship] = useState<any | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     fullName: initialStudentProfileData.fullName,
@@ -24,6 +31,65 @@ export const ApplyInternshipPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  const loadData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const [remotePosting, user] = await Promise.all([
+        (async () => {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          if (isUuid) {
+            return await fetchInternshipPostingByIdBackend(id);
+          }
+          return null;
+        })(),
+        getCurrentUserBackend().catch(() => null),
+      ]);
+
+      if (remotePosting) {
+        setInternship(remotePosting);
+      } else {
+        const fallback = mockInternships.find((item) => item.id === id);
+        setInternship(fallback || null);
+      }
+
+      if (user) {
+        setFormData((prev) => ({
+          ...prev,
+          fullName: user.fullName || prev.fullName,
+          email: user.email || prev.email,
+        }));
+      }
+    } catch (err) {
+      console.error('[ApplyInternshipPage] Error loading data:', err);
+      const fallback = mockInternships.find((item) => item.id === id);
+      setInternship(fallback || null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <PageHeader title="Loading Opportunity..." description="Preparing application form..." />
+        <Card>
+          <div className="p-12 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+            <p className="text-xs text-slate-500 mt-2">Loading application details...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   if (!internship) {
     return (
       <div className="space-y-6">
@@ -37,13 +103,27 @@ export const ApplyInternshipPage: React.FC = () => {
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
+    setSubmitError(null);
+
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(internship.id);
+      if (isUuid) {
+        const res = await createStudentApplicationBackend(internship.id, formData.coverLetter);
+        if (!res.success) {
+          setSubmitError(res.error || 'Failed to submit application.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
       setIsSubmitting(false);
       setIsSubmitted(true);
-    }, 800);
+    } catch (err: any) {
+      setSubmitError(err.message || 'An unexpected error occurred.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -60,6 +140,12 @@ export const ApplyInternshipPage: React.FC = () => {
           description={`Submitting application to ${internship.companyName}`}
         />
       </div>
+
+      {submitError && (
+        <Alert type="error" title="Application Error">
+          {submitError}
+        </Alert>
+      )}
 
       {!isSubmitted ? (
         <form onSubmit={handleSubmit} className="space-y-6">

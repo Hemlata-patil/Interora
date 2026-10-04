@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from '../services/auth.service';
-import { registerSchema, loginSchema, parseSchema } from '../validators/auth.validators';
+import {
+  registerSchema,
+  loginSchema,
+  updateProfileSchema,
+  PROHIBITED_PROFILE_FIELDS,
+  parseSchema,
+} from '../validators/auth.validators';
 import { buildCookieOptions, buildClearCookieOptions, parseExpiryToMs } from '../utils/cookie';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
@@ -132,6 +138,55 @@ export async function meController(
     const body: ApiSuccess<typeof user> = {
       success: true,
       data: user,
+    };
+    res.status(200).json(body);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── PATCH /api/auth/me ─────────────────────────────────────────────────────────
+
+export async function updateMeController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError(401, 'Authentication required.');
+    }
+
+    // Reject attempts to update restricted role, status, or identity fields
+    if (req.body && typeof req.body === 'object') {
+      const attemptedProhibited = Object.keys(req.body).filter((key) =>
+        PROHIBITED_PROFILE_FIELDS.includes(key)
+      );
+      if (attemptedProhibited.length > 0) {
+        throw new AppError(
+          400,
+          `Modifying restricted field(s) is not permitted: ${attemptedProhibited.join(', ')}`
+        );
+      }
+    }
+
+    const parsed = parseSchema(updateProfileSchema, req.body);
+    if (!parsed.success) {
+      const body: ApiError = {
+        success: false,
+        message: 'Validation failed',
+        errors: parsed.errors,
+      };
+      res.status(400).json(body);
+      return;
+    }
+
+    const updatedUser = await authService.updateCurrentUser(req.user.id, parsed.data);
+
+    const body: ApiSuccess<typeof updatedUser> = {
+      success: true,
+      message: 'Profile updated successfully.',
+      data: updatedUser,
     };
     res.status(200).json(body);
   } catch (err) {

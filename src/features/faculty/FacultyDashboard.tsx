@@ -5,7 +5,6 @@ import {
   ArrowRight, ShieldCheck, UserCheck, Star, 
   AlertTriangle, BarChart3, HelpCircle, Layers, RefreshCw
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/services/supabase/supabaseClient';
 import { 
   fetchFacultyAssignedStudentsBackend, 
   fetchFacultyDashboardMetricsBackend,
@@ -55,31 +54,14 @@ export const FacultyDashboard: React.FC = () => {
 
     init();
 
-    // Subscribe to Realtime postgres_changes on Supabase tables
-    if (isSupabaseConfigured()) {
-      const channel = supabase
-        .channel('faculty_dashboard_realtime')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'faculty_student_assignments' },
-          () => loadFacultyDashboard()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'student_applications' },
-          () => loadFacultyDashboard()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'profiles' },
-          () => loadFacultyDashboard()
-        )
-        .subscribe();
+    const handleFocus = () => {
+      loadFacultyDashboard();
+    };
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const totalAssigned = metrics.totalAssignedStudents || assignedStudents.length;
@@ -104,7 +86,7 @@ export const FacultyDashboard: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Faculty Mentor Dashboard</h1>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Supabase Connected
+              System Connected
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-1">Academic overview & internship monitoring for assigned batch cohorts.</p>
@@ -116,7 +98,7 @@ export const FacultyDashboard: React.FC = () => {
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-xs w-fit"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span>{isRefreshing ? 'Syncing...' : 'Sync Supabase Data'}</span>
+          <span>{isRefreshing ? 'Syncing...' : 'Sync System Data'}</span>
         </button>
       </div>
 
@@ -184,7 +166,7 @@ export const FacultyDashboard: React.FC = () => {
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
           <div>
             <h3 className="font-bold text-slate-900 text-sm">Assigned Student Cohort & Pipeline</h3>
-            <p className="text-xs text-slate-500">Live student status queried from Supabase profiles & applications</p>
+            <p className="text-xs text-slate-500">Live student status queried from active records & applications</p>
           </div>
           <button
             onClick={() => navigate('/faculty/assigned-students')}
@@ -228,7 +210,7 @@ export const FacultyDashboard: React.FC = () => {
           </div>
         ) : (
           <p className="text-xs text-slate-500 italic text-center py-6">
-            {loading ? 'Loading assigned students from Supabase...' : 'No assigned students found.'}
+            {loading ? 'Loading assigned students...' : 'No assigned students found.'}
           </p>
         )}
       </div>

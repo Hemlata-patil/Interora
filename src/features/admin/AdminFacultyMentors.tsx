@@ -24,7 +24,6 @@ import {
   type FacultyRegistrationInput,
   type FacultyMentorRecord,
 } from '@/services/api/backendService';
-import { supabase } from '@/services/supabase/supabaseClient';
 
 export type BatchDivision = 'CS1' | 'CS2' | 'CS3' | 'CS4';
 
@@ -122,15 +121,13 @@ export const AdminFacultyMentors: React.FC = () => {
   useEffect(() => {
     loadMentors();
 
-    const channel = supabase
-      .channel('admin_faculty_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        loadMentors();
-      })
-      .subscribe();
+    const handleFocus = () => {
+      loadMentors();
+    };
 
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 

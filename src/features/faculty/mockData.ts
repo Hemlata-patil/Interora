@@ -525,12 +525,6 @@ export let mockCompanyInternships: InternshipData[] = [
   }
 ];
 
-export const setMockCompanyInternships = (internships: InternshipData[]) => {
-  mockCompanyInternships = internships;
-};
-
-export const MOCK_CURRENT_MENTOR_ID = 'MNT-001';
-
 // ==========================================
 // MENTORS (COMPANY)
 // ==========================================
@@ -575,11 +569,6 @@ let mockCompanyMentorsData: CompanyMentorData[] = [
 ];
 
 export const mockCompanyMentors = mockCompanyMentorsData;
-export const setMockCompanyMentors = (mentors: CompanyMentorData[]) => {
-  mockCompanyMentorsData = mentors;
-  mockCompanyMentorsData.length = 0;
-  mockCompanyMentorsData.push(...mentors);
-};
 
 
 export type CompanyApplicationStatus = 'Under Review' | 'Shortlisted' | 'Selected' | 'Rejected';
@@ -706,10 +695,6 @@ export let mockCompanyApplications: CompanyApplicationData[] = [
   }
 ];
 
-export const setMockCompanyApplications = (applications: CompanyApplicationData[]) => {
-  mockCompanyApplications = applications;
-};
-
 // ==========================================
 // TASKS & PROOF (COMPANY)
 // ==========================================
@@ -827,11 +812,6 @@ let mockCompanyTasksData: StudentTaskExecution[] = [
 ];
 
 export const mockCompanyTasks = mockCompanyTasksData;
-export const setMockCompanyTasks = (data: StudentTaskExecution[]) => {
-  mockCompanyTasksData = data;
-  mockCompanyTasksData.length = 0;
-  mockCompanyTasksData.push(...data);
-};
 
 // ==========================================
 // MILESTONES (COMPANY)
@@ -900,11 +880,6 @@ let mockCompanyMilestonesData: CompanyMilestoneData[] = [
 ];
 
 export const mockCompanyMilestones = mockCompanyMilestonesData;
-export const setMockCompanyMilestones = (data: CompanyMilestoneData[]) => {
-  mockCompanyMilestonesData = data;
-  mockCompanyMilestonesData.length = 0;
-  mockCompanyMilestonesData.push(...data);
-};
 
 // ==========================================
 // EVALUATIONS (COMPANY)
@@ -1080,11 +1055,6 @@ let mockCompanyEvaluationsData: CompanyEvaluationData[] = [
 ];
 
 export const mockCompanyEvaluations = mockCompanyEvaluationsData;
-export const setMockCompanyEvaluations = (data: CompanyEvaluationData[]) => {
-  mockCompanyEvaluationsData = data;
-  mockCompanyEvaluationsData.length = 0;
-  mockCompanyEvaluationsData.push(...data);
-};
 
 // ==========================================
 // PPO / CONVERSION (COMPANY)
@@ -1145,11 +1115,6 @@ let mockCompanyPPOData: CompanyPPOData[] = [
 ];
 
 export const mockCompanyPPOs = mockCompanyPPOData;
-export const setMockCompanyPPOs = (data: CompanyPPOData[]) => {
-  mockCompanyPPOData = data;
-  mockCompanyPPOData.length = 0;
-  mockCompanyPPOData.push(...data);
-};
 
 // ==========================================
 // CERTIFICATES (COMPANY)
@@ -1181,11 +1146,6 @@ let mockCompanyCertificatesData: CompanyCertificateData[] = [
 ];
 
 export const mockCompanyCertificates = mockCompanyCertificatesData;
-export const setMockCompanyCertificates = (data: CompanyCertificateData[]) => {
-  mockCompanyCertificatesData = data;
-  mockCompanyCertificatesData.length = 0;
-  mockCompanyCertificatesData.push(...data);
-};
 
 // ==========================================
 // NOTIFICATIONS (COMPANY)
@@ -1270,11 +1230,6 @@ let mockCompanyNotificationsData: CompanyNotificationData[] = [
 ];
 
 export const mockCompanyNotifications = mockCompanyNotificationsData;
-export const setMockCompanyNotifications = (data: CompanyNotificationData[]) => {
-  mockCompanyNotificationsData = data;
-  mockCompanyNotificationsData.length = 0;
-  mockCompanyNotificationsData.push(...data);
-};
 
 export type GuidanceStatus = 'Awaiting Faculty Reply' | 'Awaiting Student Reply' | 'In Progress' | 'Resolved';
 
@@ -1315,11 +1270,6 @@ let mockGuidanceConversationsData: GuidanceConversation[] = [
 ];
 
 export const mockGuidanceConversations = mockGuidanceConversationsData;
-export const setMockGuidanceConversations = (data: GuidanceConversation[]) => {
-  mockGuidanceConversationsData = data;
-  mockGuidanceConversationsData.length = 0;
-  mockGuidanceConversationsData.push(...data);
-};
 
 // ==========================================
 // INTERNSHIP OFFER LETTERS

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { Header } from '@/components/navigation/Header';
 import type { UserRole } from '@/types';
-import { supabase } from '@/services/supabase/supabaseClient';
+import { getCurrentUserBackend } from '@/services/api/backendService';
 
 export interface AppLayoutProps {
   role: UserRole;
@@ -10,47 +11,81 @@ export interface AppLayoutProps {
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSessionUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        setUserEmail(data.user.email || '');
-        const metaName = data.user.user_metadata?.full_name || data.user.user_metadata?.company_name;
-        if (metaName) {
-          setUserName(metaName);
-        } else {
-          // Query profiles if metadata absent
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', data.user.id)
-            .single();
+    let isMounted = true;
 
-          if (profile?.role === 'company') {
-            const { data: comp } = await supabase
-              .from('company_profiles')
-              .select('company_name')
-              .eq('id', data.user.id)
-              .single();
-            if (comp) setUserName(comp.company_name);
-          } else {
-            setUserName(data.user.email?.split('@')[0] || role.toUpperCase());
-          }
+    const resolveSession = async () => {
+      try {
+        const user = await getCurrentUserBackend();
+        if (!isMounted) return;
+
+        if (!user) {
+          // No active session — redirect to login
+          navigate('/login', { replace: true });
+          return;
         }
+
+        // Authoritative role guard: Ensure user has access to this role layout
+        if (user.role !== role) {
+          // If role doesn't match layout, redirect to their authoritative dashboard
+          navigate(`/${user.role}`, { replace: true });
+          return;
+        }
+
+        setUserEmail(user.email);
+        setUserName(
+          user.fullName ||
+            (role === 'company'
+              ? 'Company Account'
+              : role === 'student'
+              ? 'Student Account'
+              : role.toUpperCase())
+        );
+        setLoading(false);
+      } catch (err) {
+        if (!isMounted) return;
+        navigate('/login', { replace: true });
       }
     };
-    fetchSessionUser();
-  }, [role]);
+
+    resolveSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [role, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-medium tracking-wide">
+            Verifying session...
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       <Sidebar
         role={role}
-        userName={userName || (role === 'company' ? 'Company Account' : role === 'student' ? 'Student Account' : role.toUpperCase())}
+        userName={
+          userName ||
+          (role === 'company'
+            ? 'Company Account'
+            : role === 'student'
+            ? 'Student Account'
+            : role.toUpperCase())
+        }
         userEmail={userEmail || `${role}@interora.app`}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

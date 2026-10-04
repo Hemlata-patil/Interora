@@ -1,6 +1,6 @@
 import { initialCompanyApplications } from '@/features/admin/AdminCompanies';
 import { initialFacultyMentors } from '@/features/admin/AdminFacultyMentors';
-import { supabase, isSupabaseConfigured } from '@/services/supabase/supabaseClient';
+import { apiClient, ApiClientError } from '@/services/api/apiClient';
 import type { UserRole } from '@/types';
 import type { CompanyApplication } from '@/features/admin/AdminCompanies';
 
@@ -45,6 +45,10 @@ export interface InternshipPostingInput {
   skills?: string[];
   applicationDeadline?: string;
   status?: string;
+  vacancies?: number;
+  workMode?: 'on_site' | 'remote' | 'hybrid';
+  tasks?: { id: string; title: string; description: string; dueDate?: string; priority?: string }[];
+  milestones?: { id: string; title: string; goal: string; targetDate?: string }[];
 }
 
 export interface InternshipPostingRecord {
@@ -63,6 +67,9 @@ export interface InternshipPostingRecord {
   applicationDeadline?: string;
   status: string;
   createdAt: string;
+  applicationCount?: number;
+  tasks?: { id: string; title: string; description: string; dueDate: string; priority: string }[];
+  milestones?: { id: string; title: string; goal: string; targetDate: string }[];
 }
 
 export interface StudentApplicationRecord {
@@ -76,631 +83,842 @@ export interface StudentApplicationRecord {
   companyName?: string;
   studentName?: string;
   facultyRating?: number;
+  allocatorMatchScore?: number;
 }
 
-// 1. Student Registration
-export const registerStudentBackend = async (input: StudentRegistrationInput): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+// 1. Student Registration (Express Backend)
+export const registerStudentBackend = async (
+  input: StudentRegistrationInput
+): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
+  try {
+    await apiClient.post('/auth/register', {
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+      fullName: input.fullName.trim(),
+      role: 'student',
+      departmentCode: input.department,
+      phone: input.phone,
+    });
+    return { success: true, requiresEmailConfirmation: false };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Student registration failed.';
+    return { success: false, error: errorMsg };
   }
-
-  const { data, error } = await supabase.auth.signUp({
-    email: input.email,
-    password: input.password,
-    options: {
-      data: {
-        role: 'student',
-        full_name: input.fullName,
-        student_id: input.studentId,
-        phone: input.phone,
-        department: input.department,
-        course: input.course,
-        year_semester: input.yearSemester,
-      },
-    },
-  });
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  const requiresEmailConfirmation = !data.session;
-  return { success: true, requiresEmailConfirmation };
 };
 
-// 2. Company Registration
-export const registerCompanyBackend = async (input: CompanyRegistrationInput): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+// 2. Company Registration (Express Backend)
+export const registerCompanyBackend = async (
+  input: CompanyRegistrationInput
+): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
+  try {
+    await apiClient.post('/auth/register', {
+      email: input.officialEmail.trim().toLowerCase(),
+      password: input.password,
+      fullName: input.companyName.trim(),
+      role: 'company',
+      phone: input.phone,
+    });
+    return { success: true, requiresEmailConfirmation: false };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Company registration failed.';
+    return { success: false, error: errorMsg };
   }
-
-  const { data, error } = await supabase.auth.signUp({
-    email: input.officialEmail,
-    password: input.password,
-    options: {
-      data: {
-        role: 'company',
-        company_name: input.companyName,
-        contact_person: input.contactPerson,
-        phone: input.phone,
-        industry_domain: input.industryDomain,
-        website: input.website,
-      },
-    },
-  });
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  const requiresEmailConfirmation = !data.session;
-  return { success: true, requiresEmailConfirmation };
 };
 
-// 3. User Login & Authorization Gatekeeping
-export const loginUserBackend = async (email: string, password: string, requestedRole: UserRole): Promise<LoginResult> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
-  }
+// 3. User Login & Authorization Gatekeeping (Express Backend)
+export const loginUserBackend = async (
+  email: string,
+  password: string,
+  _requestedRole?: UserRole
+): Promise<LoginResult> => {
+  try {
+    const res = await apiClient.post<{
+      id: string;
+      email: string;
+      fullName: string;
+      role: UserRole;
+      accountStatus: string;
+    }>('/auth/login', {
+      email: email.trim().toLowerCase(),
+      password,
+    });
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-    if (error) {
-    const cleanEmail = email.trim().toLowerCase();
-
-    // 1. Check provisioned Faculty Mentors with temporary password
-    const matchedFaculty = initialFacultyMentors.find(
-      (f) => f.email.toLowerCase() === cleanEmail && (f.tempPassword === password || password === 'faculty@123' || password === 'password@123' || password.length >= 6)
-    );
-    if (matchedFaculty) {
-      return { success: true, role: 'faculty' };
-    }
-
-    // 2. Check provisioned Industry Partners with temporary password
-    const matchedCompany = initialCompanyApplications.find(
-      (c) => c.email.toLowerCase() === cleanEmail && (c.tempPassword === password || password === 'company@123' || password === 'password@123' || password.length >= 6)
-    );
-    if (matchedCompany) {
-      if (matchedCompany.status === 'Rejected') {
-        return { success: false, error: 'Your company registration was rejected. Please contact the administrator.' };
-      }
-      if (matchedCompany.status === 'Pending') {
-        return { success: false, error: 'Your company registration is awaiting TPO approval. You cannot log in until approved.' };
-      }
-      return { success: true, role: 'company' };
-    }
-
-    if (error.message.toLowerCase().includes('email not confirmed')) {
+    if (res.data) {
       return {
-        success: false,
-        error: 'Your email address has not been confirmed yet. Please check your inbox and verify your email before logging in.',
-        requiresEmailConfirmation: true,
+        success: true,
+        role: res.data.role,
       };
     }
-    return { success: false, error: error.message || 'Invalid email or password.' };
-  }
-
-  if (!data.user) {
     return { success: false, error: 'Authentication failed.' };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Invalid email or password.';
+    return { success: false, error: errorMsg };
   }
-
-  // Query Profile
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('role, account_status')
-    .eq('id', data.user.id)
-    .single();
-
-  if (profileErr || !profile) {
-    return { success: false, error: 'User profile not found in database.' };
-  }
-
-  // Account Status Check
-  if (profile.account_status === 'inactive') {
-    return { success: false, error: 'Your account is currently inactive. Please contact the administrator.' };
-  }
-
-  // Company Status Gatekeeping
-  if (profile.role === 'company' || requestedRole === 'company') {
-    const { data: compProfile, error: compErr } = await supabase
-      .from('company_profiles')
-      .select('approval_status, rejection_reason')
-      .eq('id', data.user.id)
-      .single();
-
-    if (compErr || !compProfile) {
-      return { success: false, error: 'Company registration profile not found.' };
-    }
-
-    if (compProfile.approval_status === 'pending') {
-      return { success: false, error: 'Your company registration is still awaiting TPO approval. You cannot log in until approved.' };
-    }
-
-    if (compProfile.approval_status === 'rejected') {
-      const reason = compProfile.rejection_reason ? ` Reason: ${compProfile.rejection_reason}` : '';
-      return { success: false, error: `Your company registration was rejected.${reason} Please contact the TPO administrator.` };
-    }
-  }
-
-  return { success: true, role: profile.role as UserRole };
 };
+
+// 3.1 Session Fetching (Express Backend)
+export interface AuthUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  accountStatus: string;
+  departmentId?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  studentProfile?: {
+    studentId: string;
+    course: string;
+    batchYear: number;
+    batchDivision?: string | null;
+    currentSemester: number;
+    cgpa?: number | string | null;
+    skills?: any;
+    resumeUrl?: string | null;
+  } | null;
+  companyProfile?: {
+    id?: string;
+    companyName: string;
+    approvalStatus: string;
+    verified: boolean;
+    industryDomain?: string | null;
+    companyAddress?: string | null;
+    contactPerson?: string | null;
+    officialEmail?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    description?: string | null;
+  } | null;
+  facultyProfile?: {
+    facultyId: string;
+    designation: string;
+    cabinLocation?: string | null;
+    officePhone?: string | null;
+    department?: {
+      id: string;
+      name: string;
+      code: string;
+    } | null;
+  } | null;
+}
+
+export const getCurrentUserBackend = async (): Promise<AuthUser | null> => {
+  try {
+    const res = await apiClient.get<AuthUser>('/auth/me');
+    return res.data || null;
+  } catch {
+    return null;
+  }
+};
+
+export interface UpdateStudentProfileInput {
+  fullName?: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  course?: string;
+  currentSemester?: number;
+  batchYear?: number;
+  batchDivision?: string | null;
+  skills?: any;
+  resumeUrl?: string | null;
+}
+
+export const updateStudentProfileBackend = async (
+  input: UpdateStudentProfileInput
+): Promise<{ success: boolean; data?: AuthUser; error?: string }> => {
+  try {
+    const res = await apiClient.patch<AuthUser>('/auth/me', input);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to update profile.';
+    return { success: false, error: errorMsg };
+  }
+};
+
+// 3.2 User Logout (Express Backend)
+export const logoutUserBackend = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.post('/auth/logout');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+// 3.3 Departments Read (Express + Prisma Backend)
+export interface DepartmentRecord {
+  id: string;
+  code: string;
+  name: string;
+  program: string;
+  headOfDepartmentId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const fetchDepartmentsBackend = async (): Promise<DepartmentRecord[]> => {
+  try {
+    const res = await apiClient.get<DepartmentRecord[]>('/departments');
+    return res.data || [];
+  } catch (err: any) {
+    console.error('[fetchDepartmentsBackend] Failed to fetch departments:', err);
+    return [];
+  }
+};
+
 
 // 4. Fetch Company Applications for Admin Dashboard
 export const fetchCompanyApplicationsBackend = async (): Promise<CompanyApplication[]> => {
-  if (!isSupabaseConfigured()) {
+  try {
+    const res = await apiClient.get<CompanyApplication[]>('/admin/companies');
+    return res.data || [];
+  } catch (err: any) {
+    console.error('[fetchCompanyApplicationsBackend] Error:', err);
     return [];
   }
-
-  const { data, error } = await supabase
-    .from('company_profiles')
-    .select('id, company_name, industry_domain, contact_person, official_email, phone, website, approval_status, created_at');
-
-  if (error || !data) {
-    return [];
-  }
-
-  return data.map((item) => ({
-    id: item.id,
-    companyName: item.company_name,
-    industryDomain: item.industry_domain,
-    contactPerson: item.contact_person,
-    email: item.official_email,
-    phone: item.phone,
-    website: item.website || 'https://company.com',
-    appliedDate: new Date(item.created_at).toISOString().slice(0, 10),
-    status: item.approval_status === 'approved' ? 'Approved' : item.approval_status === 'rejected' ? 'Rejected' : 'Pending',
-    invitationSent: false,
-    internshipCount: 0,
-    mentorCount: 0,
-  }));
 };
 
-// Helper: Trigger Edge Function Email
+// Helper: Trigger Company Email (Handled directly via Express backend)
 export const triggerCompanyEmailFunction = async (
-  recipientEmail: string,
-  companyName: string,
-  type: 'approved' | 'rejected',
-  rejectionReason?: string
+  _recipientEmail: string,
+  _companyName: string,
+  _type: 'approved' | 'rejected',
+  _rejectionReason?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const { data, error } = await supabase.functions.invoke('send-company-email', {
-    body: {
-      recipientEmail,
-      companyName,
-      type,
-      rejectionReason,
-    },
-    headers,
-  });
-
-  if (error) {
-    try {
-      if ('context' in error && error.context) {
-        const responseBody = await (error.context as Response).json();
-        if (responseBody && responseBody.error) {
-          return { success: false, error: responseBody.error };
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return { success: false, error: error.message || 'Failed to trigger company notification email Edge Function.' };
-  }
-
-  if (data && data.success === false) {
-    return { success: false, error: data.error || 'Email function returned an unhandled error.' };
-  }
-
   return { success: true };
 };
 
-// 5. Admin Approve Company RPC
+// 5. Admin Approve Company
 export const approveCompanyBackend = async (
   companyId: string,
-  companyName?: string,
-  officialEmail?: string
+  _companyName?: string,
+  _officialEmail?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    await apiClient.patch(`/admin/companies/${companyId}/approval`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[approveCompanyBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to approve company.' };
   }
-
-  const { error: rpcError } = await supabase.rpc('approve_company', { target_company_id: companyId });
-  if (rpcError) {
-    return { success: false, error: rpcError.message };
-  }
-
-  return { success: true };
 };
 
-// 6. Admin Reject Company RPC + Email Notification
+// 6. Admin Reject Company
 export const rejectCompanyBackend = async (
   companyId: string,
   reason: string = 'Criteria not met',
-  companyName?: string,
-  officialEmail?: string
+  _companyName?: string,
+  _officialEmail?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    await apiClient.patch(`/admin/companies/${companyId}/rejection`, { reason });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[rejectCompanyBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to reject company.' };
   }
-
-  let emailToSend = officialEmail;
-  let nameToSend = companyName;
-
-  if (!emailToSend || !nameToSend) {
-    const { data: compProfile } = await supabase
-      .from('company_profiles')
-      .select('company_name, official_email')
-      .eq('id', companyId)
-      .single();
-
-    if (compProfile) {
-      emailToSend = compProfile.official_email;
-      nameToSend = compProfile.company_name;
-    }
-  }
-
-  const { error: rpcError } = await supabase.rpc('reject_company', {
-    target_company_id: companyId,
-    p_rejection_reason: reason,
-  });
-
-  if (rpcError) {
-    return { success: false, error: rpcError.message };
-  }
-
-  if (emailToSend && nameToSend) {
-    const emailResult = await triggerCompanyEmailFunction(emailToSend, nameToSend, 'rejected', reason);
-    if (!emailResult.success) {
-      return { success: false, error: `Company rejected in database, but notification email failed: ${emailResult.error}` };
-    }
-  }
-
-  return { success: true };
 };
 
-// 7. Explicit Send Company Invitation Email backend method
+// 7. Explicit Send Company Invitation Email backend method (Express Backend)
 export const sendCompanyInvitationBackend = async (
   companyId: string,
   companyName: string,
   officialEmail: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    await apiClient.post(`/admin/companies/${companyId}/invite`, {
+      companyName,
+      officialEmail,
+    });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[sendCompanyInvitationBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to send company invitation.' };
   }
-
-  return await triggerCompanyEmailFunction(officialEmail, companyName, 'approved');
 };
 
 /* ====================================================================
    PHASE 2 & PHASE 3: INTERNSHIP POSTINGS & STUDENT APPLICATIONS
    ==================================================================== */
 
-// Create Internship Posting (Company)
+// Create Internship Posting (Express Backend)
 export const createInternshipPostingBackend = async (
   input: InternshipPostingInput
 ): Promise<{ success: boolean; data?: InternshipPostingRecord; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
-  }
+  try {
+    const workMode = input.workMode || (
+      input.location?.toLowerCase().includes('remote')
+        ? 'remote'
+        : input.location?.toLowerCase().includes('on-site') || input.location?.toLowerCase().includes('onsite')
+        ? 'on_site'
+        : 'hybrid'
+    );
+    const internshipType = input.internshipType?.toLowerCase().includes('part') ? 'part_time' : 'full_time';
+    const status = input.status === 'published' ? 'open' : (input.status || 'open');
+    const vacancies = typeof input.vacancies === 'number' && input.vacancies > 0 ? input.vacancies : 2;
 
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) {
-    return { success: false, error: 'User is not authenticated.' };
-  }
-
-  const { data, error } = await supabase
-    .from('internship_postings')
-    .insert({
-      company_id: userData.user.id,
-      title: input.title,
-      description: input.description,
-      industry_domain: input.industryDomain,
-      location: input.location || 'Remote / On-site',
-      internship_type: input.internshipType || 'Full-time',
-      duration: input.duration || '3 Months',
-      stipend: input.stipend || 'Unpaid / Paid',
-      eligibility: input.eligibility || 'All Eligible',
+    const payload = {
+      title: input.title.trim(),
+      description: input.description.trim(),
+      industryDomain: input.industryDomain.trim(),
+      location: input.location?.trim() || 'Remote / On-site',
+      workMode,
+      internshipType,
+      duration: input.duration?.trim() || '3 Months',
+      stipend: input.stipend?.trim() || 'Unpaid / Paid',
+      eligibility: input.eligibility?.trim() || 'All Eligible',
+      vacancies,
       skills: input.skills || [],
-      application_deadline: input.applicationDeadline || null,
-      status: input.status || 'open',
-    })
-    .select('*, company_profiles(company_name)')
-    .single();
+      applicationDeadline: input.applicationDeadline || null,
+      status,
+    };
 
-  if (error) {
-    console.error('[createInternshipPostingBackend] Error:', error);
-    return { success: false, error: error.message };
+    const res = await apiClient.post<any>('/postings', payload);
+    if (!res.data) {
+      return { success: false, error: 'Failed to create internship posting.' };
+    }
+
+    const createdPosting = res.data;
+
+    // Create task templates if provided
+    if (input.tasks && input.tasks.length > 0) {
+      for (const task of input.tasks) {
+        if (!task.title) continue;
+        try {
+          const priority = (task.priority?.toLowerCase() || 'medium') as 'low' | 'medium' | 'high' | 'urgent';
+          const expectedDaysMatch = task.dueDate?.match(/\d+/);
+          const expectedDays = expectedDaysMatch ? parseInt(expectedDaysMatch[0], 10) : undefined;
+          await apiClient.post(`/postings/${createdPosting.id}/task-templates`, {
+            title: task.title,
+            description: task.description || undefined,
+            priority: ['low', 'medium', 'high', 'urgent'].includes(priority) ? priority : 'medium',
+            expectedDays: expectedDays && expectedDays > 0 ? expectedDays : undefined,
+          });
+        } catch (tErr) {
+          console.warn('[createInternshipPostingBackend] Task template create error:', tErr);
+        }
+      }
+    }
+
+    // Create milestone templates if provided
+    if (input.milestones && input.milestones.length > 0) {
+      let seq = 1;
+      for (const m of input.milestones) {
+        if (!m.title) continue;
+        try {
+          await apiClient.post(`/postings/${createdPosting.id}/milestone-templates`, {
+            title: m.title,
+            description: m.goal || undefined,
+            sequenceOrder: seq++,
+          });
+        } catch (mErr) {
+          console.warn('[createInternshipPostingBackend] Milestone template create error:', mErr);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        id: createdPosting.id,
+        companyId: createdPosting.companyId || createdPosting.company?.id || '',
+        companyName: createdPosting.company?.companyName || 'Company',
+        title: createdPosting.title,
+        description: createdPosting.description,
+        industryDomain: createdPosting.industryDomain,
+        location: createdPosting.location,
+        internshipType: createdPosting.internshipType === 'part_time' ? 'Part-time' : 'Full-time',
+        duration: createdPosting.duration,
+        stipend: createdPosting.stipend,
+        eligibility: createdPosting.eligibility,
+        skills: createdPosting.skills || [],
+        applicationDeadline: createdPosting.applicationDeadline || '',
+        status: createdPosting.status,
+        createdAt: createdPosting.createdAt,
+        applicationCount: 0,
+      },
+    };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Failed to create internship posting.';
+    return { success: false, error: errorMsg };
   }
-
-  return {
-    success: true,
-    data: {
-      id: data.id,
-      companyId: data.company_id,
-      companyName: data.company_profiles?.company_name || 'Company',
-      title: data.title,
-      description: data.description,
-      industryDomain: data.industry_domain,
-      location: data.location,
-      internshipType: data.internship_type,
-      duration: data.duration,
-      stipend: data.stipend,
-      eligibility: data.eligibility,
-      skills: data.skills || [],
-      applicationDeadline: data.application_deadline,
-      status: data.status,
-      createdAt: data.created_at,
-    },
-  };
 };
 
-// Update Internship Posting (Company / Admin)
+// Update Internship Posting (Express Backend)
 export const updateInternshipPostingBackend = async (
   postingId: string,
   input: Partial<InternshipPostingInput>
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    const payload: Record<string, any> = {};
+    if (input.title !== undefined) payload.title = input.title.trim();
+    if (input.description !== undefined) payload.description = input.description.trim();
+    if (input.industryDomain !== undefined) payload.industryDomain = input.industryDomain.trim();
+    if (input.location !== undefined) payload.location = input.location.trim();
+    if (input.duration !== undefined) payload.duration = input.duration.trim();
+    if (input.stipend !== undefined) payload.stipend = input.stipend.trim();
+    if (input.eligibility !== undefined) payload.eligibility = input.eligibility.trim();
+    if (input.skills !== undefined) payload.skills = input.skills;
+    if (input.applicationDeadline !== undefined) {
+      payload.applicationDeadline = input.applicationDeadline || null;
+    }
+    if (input.status !== undefined) {
+      payload.status = input.status === 'published' ? 'open' : input.status;
+    }
+    if (input.workMode !== undefined) payload.workMode = input.workMode;
+    if (input.internshipType !== undefined) {
+      payload.internshipType = input.internshipType.toLowerCase().includes('part') ? 'part_time' : 'full_time';
+    }
+    if (input.vacancies !== undefined) payload.vacancies = input.vacancies;
+
+    await apiClient.patch(`/postings/${postingId}`, payload);
+    return { success: true };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Failed to update internship posting.';
+    return { success: false, error: errorMsg };
   }
-
-  const updatePayload: Record<string, any> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (input.title !== undefined) updatePayload.title = input.title;
-  if (input.description !== undefined) updatePayload.description = input.description;
-  if (input.industryDomain !== undefined) updatePayload.industry_domain = input.industryDomain;
-  if (input.location !== undefined) updatePayload.location = input.location;
-  if (input.internshipType !== undefined) updatePayload.internship_type = input.internshipType;
-  if (input.duration !== undefined) updatePayload.duration = input.duration;
-  if (input.stipend !== undefined) updatePayload.stipend = input.stipend;
-  if (input.eligibility !== undefined) updatePayload.eligibility = input.eligibility;
-  if (input.skills !== undefined) updatePayload.skills = input.skills;
-  if (input.applicationDeadline !== undefined) updatePayload.application_deadline = input.applicationDeadline;
-  if (input.status !== undefined) updatePayload.status = input.status;
-
-  const { error } = await supabase
-    .from('internship_postings')
-    .update(updatePayload)
-    .eq('id', postingId);
-
-  if (error) {
-    console.error('[updateInternshipPostingBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 };
 
-// Delete Internship Posting (Company / Admin)
+// Delete Internship Posting (Express Backend)
 export const deleteInternshipPostingBackend = async (
   postingId: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    await apiClient.delete(`/postings/${postingId}`);
+    return { success: true };
+  } catch (err: any) {
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Failed to delete internship posting.';
+    return { success: false, error: errorMsg };
   }
-
-  const { error } = await supabase
-    .from('internship_postings')
-    .delete()
-    .eq('id', postingId);
-
-  if (error) {
-    console.error('[deleteInternshipPostingBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 };
 
-// Fetch Internship Postings (Open or Company-specific)
+// Fetch Internship Postings (Express Backend)
 export const fetchInternshipPostingsBackend = async (
   companyId?: string
 ): Promise<InternshipPostingRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  try {
+    const params: Record<string, string> = {};
+    if (companyId) {
+      params.scope = 'mine';
+      params.companyId = companyId;
+    }
+    const res = await apiClient.get<any[]>('/postings', { params });
+    if (!res.data || !Array.isArray(res.data)) return [];
 
-  let query = supabase
-    .from('internship_postings')
-    .select('*, company_profiles(company_name)')
-    .order('created_at', { ascending: false });
-
-  if (companyId) {
-    query = query.eq('company_id', companyId);
-  } else {
-    query = query.eq('status', 'open');
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error('[fetchInternshipPostingsBackend] Error:', error);
+    return res.data.map((item) => ({
+      id: item.id,
+      companyId: item.companyId || item.company?.id || '',
+      companyName: item.company?.companyName || 'Company',
+      title: item.title,
+      description: item.description,
+      industryDomain: item.industryDomain,
+      location: item.location || 'Remote / On-site',
+      internshipType: item.internshipType === 'part_time' ? 'Part-time' : 'Full-time',
+      duration: item.duration,
+      stipend: item.stipend,
+      eligibility: item.eligibility,
+      skills: item.skills || [],
+      applicationDeadline: item.applicationDeadline || '',
+      status: item.status,
+      createdAt: item.createdAt,
+      applicationCount: item._count?.applications || 0,
+      tasks: (item.taskTemplates || []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        dueDate: t.expectedDays ? `${t.expectedDays} days` : '',
+        priority: t.priority ? t.priority.charAt(0).toUpperCase() + t.priority.slice(1) : 'Medium',
+      })),
+      milestones: (item.milestoneTemplates || []).map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        goal: m.description || '',
+        targetDate: `Order ${m.sequenceOrder}`,
+      })),
+    }));
+  } catch (err: any) {
+    console.error('[fetchInternshipPostingsBackend] Error:', err);
     return [];
   }
-  if (!data) return [];
-
-  return data.map((item) => ({
-    id: item.id,
-    companyId: item.company_id,
-    companyName: item.company_profiles?.company_name || 'Company',
-    title: item.title,
-    description: item.description,
-    industryDomain: item.industry_domain,
-    location: item.location,
-    internshipType: item.internship_type,
-    duration: item.duration,
-    stipend: item.stipend,
-    eligibility: item.eligibility,
-    skills: item.skills || [],
-    applicationDeadline: item.application_deadline,
-    status: item.status,
-    createdAt: item.created_at,
-  }));
 };
 
-// Create Student Application
+// Alias for Slice 20 Admin Postings lookup
+export const fetchPostingsBackend = fetchInternshipPostingsBackend;
+
+// Create Student Application (Express Backend: POST /api/applications)
 export const createStudentApplicationBackend = async (
   internshipId: string,
   coverLetter?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    await apiClient.post('/applications', {
+      internshipId,
+      coverLetter: coverLetter || undefined,
+    });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[createStudentApplicationBackend] Error:', err);
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Failed to submit application.';
+    return { success: false, error: errorMsg };
   }
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) {
-    return { success: false, error: 'User is not authenticated.' };
-  }
-
-  const { error } = await supabase.from('student_applications').insert({
-    internship_id: internshipId,
-    student_id: userData.user.id,
-    cover_letter: coverLetter || '',
-    status: 'Submitted',
-  });
-
-  if (error) {
-    if (error.code === '23505') {
-      return { success: false, error: 'You have already applied for this internship position.' };
-    }
-    console.error('[createStudentApplicationBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 };
 
-// Fetch Student Applications (Student views own applications)
+
+// Fetch Student Applications (Express Backend: GET /api/applications/my)
 export const fetchStudentApplicationsBackend = async (): Promise<StudentApplicationRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  try {
+    const res = await apiClient.get<any[]>('/applications/my');
+    if (!res.data || !Array.isArray(res.data)) return [];
 
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('student_applications')
-    .select('*, internship_postings(title, company_profiles(company_name))')
-    .eq('student_id', userData.user.id)
-    .order('applied_at', { ascending: false });
-
-  if (error) {
-    console.error('[fetchStudentApplicationsBackend] Error:', error);
+    return res.data.map((item) => ({
+      id: item.id,
+      internshipId: item.internshipId,
+      studentId: item.studentId,
+      status: mapBackendApplicationStatusToUi(item.status),
+      coverLetter: item.coverLetter || undefined,
+      appliedAt: item.appliedAt,
+      internshipTitle: item.internship?.title || 'Internship Position',
+      companyName: item.internship?.company?.companyName || 'Corporate Partner',
+      facultyRating: item.facultyRating ?? undefined,
+      allocatorMatchScore: item.allocatorMatchScore ?? undefined,
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentApplicationsBackend] Error:', err);
     return [];
   }
-  if (!data) return [];
-
-  return data.map((item) => ({
-    id: item.id,
-    internshipId: item.internship_id,
-    studentId: item.student_id,
-    status: item.status,
-    coverLetter: item.cover_letter,
-    appliedAt: item.applied_at,
-    internshipTitle: item.internship_postings?.title,
-    companyName: item.internship_postings?.company_profiles?.company_name,
-  }));
 };
 
-// Fetch Company Applicants (Company views applications for its internships) via Reliable Multi-Query Decoupling
+// Fetch Single Application Details (Express Backend: GET /api/applications/:id)
+export const fetchApplicationDetailsBackend = async (id: string): Promise<any | null> => {
+  try {
+    const res = await apiClient.get<any>(`/applications/${id}`);
+    const item = res.data;
+    if (!item) return null;
+
+    const appliedDateStr = item.appliedAt ? new Date(item.appliedAt).toISOString().slice(0, 10) : 'Recent';
+    const updatedDateStr = item.updatedAt ? new Date(item.updatedAt).toISOString().slice(0, 10) : 'Recent';
+    const uiStatus = mapBackendApplicationStatusToUi(item.status);
+
+    const isFacultyDone = ['faculty_approved', 'shortlisted', 'selected'].includes(item.status);
+    const isFacultyCurrent = item.status === 'faculty_review';
+    const isCompanyDone = ['selected'].includes(item.status);
+    const isCompanyCurrent = ['shortlisted', 'faculty_approved'].includes(item.status);
+    const isSelected = item.status === 'selected';
+    const isRejected = item.status === 'rejected' || item.status === 'faculty_rejected';
+
+    return {
+      id: item.id,
+      internshipId: item.internshipId,
+      title: item.internship?.title || 'Internship Position',
+      companyName: item.internship?.company?.companyName || 'Corporate Partner',
+      location: item.internship?.location || 'Remote / On-site',
+      workMode: item.internship?.workMode === 'on_site' ? 'On-site' : item.internship?.workMode === 'hybrid' ? 'Hybrid' : 'Remote',
+      duration: item.internship?.duration || '3 Months',
+      stipend: item.internship?.stipend || 'Provided',
+      appliedAt: appliedDateStr,
+      lastUpdated: updatedDateStr,
+      status: uiStatus,
+      applicantName: item.student?.profile?.fullName || 'Student Applicant',
+      applicantEmail: item.student?.profile?.email || 'student@interora.app',
+      resumeFileName: item.resumeUrl ? (item.resumeUrl.split('/').pop() || 'Student_Resume.pdf') : 'Student_Resume.pdf',
+      coverLetter: item.coverLetter || 'No cover letter provided.',
+      submittedSkills: item.student?.skills || ['JavaScript', 'TypeScript', 'React'],
+      timeline: [
+        {
+          title: 'Application Submitted',
+          description: 'Application received and registered in placement system.',
+          date: appliedDateStr,
+          status: 'completed' as const,
+        },
+        {
+          title: 'Faculty Verification',
+          description: 'Academic advisor verification and eligibility clearance.',
+          date: item.facultyReviewedAt ? new Date(item.facultyReviewedAt).toISOString().slice(0, 10) : (isFacultyDone ? appliedDateStr : 'Pending'),
+          status: (isFacultyDone ? 'completed' : isFacultyCurrent ? 'current' : 'upcoming') as 'completed' | 'current' | 'upcoming',
+        },
+        {
+          title: 'Company Assessment',
+          description: 'Technical and portfolio review by host company mentors.',
+          date: isCompanyDone ? updatedDateStr : isCompanyCurrent ? 'In Review' : 'Upcoming',
+          status: (isCompanyDone ? 'completed' : isCompanyCurrent ? 'current' : 'upcoming') as 'completed' | 'current' | 'upcoming',
+        },
+        {
+          title: 'Final Selection Decision',
+          description: 'Confirmation and internship offer issuance.',
+          date: isSelected ? updatedDateStr : isRejected ? 'Concluded' : 'Upcoming',
+          status: (isSelected ? 'completed' : isRejected ? 'current' : 'upcoming') as 'completed' | 'current' | 'upcoming',
+        },
+      ],
+    };
+  } catch (err: any) {
+    console.error(`[fetchApplicationDetailsBackend] Error fetching ${id}:`, err);
+    return null;
+  }
+};
+
+// Student Withdraw Application (Express Backend: PATCH /api/applications/:id/withdraw)
+export const withdrawStudentApplicationBackend = async (
+  applicationId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch(`/applications/${applicationId}/withdraw`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[withdrawStudentApplicationBackend] Error:', err);
+    const errorMsg = err.errors
+      ? Object.values(err.errors).flat().join(', ')
+      : err.message || 'Failed to withdraw application.';
+    return { success: false, error: errorMsg };
+  }
+};
+
+// Fetch Single Posting By ID (Express Backend: GET /api/postings/:id)
+export const fetchInternshipPostingByIdBackend = async (
+  postingId: string
+): Promise<any | null> => {
+  try {
+    const res = await apiClient.get<any>(`/postings/${postingId}`);
+    const item = res.data;
+    if (!item) return null;
+
+    return {
+      id: item.id,
+      companyId: item.companyId || item.company?.id || '',
+      companyName: item.company?.companyName || 'Host Company',
+      title: item.title,
+      description: item.description,
+      industryDomain: item.industryDomain,
+      location: item.location || 'Remote / On-site',
+      workMode: item.workMode ? (item.workMode === 'on_site' ? 'On-site' : item.workMode === 'remote' ? 'Remote' : 'Hybrid') : 'Remote',
+      internshipType: item.internshipType === 'part_time' ? 'Part-time' : 'Full-time',
+      duration: item.duration || '3 Months',
+      stipend: item.stipend || 'Provided',
+      eligibility: item.eligibility || 'Open to all eligible students',
+      skills: item.skills || [],
+      applicationDeadline: item.applicationDeadline || '',
+      status: item.status,
+      postedDate: item.createdAt ? new Date(item.createdAt).toISOString().slice(0, 10) : 'Recent',
+      responsibilities: item.taskTemplates?.length
+        ? item.taskTemplates.map((t: any) => t.title)
+        : [
+            'Deliver assigned engineering tickets following repository patterns',
+            'Participate in sprint standups and technical code reviews',
+            'Document work logs and milestones throughout internship',
+          ],
+      requirements: item.skills?.length
+        ? item.skills.map((s: string) => `Demonstrated competency or familiarity with ${s}`)
+        : [
+            'Solid computer science and software development foundations',
+            'Willingness to learn modern framework patterns and best practices',
+            'Effective collaboration and communication skills',
+          ],
+      learningOutcomes: [
+        'Hands-on full-stack development experience in production codebase',
+        'Direct mentorship and task guidance from assigned industry mentors',
+        'Institutional credit and verified completion certificate',
+      ],
+    };
+  } catch (err: any) {
+    console.error(`[fetchInternshipPostingByIdBackend] Error for ${postingId}:`, err);
+    return null;
+  }
+};
+
+// Fetch Single Task Details By ID (Express Backend: GET /api/tasks/:id)
+export const fetchTaskDetailsBackend = async (
+  taskId: string
+): Promise<any | null> => {
+  try {
+    const res = await apiClient.get<any>(`/tasks/${taskId}`);
+    const t = res.data;
+    if (!t) return null;
+
+    const isCompleted = t.status === 'submitted' || t.status === 'reviewed' || t.status === 'closed';
+
+    return {
+      id: t.id,
+      title: t.title,
+      category: t.assignment?.internship?.title || 'Active Project Task',
+      status: t.status === 'in_progress' ? 'In Progress' : isCompleted ? 'Completed' : 'To Do',
+      priority: t.priority ? t.priority.charAt(0).toUpperCase() + t.priority.slice(1) : 'Medium',
+      dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'Upcoming',
+      assignedDate: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Recently',
+      estimatedHours: 4,
+      actualHours: isCompleted ? 4 : 0,
+      description: t.description || 'Assigned project task.',
+      assignedBy: t.assignedBy?.fullName || 'Assigned Mentor',
+      notes: t.submissions?.[0]?.submissionText || (t.requiredSkills?.length ? `Required skills: ${t.requiredSkills.join(', ')}` : undefined),
+      completedAt: isCompleted && t.submissions?.[0]?.submittedAt ? new Date(t.submissions[0].submittedAt).toLocaleString() : undefined,
+    };
+  } catch (err: any) {
+    console.error(`[fetchTaskDetailsBackend] Error for ${taskId}:`, err);
+    return null;
+  }
+};
+
+// Fetch Student Placement Readiness (Express Backend: GET /api/placement-readiness/latest)
+export const fetchStudentPlacementReadinessBackend = async (): Promise<any | null> => {
+  try {
+    const res = await apiClient.get<any>('/placement-readiness/latest');
+    return res.data || null;
+  } catch (err: any) {
+    try {
+      const calcRes = await apiClient.post<any>('/placement-readiness/calculate', {});
+      return calcRes.data || null;
+    } catch {
+      return null;
+    }
+  }
+};
+
+
+// Status mapping helpers between Express/Prisma (lowercase enum) and UI (Title Case)
+export const mapBackendApplicationStatusToUi = (status?: string): string => {
+  switch (status?.toLowerCase()) {
+    case 'submitted':
+      return 'Submitted';
+    case 'shortlisted':
+      return 'Shortlisted';
+    case 'selected':
+      return 'Selected';
+    case 'rejected':
+      return 'Rejected';
+    case 'faculty_review':
+      return 'Faculty Review';
+    case 'faculty_approved':
+      return 'Faculty Approved';
+    case 'faculty_rejected':
+      return 'Faculty Rejected';
+    case 'withdrawn':
+      return 'Withdrawn';
+    default:
+      return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Submitted';
+  }
+};
+
+export const mapUiApplicationStatusToBackend = (status: string): string => {
+  switch (status?.toLowerCase()) {
+    case 'submitted':
+      return 'submitted';
+    case 'shortlisted':
+      return 'shortlisted';
+    case 'selected':
+      return 'selected';
+    case 'rejected':
+      return 'rejected';
+    case 'faculty_review':
+    case 'faculty review':
+      return 'faculty_review';
+    case 'faculty_approved':
+    case 'faculty approved':
+      return 'faculty_approved';
+    case 'faculty_rejected':
+    case 'faculty rejected':
+      return 'faculty_rejected';
+    case 'withdrawn':
+      return 'withdrawn';
+    default:
+      return status?.toLowerCase() || 'submitted';
+  }
+};
+
+// Fetch Company Applicants (Express + Prisma Backend)
 export const fetchCompanyApplicantsBackend = async (
-  companyId: string
+  companyId?: string
 ): Promise<StudentApplicationRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  try {
+    // 1. Fetch postings owned by authenticated company
+    const params: Record<string, string> = { scope: 'mine' };
+    if (companyId) {
+      params.companyId = companyId;
+    }
+    const postingsRes = await apiClient.get<any[]>('/postings', { params });
+    const postings = postingsRes.data;
 
-  console.log('[Applicants] Company ID:', companyId);
+    if (!postings || !Array.isArray(postings) || postings.length === 0) {
+      return [];
+    }
 
-  // 1. Query company internship postings
-  const { data: internships, error: intErr } = await supabase
-    .from('internship_postings')
-    .select('id, company_id, title')
-    .eq('company_id', companyId);
+    // 2. Fetch applications for each posting
+    const appResults = await Promise.all(
+      postings.map(async (posting) => {
+        try {
+          const res = await apiClient.get<any[]>(`/postings/${posting.id}/applications`);
+          const apps = res.data || [];
+          return apps.map((app) => ({
+            id: app.id,
+            internshipId: app.internshipId,
+            studentId: app.studentId,
+            status: mapBackendApplicationStatusToUi(app.status),
+            coverLetter: app.coverLetter || undefined,
+            appliedAt: app.appliedAt,
+            internshipTitle: posting.title || 'Internship Position',
+            companyName: posting.company?.companyName || 'Company',
+            studentName: app.student?.profile?.fullName || 'Student Candidate',
+            facultyRating:
+              app.facultyRating !== null && app.facultyRating !== undefined
+                ? Number(app.facultyRating)
+                : undefined,
+            allocatorMatchScore:
+              app.allocatorMatchScore !== null && app.allocatorMatchScore !== undefined
+                ? Number(app.allocatorMatchScore)
+                : undefined,
+          }));
+        } catch (err) {
+          console.error(`[fetchCompanyApplicantsBackend] Error fetching applications for posting ${posting.id}:`, err);
+          return [];
+        }
+      })
+    );
 
-  if (intErr) {
-    console.error('[Applicants] Internship query error:', intErr);
+    // 3. Combine and sort by application date desc
+    const allApps = appResults
+      .flat()
+      .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+
+    return allApps;
+  } catch (err) {
+    console.error('[fetchCompanyApplicantsBackend] Error:', err);
     return [];
   }
-
-  console.log('[Applicants] Internships:', internships);
-  if (!internships || internships.length === 0) return [];
-
-  const internshipIds = internships.map((i) => i.id);
-  const internshipMap = new Map(internships.map((i) => [i.id, i.title]));
-
-  // 2. Query student_applications
-  const { data: applications, error: appErr } = await supabase
-    .from('student_applications')
-    .select('*')
-    .in('internship_id', internshipIds)
-    .order('applied_at', { ascending: false });
-
-  if (appErr) {
-    console.error('[Applicants] Student applications query error:', appErr);
-    return [];
-  }
-
-  console.log('[Applicants] Applications:', applications);
-  if (!applications || applications.length === 0) return [];
-
-  const studentIds = Array.from(new Set(applications.map((a) => a.student_id)));
-
-  // 3. Query profiles separately for student names
-  const { data: profiles, error: profErr } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .in('id', studentIds);
-
-  if (profErr) {
-    console.error('[Applicants] Profiles query error:', profErr);
-  }
-
-  console.log('[Applicants] Profiles:', profiles);
-  const profileMap = new Map((profiles || []).map((p) => [p.id, p.full_name]));
-
-  // 4. Combine records cleanly into StudentApplicationRecord[]
-  const finalResult: StudentApplicationRecord[] = applications.map((app) => ({
-    id: app.id,
-    internshipId: app.internship_id,
-    studentId: app.student_id,
-    status: app.status,
-    coverLetter: app.cover_letter,
-    appliedAt: app.applied_at,
-    internshipTitle: internshipMap.get(app.internship_id) || 'Internship Position',
-    studentName: profileMap.get(app.student_id) || 'Student Candidate',
-    facultyRating: app.faculty_rating,
-  }));
-
-  console.log('[Applicants] Final result:', finalResult);
-  return finalResult;
 };
 
-// Update Application Status (Company / Admin)
+// Update Application Status (Express Backend)
 export const updateApplicationStatusBackend = async (
   applicationId: string,
-  newStatus: string
+  newStatus: string,
+  companyRemarks?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env file.' };
+  try {
+    const backendStatus = mapUiApplicationStatusToBackend(newStatus);
+    await apiClient.patch(`/applications/${applicationId}/status`, {
+      status: backendStatus,
+      ...(companyRemarks !== undefined ? { companyRemarks } : {}),
+    });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[updateApplicationStatusBackend] Error:', err);
+    const errorMsg =
+      err.errors
+        ? Object.values(err.errors).flat().join(', ')
+        : err.message || 'Failed to update application status.';
+    return { success: false, error: errorMsg };
   }
-
-  const { error } = await supabase
-    .from('student_applications')
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq('id', applicationId);
-
-  if (error) {
-    console.error('[updateApplicationStatusBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 };
 /* ====================================================================
    PHASE 4: STUDENT PERSISTENCE FEATURE SERVICES
@@ -711,9 +929,17 @@ export interface AttendanceRecord {
   studentId: string;
   internshipId?: string;
   attendanceDate: string;
-  status: 'present' | 'absent' | 'late' | 'leave';
+  status: 'present' | 'absent' | 'late' | 'half_day' | 'leave';
   checkInTime?: string;
   checkOutTime?: string;
+  checkInPhotoUrl?: string;
+  checkInLat?: number;
+  checkInLng?: number;
+  checkOutPhotoUrl?: string;
+  checkOutLat?: number;
+  checkOutLng?: number;
+  locationAddress?: string;
+  workingHours?: string;
 }
 
 export interface StudentTaskRecord {
@@ -724,15 +950,11 @@ export interface StudentTaskRecord {
   dueDate?: string;
   completed: boolean;
   createdAt: string;
+  status?: string;
+  priority?: string;
+  assignmentId?: string;
 }
 
-export interface CareerProgressRecord {
-  id: string;
-  studentId: string;
-  moduleKey: string;
-  progressPercent: number;
-  completed: boolean;
-}
 
 export interface StudentMilestoneRecord {
   id: string;
@@ -769,118 +991,172 @@ export const uploadAttendancePhotoBackend = async (
   blob: Blob,
   actionType: 'check_in' | 'check_out'
 ): Promise<string> => {
-  if (!isSupabaseConfigured()) return '';
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id || 'anon_' + Date.now();
-    const filePath = "attendance/" + userId + "/" + actionType + "_" + Date.now() + ".jpg";
+    const formData = new FormData();
+    const file = new File([blob], `${actionType}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    formData.append('photo', file);
 
-    const { error } = await supabase.storage
-      .from('attendance-photos')
-      .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
-
-    if (!error) {
-      const { data } = supabase.storage.from('attendance-photos').getPublicUrl(filePath);
-      return data?.publicUrl || '';
-    } else {
-      console.warn('[uploadAttendancePhotoBackend] Storage notice:', error.message);
-      return "https://zvbxdpasnmkvctcikllr.supabase.co/storage/v1/object/public/attendance-photos/" + filePath;
-    }
+    const res = await apiClient.post<{ photoUrl: string }>('/uploads/attendance-photo', formData);
+    return res.data?.photoUrl || '';
   } catch (err) {
     console.warn('[uploadAttendancePhotoBackend] Handled:', err);
     return '';
   }
 };
 
-// Attendance Services
+// Attendance Services (Express Backend)
 export const fetchStudentAttendanceBackend = async (): Promise<AttendanceRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .select('*')
-    .eq('student_id', userData.user.id)
-    .order('attendance_date', { ascending: false });
-
-  if (error || !data) {
-    console.error('[fetchStudentAttendanceBackend] Error:', error);
+  try {
+    const res = await apiClient.get<any[]>('/attendance/my');
+    const records = res.data || [];
+    return records.map((a: any) => {
+      let dateStr = '';
+      if (a.attendanceDate) {
+        dateStr = typeof a.attendanceDate === 'string'
+          ? a.attendanceDate.slice(0, 10)
+          : new Date(a.attendanceDate).toISOString().slice(0, 10);
+      }
+      return {
+        id: a.id,
+        studentId: a.assignment?.studentId || a.studentId || '',
+        internshipId: a.assignmentId || a.internshipId || '',
+        attendanceDate: dateStr,
+        status: a.status,
+        checkInTime: a.checkInTime ? new Date(a.checkInTime).toISOString() : undefined,
+        checkOutTime: a.checkOutTime ? new Date(a.checkOutTime).toISOString() : undefined,
+        checkInPhotoUrl: a.checkInPhotoUrl || undefined,
+        checkInLat: a.checkInLat ?? undefined,
+        checkInLng: a.checkInLng ?? undefined,
+        checkOutPhotoUrl: a.checkOutPhotoUrl || undefined,
+        checkOutLat: a.checkOutLat ?? undefined,
+        checkOutLng: a.checkOutLng ?? undefined,
+        locationAddress: a.checkInAddress || a.checkOutAddress || a.locationAddress || undefined,
+        workingHours: a.workingHours ? `${a.workingHours} hrs` : undefined,
+      };
+    });
+  } catch (err: any) {
+    console.error('[fetchStudentAttendanceBackend] Error:', err);
     return [];
   }
-
-  return data.map((a) => ({
-    id: a.id,
-    studentId: a.student_id,
-    internshipId: a.internship_id,
-    attendanceDate: a.attendance_date,
-    status: a.status,
-    checkInTime: a.check_in_time,
-    checkOutTime: a.check_out_time,
-  }));
 };
 
 export const createAttendanceRecordBackend = async (
-  status: 'present' | 'absent' | 'late' | 'leave',
+  status: 'present' | 'absent' | 'late' | 'half_day' | 'leave',
   photoBlob?: Blob,
   coords?: { latitude: number; longitude: number; address?: string },
-  internshipId?: string
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
+  assignmentId?: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
   let photoUrl = '';
   if (photoBlob) {
-    photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_in');
+    try {
+      photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_in');
+    } catch (err) {
+      console.warn('[createAttendanceRecordBackend] Photo upload notice:', err);
+    }
   }
 
-  const { error } = await supabase.from('attendance_records').insert({
-    student_id: userData.user.id,
-    internship_id: internshipId || null,
-    attendance_date: new Date().toISOString().slice(0, 10),
-    status,
-    check_in_time: new Date().toISOString(),
-    check_in_photo_url: photoUrl || null,
-    check_in_lat: coords?.latitude || 18.5204,
-    check_in_lng: coords?.longitude || 73.8567,
-    location_address: coords?.address || 'Campus Location Tagged',
-  });
-
-  if (error) {
-    console.error('[createAttendanceRecordBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    const res = await apiClient.post<any>('/attendance/check-in', {
+      assignmentId: assignmentId || undefined,
+      checkInPhotoUrl: photoUrl || undefined,
+      checkInLat: coords?.latitude,
+      checkInLng: coords?.longitude,
+      checkInAddress: coords?.address,
+    });
+    return {
+      success: true,
+      data: res.data,
+    };
+  } catch (err: any) {
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Attendance check-in failed.';
+    return {
+      success: false,
+      error: errorMsg,
+    };
   }
-
-  return { success: true };
 };
 
-// Student Tasks Services
+// Student Tasks Services (Express Backend)
 export const fetchStudentTasksBackend = async (): Promise<StudentTaskRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('student_tasks')
-    .select('*')
-    .eq('student_id', userData.user.id)
-    .order('created_at', { ascending: false });
-
-  if (error || !data) {
-    console.error('[fetchStudentTasksBackend] Error:', error);
+  try {
+    const res = await apiClient.get<any>('/tasks');
+    const tasks: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return tasks.map((t: any) => ({
+      id: t.id,
+      studentId: t.assignment?.studentId || '',
+      title: t.title,
+      description: t.description || '',
+      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : undefined,
+      completed:
+        (t.status || '').toLowerCase() === 'completed' ||
+        (t.status || '').toLowerCase() === 'submitted' ||
+        (t.status || '').toLowerCase() === 'closed',
+      createdAt: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+      status: t.status,
+      priority: t.priority,
+      assignmentId: t.assignmentId,
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentTasksBackend] Express fetch error:', err);
     return [];
   }
+};
 
-  return data.map((t) => ({
-    id: t.id,
-    studentId: t.student_id,
-    title: t.title,
-    description: t.description,
-    dueDate: t.due_date,
-    completed: t.completed,
-    createdAt: t.created_at,
-  }));
+export const updateStudentTaskStatusBackend = async (
+  taskId: string,
+  status: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch(`/tasks/${taskId}/status`, { status });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[updateStudentTaskStatusBackend] Error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to update task status.';
+    return { success: false, error: errorMsg };
+  }
+};
+
+export const createStudentTaskSubmissionBackend = async (
+  taskId: string,
+  proofUrl: string,
+  submissionText?: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.post(`/tasks/${taskId}/submissions`, {
+      proofUrl,
+      submissionText: submissionText || null,
+    });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[createStudentTaskSubmissionBackend] Error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to submit task proof.';
+    return { success: false, error: errorMsg };
+  }
+};
+
+export const updateStudentTaskBackend = async (
+  taskId: string,
+  completed: boolean
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    if (completed) {
+      const subRes = await createStudentTaskSubmissionBackend(
+        taskId,
+        `https://interora.app/submissions/${taskId}`,
+        'Task completed and deliverables submitted by student.'
+      );
+      if (subRes.success) return { success: true };
+      return await updateStudentTaskStatusBackend(taskId, 'in_progress');
+    } else {
+      return await updateStudentTaskStatusBackend(taskId, 'in_progress');
+    }
+  } catch (err: any) {
+    console.error('[updateStudentTaskBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to update task.' };
+  }
 };
 
 export const createStudentTaskBackend = async (
@@ -888,183 +1164,105 @@ export const createStudentTaskBackend = async (
   description?: string,
   dueDate?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase.from('student_tasks').insert({
-    student_id: userData.user.id,
-    title,
-    description: description || '',
-    due_date: dueDate || null,
-    completed: false,
-  });
-
-  if (error) {
-    console.error('[createStudentTaskBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    console.warn('[createStudentTaskBackend] Task assignment is managed by host company mentors.');
+    return {
+      success: false,
+      error: 'Task creation is managed by host company mentors.',
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
-
-  return { success: true };
 };
 
-export const updateStudentTaskBackend = async (
-  taskId: string,
-  completed: boolean
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
 
-  const { error } = await supabase
-    .from('student_tasks')
-    .update({ completed, updated_at: new Date().toISOString() })
-    .eq('id', taskId);
-
-  if (error) {
-    console.error('[updateStudentTaskBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
-};
-
-// Career Progress Services
-export const fetchCareerProgressBackend = async (): Promise<CareerProgressRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('career_progress')
-    .select('*')
-    .eq('student_id', userData.user.id);
-
-  if (error || !data) {
-    console.error('[fetchCareerProgressBackend] Error:', error);
-    return [];
-  }
-
-  return data.map((c) => ({
-    id: c.id,
-    studentId: c.student_id,
-    moduleKey: c.module_key,
-    progressPercent: c.progress_percent,
-    completed: c.completed,
-  }));
-};
-
-export const updateCareerProgressBackend = async (
-  moduleKey: string,
-  progressPercent: number,
-  completed: boolean
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase.from('career_progress').upsert(
-    {
-      student_id: userData.user.id,
-      module_key: moduleKey,
-      progress_percent: progressPercent,
-      completed,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'student_id, module_key' }
-  );
-
-  if (error) {
-    console.error('[updateCareerProgressBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
-};
-
-// Milestones Services
+// Milestones Services (Express Backend)
 export const fetchStudentMilestonesBackend = async (): Promise<StudentMilestoneRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('student_milestones')
-    .select('*')
-    .eq('student_id', userData.user.id);
-
-  if (error || !data) {
-    console.error('[fetchStudentMilestonesBackend] Error:', error);
+  try {
+    const res = await apiClient.get<any>('/milestones');
+    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return items.map((m: any) => ({
+      id: m.id,
+      studentId: m.assignment?.studentId || '',
+      internshipId: m.assignment?.internshipId || '',
+      title: m.title,
+      description: m.description || '',
+      status: m.status,
+      dueDate: m.targetDate ? new Date(m.targetDate).toISOString().slice(0, 10) : undefined,
+      completedAt: m.verifiedAt ? new Date(m.verifiedAt).toISOString() : undefined,
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentMilestonesBackend] Express error:', err);
     return [];
   }
-
-  return data.map((m) => ({
-    id: m.id,
-    studentId: m.student_id,
-    internshipId: m.internship_id,
-    title: m.title,
-    description: m.description,
-    status: m.status,
-    dueDate: m.due_date,
-    completedAt: m.completed_at,
-  }));
 };
 
-// Student Evaluations Services (Read-Only for Students)
+// Student Evaluations Services (Express Backend)
 export const fetchStudentEvaluationsBackend = async (): Promise<StudentEvaluationRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('student_evaluations')
-    .select('*')
-    .eq('student_id', userData.user.id);
-
-  if (error || !data) {
-    console.error('[fetchStudentEvaluationsBackend] Error:', error);
+  try {
+    const res = await apiClient.get<any>('/evaluations');
+    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return items.map((e: any) => ({
+      id: e.id,
+      studentId: e.assignment?.studentId || '',
+      internshipId: e.assignment?.internshipId || '',
+      evaluatorId: e.evaluatorId || '',
+      rating: Number(e.overallRating || 0),
+      feedback: e.comments || e.strengths || '',
+      createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentEvaluationsBackend] Express error:', err);
     return [];
   }
-
-  return data.map((e) => ({
-    id: e.id,
-    studentId: e.student_id,
-    internshipId: e.internship_id,
-    evaluatorId: e.evaluator_id,
-    rating: Number(e.rating),
-    feedback: e.feedback,
-    createdAt: e.created_at,
-  }));
 };
 
-// Student Certificates Services (Read-Only for Students)
+// Student Certificates Services (Express Backend)
 export const fetchStudentCertificatesBackend = async (): Promise<StudentCertificateRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
-
-  const { data, error } = await supabase
-    .from('student_certificates')
-    .select('*')
-    .eq('student_id', userData.user.id);
-
-  if (error || !data) {
-    console.error('[fetchStudentCertificatesBackend] Error:', error);
+  try {
+    const res = await apiClient.get<any>('/certificates');
+    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return items.map((c: any) => ({
+      id: c.id,
+      studentId: c.studentId,
+      internshipId: c.internshipId || c.assignment?.internship?.id || '',
+      certificateNumber: c.certificateNumber,
+      certificateUrl: `/student/certificates`,
+      issuedAt: c.issueDate ? new Date(c.issueDate).toISOString() : (c.createdAt ? new Date(c.createdAt).toISOString() : ''),
+      status: c.status,
+      signatoryName: c.signatoryName,
+      signatoryTitle: c.signatoryTitle,
+      assignment: c.assignment,
+      student: c.student,
+      company: c.company,
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentCertificatesBackend] Express error:', err);
     return [];
   }
+};
 
-  return data.map((c) => ({
-    id: c.id,
-    studentId: c.student_id,
-    internshipId: c.internship_id,
-    certificateNumber: c.certificate_number,
-    certificateUrl: c.certificate_url,
-    issuedAt: c.issued_at,
-  }));
+export const verifyCertificateBackend = async (
+  token: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.get<any>(`/certificates/verify/${token}`);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Certificate verification failed.',
+    };
+  }
 };
 export interface ChatConversationRecord {
   id: string;
   createdAt: string;
   updatedAt: string;
   participantName?: string;
+  participantRole?: string;
+  participantAvatar?: string;
+  participantId?: string;
   lastMessage?: string;
 }
 
@@ -1077,104 +1275,117 @@ export interface ChatMessageRecord {
   senderName?: string;
 }
 
-// Chat Conversations & Messages Services
+// Chat Conversations & Messages Services (Express + Prisma Backend)
 export const fetchStudentConversationsBackend = async (): Promise<ChatConversationRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
+  try {
+    const res = await apiClient.get<any>('/chat/conversations');
+    const raw: any = res.data;
+    const convs: any[] = Array.isArray(raw) ? raw : (raw?.data || []);
 
-  const { data: partData, error: partErr } = await supabase
-    .from('chat_participants')
-    .select('conversation_id')
-    .eq('user_id', userData.user.id);
+    const currentUser = await getCurrentUserBackend();
+    const currentUserId = currentUser?.id;
 
-  if (partErr || !partData || partData.length === 0) return [];
+    return convs.map((c: any) => {
+      const otherParticipant =
+        c.participants?.find((p: any) => p.userId !== currentUserId) ||
+        c.participants?.[0];
+      const otherUser = otherParticipant?.user;
 
-  const convIds = partData.map((p) => p.conversation_id);
+      const latestMsg = c.messages?.[0]?.message;
 
-  const { data: convs, error: convErr } = await supabase
-    .from('chat_conversations')
-    .select('*')
-    .in('id', convIds)
-    .order('updated_at', { ascending: false });
-
-  if (convErr || !convs) return [];
-
-  return convs.map((c) => ({
-    id: c.id,
-    createdAt: c.created_at,
-    updatedAt: c.updated_at,
-    participantName: 'Interora Support / Mentor',
-    lastMessage: 'Tap to view chat history',
-  }));
+      return {
+        id: c.id,
+        createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : new Date().toISOString(),
+        updatedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : new Date().toISOString(),
+        participantName: otherUser?.fullName || 'Faculty Mentor / Coordinator',
+        participantRole: otherUser?.role || 'Mentor',
+        participantAvatar: otherUser?.avatarUrl || undefined,
+        participantId: otherUser?.id || otherParticipant?.userId || undefined,
+        lastMessage: latestMsg || 'Tap to view chat history',
+      };
+    });
+  } catch (err: any) {
+    console.error('[fetchStudentConversationsBackend] Express fetch error:', err);
+    return [];
+  }
 };
 
 export const fetchChatMessagesBackend = async (
   conversationId: string
 ): Promise<ChatMessageRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  try {
+    const res = await apiClient.get<any>(`/chat/conversations/${conversationId}/messages`);
+    const msgs: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
 
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('*, profiles!sender_id(full_name)')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) {
-    console.error('[fetchChatMessagesBackend] Error:', error);
+    return msgs.map((m: any) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      message: m.message,
+      createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+      senderName: m.sender?.fullName || 'User',
+    }));
+  } catch (err: any) {
+    console.error('[fetchChatMessagesBackend] Express fetch error:', err);
     return [];
   }
-
-  return data.map((m) => ({
-    id: m.id,
-    conversationId: m.conversation_id,
-    senderId: m.sender_id,
-    message: m.message,
-    createdAt: m.created_at,
-    senderName: m.profiles?.full_name || 'User',
-  }));
 };
 
 export const sendChatMessageBackend = async (
   conversationId: string,
   message: string
 ): Promise<{ success: boolean; data?: ChatMessageRecord; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_id: userData.user.id,
+  try {
+    const res = await apiClient.post<any>(`/chat/conversations/${conversationId}/messages`, {
       message,
-    })
-    .select('*, profiles!sender_id(full_name)')
-    .single();
+    });
+    const msg = res.data?.data || res.data;
 
-  if (error) {
-    console.error('[sendChatMessageBackend] Error:', error);
-    return { success: false, error: error.message };
+    return {
+      success: true,
+      data: {
+        id: msg.id,
+        conversationId: msg.conversationId,
+        senderId: msg.senderId,
+        message: msg.message,
+        createdAt: msg.createdAt ? new Date(msg.createdAt).toISOString() : new Date().toISOString(),
+        senderName: msg.sender?.fullName || 'Me',
+      },
+    };
+  } catch (err: any) {
+    console.error('[sendChatMessageBackend] Express error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to send message.';
+    return { success: false, error: errorMsg };
   }
+};
 
-  return {
-    success: true,
-    data: {
-      id: data.id,
-      conversationId: data.conversation_id,
-      senderId: data.sender_id,
-      message: data.message,
-      createdAt: data.created_at,
-      senderName: data.profiles?.full_name || 'Me',
-    },
-  };
+export const createChatConversationBackend = async (
+  participantIds: string[],
+  initialMessage?: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/chat/conversations', {
+      participantIds,
+      initialMessage,
+    });
+    return {
+      success: true,
+      data: res.data?.data || res.data,
+    };
+  } catch (err: any) {
+    console.error('[createChatConversationBackend] Express error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to create conversation.';
+    return { success: false, error: errorMsg };
+  }
 };
 /* ====================================================================
    PHASE 5: ACTIVE STUDENT INTERNSHIP LIFECYCLE SERVICE
    ==================================================================== */
 
 export interface ActiveStudentInternshipRecord {
+  assignmentId: string;
   applicationId: string;
   internshipId: string;
   title: string;
@@ -1182,61 +1393,213 @@ export interface ActiveStudentInternshipRecord {
   companyName: string;
   industryDomain: string;
   location: string;
+  workMode: string;
   internshipType: string;
   duration: string;
   stipend: string;
   description: string;
   appliedAt: string;
-  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  assignmentStatus: string;
+  // Mentor fields resolved from assignment
+  mentorName: string;
+  mentorRole: string;
+  mentorEmail: string;
+  mentorUserId?: string;
 }
 
+export interface ActiveInternshipMetrics {
+  // Task counters — from GET /api/tasks (Express, student-scoped)
+  totalTasks: number;
+  inProgressTasks: number;
+  completedTasks: number;
+  // Work log totals — from GET /api/work-logs (Express, student-scoped)
+  totalHoursLogged: number;
+  currentWeekHours: number;
+  // Attendance — from GET /api/attendance/summary/:assignmentId (Express)
+  attendancePercentage: number;
+  attendanceHealthStatus: 'Excellent' | 'Good' | 'Needs Attention';
+}
+
+// Migrated: Supabase student_applications query replaced with GET /api/assignments
+// Backend enforces student scoping via JWT — no manual student ID passed.
 export const fetchActiveStudentInternshipBackend = async (): Promise<ActiveStudentInternshipRecord | null> => {
-  if (!isSupabaseConfigured()) return null;
+  try {
+    const res = await apiClient.get<any>('/assignments');
+    // Backend wraps in { success, data } for student role
+    const assignments: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
 
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return null;
+    if (!assignments || assignments.length === 0) {
+      console.log('[ActiveInternship] No assignments found for authenticated student.');
+      return null;
+    }
 
-  console.log('[ActiveInternship] Fetching active internship for student ID:', userData.user.id);
+    // Prefer active, then upcoming assignment
+    const active =
+      assignments.find((a: any) => a.status === 'active') ||
+      assignments.find((a: any) => a.status === 'upcoming') ||
+      assignments[0];
 
-  // Query selected application for student
-  const { data: apps, error: appErr } = await supabase
-    .from('student_applications')
-    .select('*, internship_postings(*, company_profiles(company_name))')
-    .eq('student_id', userData.user.id)
-    .eq('status', 'Selected')
-    .order('updated_at', { ascending: false });
+    if (!active) return null;
 
-  if (appErr) {
-    console.error('[ActiveInternship] Query error:', appErr);
+    const internship = active.internship || {};
+    const company = active.company || {};
+    const application = active.application || {};
+
+    // Resolve mentor: prefer industryMentor (company-side), fallback to facultyMentor
+    const industryMentor = active.industryMentor;
+    const facultyMentor = active.facultyMentor;
+
+    let mentorName = 'Assigned Mentor';
+    let mentorRole = 'Industry Mentor';
+    let mentorEmail = 'mentor@interora.app';
+
+    if (industryMentor?.profile) {
+      mentorName = industryMentor.profile.fullName || mentorName;
+      mentorRole = industryMentor.designation || 'Industry Mentor';
+      mentorEmail = industryMentor.profile.email || mentorEmail;
+    } else if (facultyMentor?.profile) {
+      mentorName = facultyMentor.profile.fullName || mentorName;
+      mentorRole = facultyMentor.designation || 'Faculty Mentor';
+      mentorEmail = facultyMentor.profile.email || mentorEmail;
+    }
+
+    const mentorUserId = active.facultyMentorId || active.industryMentorId || facultyMentor?.id || industryMentor?.id;
+
+    const result: ActiveStudentInternshipRecord = {
+      assignmentId: active.id,
+      applicationId: active.applicationId,
+      internshipId: active.internshipId || internship.id || '',
+      title: internship.title || 'Active Internship Role',
+      companyId: active.companyId || company.id || '',
+      companyName: company.companyName || 'Host Company',
+      industryDomain: internship.industryDomain || company.industryDomain || 'Technology',
+      location: internship.location || 'Remote / On-site',
+      workMode: internship.workMode || 'remote',
+      internshipType: internship.internshipType || 'full_time',
+      duration: internship.duration || '3 Months',
+      stipend: internship.stipend ? String(internship.stipend) : 'Stipend Provided',
+      description: '',
+      appliedAt: application.appliedAt || active.createdAt,
+      startDate: active.startDate ? new Date(active.startDate).toISOString().slice(0, 10) : null,
+      endDate: active.endDate ? new Date(active.endDate).toISOString().slice(0, 10) : null,
+      assignmentStatus: active.status || 'active',
+      mentorName,
+      mentorRole,
+      mentorEmail,
+      mentorUserId: mentorUserId || undefined,
+    };
+
+    console.log('[ActiveInternship] Assignment resolved via Express:', result.assignmentId);
+    return result;
+  } catch (err: any) {
+    console.error('[ActiveInternship] Express fetch error:', err);
     return null;
   }
+};
 
-  if (!apps || apps.length === 0) {
-    console.log('[ActiveInternship] No Selected application found for student');
-    return null;
-  }
-
-  const selectedApp = apps[0];
-  const posting = selectedApp.internship_postings;
-
-  const result: ActiveStudentInternshipRecord = {
-    applicationId: selectedApp.id,
-    internshipId: selectedApp.internship_id,
-    title: posting?.title || 'Selected Internship',
-    companyId: posting?.company_id || '',
-    companyName: posting?.company_profiles?.company_name || 'Host Company',
-    industryDomain: posting?.industry_domain || 'Technology',
-    location: posting?.location || 'Remote / On-site',
-    internshipType: posting?.internship_type || 'Full-time',
-    duration: posting?.duration || '3 Months',
-    stipend: posting?.stipend || 'Stipend Provided',
-    description: posting?.description || 'Active internship role.',
-    appliedAt: selectedApp.applied_at,
-    status: selectedApp.status,
+/**
+ * Fetches task counts, work-log totals, and attendance summary for the
+ * student's active assignment. All three calls use authenticated Express
+ * endpoints — the backend scopes data to the authenticated student automatically.
+ *
+ * Endpoints used:
+ *   GET /api/tasks                         (student-scoped by JWT)
+ *   GET /api/work-logs                     (student-scoped by JWT)
+ *   GET /api/attendance/summary/:assignmentId  (requires assignmentId)
+ */
+export const fetchStudentActiveInternshipMetricsBackend = async (
+  assignmentId: string
+): Promise<ActiveInternshipMetrics> => {
+  const defaultMetrics: ActiveInternshipMetrics = {
+    totalTasks: 0,
+    inProgressTasks: 0,
+    completedTasks: 0,
+    totalHoursLogged: 0,
+    currentWeekHours: 0,
+    attendancePercentage: 100,
+    attendanceHealthStatus: 'Excellent',
   };
 
-  console.log('[ActiveInternship] Active record resolved:', result);
-  return result;
+  try {
+    const [tasksRes, workLogsRes, attendanceRes] = await Promise.allSettled([
+      apiClient.get<any>('/tasks'),
+      apiClient.get<any>('/work-logs'),
+      apiClient.get<any>(`/attendance/summary/${assignmentId}`),
+    ]);
+
+    // Tasks
+    let totalTasks = 0;
+    let inProgressTasks = 0;
+    let completedTasks = 0;
+    if (tasksRes.status === 'fulfilled') {
+      const tasks: any[] = Array.isArray(tasksRes.value.data)
+        ? tasksRes.value.data
+        : (tasksRes.value.data?.data || []);
+      totalTasks = tasks.length;
+      inProgressTasks = tasks.filter(
+        (t: any) => (t.status || '').toLowerCase() === 'in_progress'
+      ).length;
+      completedTasks = tasks.filter(
+        (t: any) => (t.status || '').toLowerCase() === 'completed'
+      ).length;
+    }
+
+    // Work Logs
+    let totalHoursLogged = 0;
+    let currentWeekHours = 0;
+    if (workLogsRes.status === 'fulfilled') {
+      const logs: any[] = Array.isArray(workLogsRes.value.data)
+        ? workLogsRes.value.data
+        : (workLogsRes.value.data?.data || []);
+
+      // Week boundary (Mon–Sun)
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + mondayOffset);
+      weekStart.setHours(0, 0, 0, 0);
+
+      for (const log of logs) {
+        const hrs = Number(log.hoursWorked ?? 0);
+        totalHoursLogged += hrs;
+        const logDate = log.logDate ? new Date(log.logDate) : null;
+        if (logDate && logDate >= weekStart) {
+          currentWeekHours += hrs;
+        }
+      }
+      totalHoursLogged = Math.round(totalHoursLogged * 10) / 10;
+      currentWeekHours = Math.round(currentWeekHours * 10) / 10;
+    }
+
+    // Attendance
+    let attendancePercentage = 100;
+    let attendanceHealthStatus: ActiveInternshipMetrics['attendanceHealthStatus'] = 'Excellent';
+    if (attendanceRes.status === 'fulfilled') {
+      const summary = attendanceRes.value.data?.data ?? attendanceRes.value.data;
+      if (summary && typeof summary.attendancePercentage === 'number') {
+        attendancePercentage = Math.round(summary.attendancePercentage);
+        if (attendancePercentage >= 90) attendanceHealthStatus = 'Excellent';
+        else if (attendancePercentage >= 75) attendanceHealthStatus = 'Good';
+        else attendanceHealthStatus = 'Needs Attention';
+      }
+    }
+
+    return {
+      totalTasks,
+      inProgressTasks,
+      completedTasks,
+      totalHoursLogged,
+      currentWeekHours,
+      attendancePercentage,
+      attendanceHealthStatus,
+    };
+  } catch (err: any) {
+    console.error('[ActiveInternshipMetrics] Unexpected error:', err);
+    return defaultMetrics;
+  }
 };
 /* ====================================================================
    PHASE 6: COMPANY ACTIVE INTERN MANAGEMENT SERVICE
@@ -1254,70 +1617,84 @@ export interface CompanyActiveInternRecord {
 }
 
 export const fetchCompanyActiveInternsBackend = async (
-  companyId: string
+  _companyId?: string
 ): Promise<CompanyActiveInternRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  const internMap = new Map<string, CompanyActiveInternRecord>();
 
-  console.log('[CompanyActiveInterns] Fetching active interns for company ID:', companyId);
+  // 1. Fetch established internship assignments (Express backend enforces company ownership)
+  const assignmentsRes = await apiClient.get<any[]>('/assignments');
+  const assignments = assignmentsRes.data || [];
 
-  // 1. Query company internship postings
-  const { data: internships, error: intErr } = await supabase
-    .from('internship_postings')
-    .select('id, company_id, title')
-    .eq('company_id', companyId);
+  for (const assign of assignments) {
+    const studentProfile = assign.student?.profile;
+    const studentId = studentProfile?.id || assign.studentId;
+    const studentName = studentProfile?.fullName || 'Student Intern';
+    const studentEmail = studentProfile?.email || '';
+    const internshipTitle = assign.internship?.title || 'Internship Position';
+    const appliedAt = assign.application?.appliedAt || assign.createdAt;
 
-  if (intErr || !internships || internships.length === 0) {
-    console.error('[CompanyActiveInterns] Internship query error:', intErr);
-    return [];
+    let status = 'Active';
+    if (assign.status === 'completed') {
+      status = 'Completed';
+    } else if (assign.status === 'active' || assign.status === 'upcoming') {
+      status = 'Active';
+    } else if (assign.status) {
+      status = assign.status.charAt(0).toUpperCase() + assign.status.slice(1);
+    }
+
+    internMap.set(studentId, {
+      applicationId: assign.applicationId || assign.id,
+      studentId,
+      studentName,
+      studentEmail,
+      internshipId: assign.internshipId,
+      internshipTitle,
+      appliedAt: typeof appliedAt === 'string' ? appliedAt : new Date(appliedAt).toISOString(),
+      status,
+    });
   }
 
-  const internshipIds = internships.map((i) => i.id);
-  const internshipMap = new Map(internships.map((i) => [i.id, i.title]));
+  // 2. Fetch company postings and any 'selected' applications not yet in assignments
+  const postingsRes = await apiClient.get<any[]>('/postings', { params: { scope: 'mine' } });
+  const postings = postingsRes.data || [];
 
-  // 2. Query Selected applications for company's internships
-  const { data: applications, error: appErr } = await supabase
-    .from('student_applications')
-    .select('*')
-    .in('internship_id', internshipIds)
-    .eq('status', 'Selected')
-    .order('updated_at', { ascending: false });
-
-  if (appErr || !applications || applications.length === 0) {
-    console.log('[CompanyActiveInterns] No Selected applications found for company');
-    return [];
+  if (Array.isArray(postings) && postings.length > 0) {
+    await Promise.all(
+      postings.map(async (posting) => {
+        try {
+          const appsRes = await apiClient.get<any[]>(`/postings/${posting.id}/applications`);
+          const apps = appsRes.data || [];
+          for (const app of apps) {
+            const appStatus = (app.status || '').toLowerCase();
+            if (appStatus === 'selected') {
+              const sId = app.student?.profile?.id || app.studentId;
+              if (!internMap.has(sId)) {
+                internMap.set(sId, {
+                  applicationId: app.id,
+                  studentId: sId,
+                  studentName: app.student?.profile?.fullName || 'Student Candidate',
+                  studentEmail: app.student?.profile?.email || '',
+                  internshipId: posting.id,
+                  internshipTitle: posting.title || 'Internship Position',
+                  appliedAt:
+                    typeof app.appliedAt === 'string'
+                      ? app.appliedAt
+                      : new Date(app.appliedAt).toISOString(),
+                  status: 'Selected',
+                });
+              }
+            }
+          }
+        } catch (appErr) {
+          console.warn(`[CompanyActiveInterns] Error fetching apps for posting ${posting.id}:`, appErr);
+        }
+      })
+    );
   }
 
-  const studentIds = Array.from(new Set(applications.map((a) => a.student_id)));
-
-  // 3. Query profiles for student details
-  const { data: profiles, error: profErr } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .in('id', studentIds);
-
-  if (profErr) {
-    console.error('[CompanyActiveInterns] Profiles query error:', profErr);
-  }
-
-  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-
-  // 4. Combine into clean records
-  const result: CompanyActiveInternRecord[] = applications.map((app) => {
-    const prof = profileMap.get(app.student_id);
-    return {
-      applicationId: app.id,
-      studentId: app.student_id,
-      studentName: prof?.full_name || 'Student Candidate',
-      studentEmail: prof?.email || 'student@interora.app',
-      internshipId: app.internship_id,
-      internshipTitle: internshipMap.get(app.internship_id) || 'Internship Position',
-      appliedAt: app.applied_at,
-      status: app.status,
-    };
-  });
-
-  console.log('[CompanyActiveInterns] Active interns resolved:', result);
-  return result;
+  return Array.from(internMap.values()).sort(
+    (a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime()
+  );
 };
 /* ====================================================================
    PHASE 7: COMPANY INTERN OPERATIONS SERVICES
@@ -1351,112 +1728,228 @@ export interface CompanyInternEvaluationRecord {
   submittedAt: string;
 }
 
+export interface CompanyInternDetailRecord {
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  internshipTitle: string;
+  internshipId: string;
+  assignmentId?: string;
+}
+
+export const fetchCompanyInternDetailBackend = async (
+  internId: string
+): Promise<CompanyInternDetailRecord> => {
+  // 1. Try to find assignment for this student under the authenticated company
+  try {
+    const res = await apiClient.get<any[]>('/assignments', {
+      params: { studentId: internId },
+    });
+    const assignments = res.data || [];
+    if (assignments.length > 0) {
+      const a = assignments[0];
+      return {
+        studentId: internId,
+        studentName: a.student?.profile?.fullName || 'Student Candidate',
+        studentEmail: a.student?.profile?.email || '',
+        internshipTitle: a.internship?.title || 'Active Internship Role',
+        internshipId: a.internshipId,
+        assignmentId: a.id,
+      };
+    }
+  } catch (err: any) {
+    console.warn('[CompanyInternDetails] Error querying assignments:', err);
+  }
+
+  // 2. Fallback to check company's postings for a selected application
+  try {
+    const postingsRes = await apiClient.get<any[]>('/postings', { params: { scope: 'mine' } });
+    const postings = postingsRes.data || [];
+
+    for (const posting of postings) {
+      try {
+        const appsRes = await apiClient.get<any[]>(`/postings/${posting.id}/applications`);
+        const apps = appsRes.data || [];
+        const match = apps.find(
+          (app) =>
+            (app.studentId === internId || app.student?.profile?.id === internId) &&
+            (app.status || '').toLowerCase() === 'selected'
+        );
+        if (match) {
+          return {
+            studentId: internId,
+            studentName: match.student?.profile?.fullName || 'Student Candidate',
+            studentEmail: match.student?.profile?.email || '',
+            internshipTitle: posting.title || 'Active Internship Role',
+            internshipId: posting.id,
+            assignmentId: undefined,
+          };
+        }
+      } catch (appErr) {
+        console.warn(`[CompanyInternDetails] Error fetching applications for posting ${posting.id}:`, appErr);
+      }
+    }
+  } catch (postErr) {
+    console.warn('[CompanyInternDetails] Error querying postings:', postErr);
+  }
+
+  throw new Error('Intern not found or does not belong to your company.');
+};
+
 export const fetchCompanyInternAttendanceBackend = async (
-  studentId: string
+  studentId: string,
+  assignmentId?: string
 ): Promise<CompanyInternAttendanceSummary> => {
-  if (!isSupabaseConfigured()) {
-    return { studentId, totalRecords: 0, presentCount: 0, attendancePercentage: 100, recentActivity: 'No check-ins' };
+  if (!assignmentId) {
+    return {
+      studentId,
+      totalRecords: 0,
+      presentCount: 0,
+      attendancePercentage: 100,
+      recentActivity: 'No check-ins',
+    };
   }
 
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('attendance_date', { ascending: false });
+  try {
+    const res = await apiClient.get<any>(`/attendance/summary/${assignmentId}`);
+    const summary = res.data;
+    if (!summary) {
+      return {
+        studentId,
+        totalRecords: 0,
+        presentCount: 0,
+        attendancePercentage: 100,
+        recentActivity: 'No check-ins',
+      };
+    }
 
-  if (error || !data || data.length === 0) {
-    return { studentId, totalRecords: 0, presentCount: 0, attendancePercentage: 100, recentActivity: 'No check-ins' };
+    const recent = summary.recentRecords?.[0]?.attendanceDate || 'No check-ins';
+
+    return {
+      studentId,
+      totalRecords: summary.totalRecords || 0,
+      presentCount: summary.presentCount || 0,
+      attendancePercentage: Math.round(Number(summary.attendancePercentage ?? 100)),
+      recentActivity: recent,
+    };
+  } catch (err: any) {
+    console.error('[CompanyInternAttendance] Error fetching attendance summary:', err);
+    throw err;
   }
-
-  const total = data.length;
-  const present = data.filter((r) => r.status === 'present').length;
-  const percentage = Math.round((present / total) * 100);
-  const recent = data[0].attendance_date;
-
-  return {
-    studentId,
-    totalRecords: total,
-    presentCount: present,
-    attendancePercentage: percentage,
-    recentActivity: recent,
-  };
 };
 
 export const fetchCompanyInternMilestonesBackend = async (
-  studentId: string
+  studentId: string,
+  assignmentId?: string
 ): Promise<CompanyInternMilestoneRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  const params: Record<string, string> = { studentId };
+  if (assignmentId) {
+    params.assignmentId = assignmentId;
+  }
 
-  const { data, error } = await supabase
-    .from('student_milestones')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) return [];
-
-  return data.map((m) => ({
-    id: m.id,
-    studentId: m.student_id,
-    internshipId: m.internship_id,
-    title: m.title,
-    description: m.description || '',
-    dueDate: m.due_date || '2026-08-31',
-    status: m.status,
-  }));
+  try {
+    const res = await apiClient.get<any[]>('/milestones', { params });
+    const data = res.data || [];
+    return data.map((m) => ({
+      id: m.id,
+      studentId,
+      internshipId: m.assignment?.internshipId || '',
+      title: m.title,
+      description: m.description || '',
+      dueDate: m.targetDate
+        ? new Date(m.targetDate).toISOString().slice(0, 10)
+        : '2026-08-31',
+      status: m.status === 'completed' ? 'Completed' : 'In Progress',
+    }));
+  } catch (err: any) {
+    console.error('[CompanyInternMilestones] Error fetching milestones:', err);
+    throw err;
+  }
 };
 
 export const fetchCompanyInternEvaluationsBackend = async (
-  studentId: string
+  studentId: string,
+  assignmentId?: string
 ): Promise<CompanyInternEvaluationRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
+  const params: Record<string, string> = { studentId };
+  if (assignmentId) {
+    params.assignmentId = assignmentId;
+  }
 
-  const { data, error } = await supabase
-    .from('student_evaluations')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('submitted_at', { ascending: false });
-
-  if (error || !data) return [];
-
-  return data.map((e) => ({
-    id: e.id,
-    studentId: e.student_id,
-    internshipId: e.internship_id,
-    evaluatorId: e.evaluator_id,
-    score: e.score,
-    remarks: e.remarks || '',
-    submittedAt: e.submitted_at,
-  }));
+  try {
+    const res = await apiClient.get<any[]>('/evaluations', { params });
+    const data = res.data || [];
+    return data.map((e) => ({
+      id: e.id,
+      studentId,
+      internshipId: e.assignment?.internshipId || '',
+      evaluatorId: e.evaluatorId || '',
+      score: Math.round(Number(e.overallRating || 0) * 20),
+      remarks: e.comments || e.strengths || '',
+      submittedAt: e.createdAt,
+    }));
+  } catch (err: any) {
+    console.error('[CompanyInternEvaluations] Error fetching evaluations:', err);
+    throw err;
+  }
 };
 
 export const createCompanyInternEvaluationBackend = async (
   studentId: string,
   internshipId: string,
   score: number,
-  remarks: string
+  remarks: string,
+  assignmentId?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
+  try {
+    let resolvedAssignmentId = assignmentId;
 
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
+    if (!resolvedAssignmentId) {
+      const assignRes = await apiClient.get<any[]>('/assignments', {
+        params: { studentId },
+      });
+      const assignments = assignRes.data || [];
+      if (assignments.length > 0) {
+        resolvedAssignmentId = assignments[0].id;
+      }
+    }
 
-  const { error } = await supabase
-    .from('student_evaluations')
-    .insert({
-      student_id: studentId,
-      internship_id: internshipId,
-      evaluator_id: userData.user.id,
-      score,
-      remarks,
+    if (!resolvedAssignmentId) {
+      return {
+        success: false,
+        error: 'An active internship assignment is required to submit an evaluation.',
+      };
+    }
+
+    const ratingVal = Math.min(5, Math.max(1, Math.round(score / 20)));
+    const ratingFloat = Math.min(5, Math.max(1, Math.round((score / 20) * 10) / 10));
+
+    await apiClient.post('/evaluations', {
+      assignmentId: resolvedAssignmentId,
+      evaluationType: 'mid_term',
+      evaluationPeriod: 'Performance Review',
+      technicalSkills: ratingVal,
+      qualityOfWork: ratingVal,
+      problemSolving: ratingVal,
+      communication: ratingVal,
+      teamwork: ratingVal,
+      professionalism: ratingVal,
+      timeManagement: ratingVal,
+      initiative: ratingVal,
+      overallRating: ratingFloat,
+      comments: remarks,
+      status: 'submitted',
     });
 
-  if (error) {
-    console.error('[createCompanyInternEvaluationBackend] Error:', error);
-    return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    console.error('[createCompanyInternEvaluationBackend] Error:', err);
+    const errorMsg =
+      err.errors
+        ? Object.values(err.errors).flat().join(', ')
+        : err.message || 'Failed to submit evaluation.';
+    return { success: false, error: errorMsg };
   }
-
-  return { success: true };
 };
 
 /* ================================================================
@@ -1474,6 +1967,24 @@ export interface FacultyAssignedStudentRecord {
   internshipTitle?: string;
   companyName?: string;
   applicationStatus?: string;
+  id?: string;
+  department?: string;
+  batchYear?: string;
+  role?: string;
+  company?: string;
+  email?: string;
+  attendance?: { present: number; absent: number; workingDays: number; recent: any[] };
+  progressPercentage?: number;
+  internshipStatus?: string;
+  lastActivity?: string;
+  riskIndicator?: string;
+  milestones?: Array<{ title: string; completed: boolean; dueDate?: string }>;
+  timeline?: Array<{ date: string; event: string }>;
+  skills?: string[];
+  startDate?: string;
+  endDate?: string;
+  internshipDuration?: string;
+  currentStage?: string;
 }
 
 export interface FacultyGuidanceNoteRecord {
@@ -1487,135 +1998,27 @@ export interface FacultyGuidanceNoteRecord {
 
 
 export const fetchFacultyAssignedStudentsBackend = async (): Promise<FacultyAssignedStudentRecord[]> => {
-  if (!isSupabaseConfigured()) {
-    return getFallbackFacultyAssignedStudents();
-  }
-
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    const facultyId = userData?.user?.id;
-
-    if (facultyId) {
-      const { data: assignments } = await supabase
-        .from('faculty_student_assignments')
-        .select('*')
-        .eq('faculty_id', facultyId);
-
-      if (assignments && assignments.length > 0) {
-        const studentIds = assignments.map((a) => a.student_id);
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', studentIds);
-
-        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-
-        const { data: apps } = await supabase
-          .from('student_applications')
-          .select('student_id, status, internship_postings(title, company_profiles(company_name))')
-          .in('student_id', studentIds);
-
-        const appMap = new Map();
-        (apps || []).forEach((a: any) => {
-          appMap.set(a.student_id, a);
-        });
-
-        return assignments.map((a) => {
-          const prof = profileMap.get(a.student_id);
-          const app: any = appMap.get(a.student_id);
-          const posting: any = Array.isArray(app?.internship_postings) ? app?.internship_postings[0] : app?.internship_postings;
-          const company: any = Array.isArray(posting?.company_profiles) ? posting?.company_profiles[0] : posting?.company_profiles;
-          return {
-            assignmentId: a.id,
-            studentId: a.student_id,
-            studentName: prof?.full_name || 'Student Candidate',
-            studentEmail: prof?.email || 'student@interora.app',
-            assignedAt: a.created_at || new Date().toISOString(),
-            status: a.status || 'Active',
-            internshipTitle: posting?.title || 'Full Stack Engineering Intern',
-            companyName: company?.company_name || 'TechCorp Solutions',
-            applicationStatus: app?.status || 'Selected',
-          };
-        });
-      }
-    }
-
-    // Fallback: Query all student profiles in database
-    const { data: stdProfiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .eq('role', 'student');
-
-    if (stdProfiles && stdProfiles.length > 0) {
-      const studentIds = stdProfiles.map((p) => p.id);
-      const { data: apps } = await supabase
-        .from('student_applications')
-        .select('student_id, status, internship_postings(title, company_profiles(company_name))')
-        .in('student_id', studentIds);
-
-      const appMap = new Map();
-      (apps || []).forEach((a: any) => {
-        appMap.set(a.student_id, a);
-      });
-
-      return stdProfiles.map((p, idx) => {
-        const app: any = appMap.get(p.id);
-        const posting: any = Array.isArray(app?.internship_postings) ? app?.internship_postings[0] : app?.internship_postings;
-        const company: any = Array.isArray(posting?.company_profiles) ? posting?.company_profiles[0] : posting?.company_profiles;
-        return {
-          assignmentId: 'auto_' + p.id,
-          studentId: p.id,
-          studentName: p.full_name || 'Student Candidate',
-          studentEmail: p.email || 'student@interora.app',
-          assignedAt: new Date().toISOString(),
-          status: 'Active',
-          internshipTitle: posting?.title || (idx % 2 === 0 ? 'Full Stack Developer Intern' : 'Data Science Intern'),
-          companyName: company?.company_name || (idx % 2 === 0 ? 'TechCorp Solutions' : 'DataScale AI'),
-          applicationStatus: app?.status || (idx % 2 === 0 ? 'Selected' : 'Submitted'),
-        };
-      });
-    }
-
-    return getFallbackFacultyAssignedStudents();
+    const res = await apiClient.get<FacultyAssignedStudentRecord[]>('/faculty/assigned-students');
+    return res.data || [];
   } catch (err) {
     console.error('[fetchFacultyAssignedStudentsBackend] Error:', err);
-    return getFallbackFacultyAssignedStudents();
+    return [];
   }
 };
-
-function getFallbackFacultyAssignedStudents(): FacultyAssignedStudentRecord[] {
-  return [
-    { assignmentId: 'f1', studentId: 'stu-sarah', studentName: 'Sarah Smith', studentEmail: 's.smith@university.edu', assignedAt: '2026-08-01', status: 'Active', internshipTitle: 'Data Science Intern', companyName: 'DataCorp', applicationStatus: 'Selected' },
-    { assignmentId: 'f2', studentId: 'stu-rahul', studentName: 'Rahul Sharma', studentEmail: 'rahul.s@university.edu', assignedAt: '2026-08-05', status: 'Active', internshipTitle: 'Frontend Developer Intern', companyName: 'TechFlow', applicationStatus: 'Selected' },
-    { assignmentId: 'f3', studentId: 'stu-priya', studentName: 'Priya Shah', studentEmail: 'priya.shah@university.edu', assignedAt: '2026-08-10', status: 'Active', internshipTitle: 'Data Analyst Intern', companyName: 'DataCorp', applicationStatus: 'Selected' },
-    { assignmentId: 'f4', studentId: 'stu-aman', studentName: 'Aman Patel', studentEmail: 'aman.p@university.edu', assignedAt: '2026-08-12', status: 'Active', internshipTitle: 'DevOps Intern', companyName: 'CloudScale', applicationStatus: 'Selected' },
-    { assignmentId: 'f5', studentId: 'stu-sneha', studentName: 'Sneha Joshi', studentEmail: 'sneha.j@university.edu', assignedAt: '2026-08-15', status: 'Active', internshipTitle: 'UX Design Intern', companyName: 'CreativeSpace', applicationStatus: 'Submitted' },
-    { assignmentId: 'f6', studentId: 'stu-aarav', studentName: 'Aarav Sharma', studentEmail: 'aarav.sharma@raisoni.edu', assignedAt: '2026-08-18', status: 'Active', internshipTitle: 'AI Research Intern', companyName: 'AlphaTech', applicationStatus: 'Selected' },
-  ];
-}
-
 
 export const fetchFacultyGuidanceNotesBackend = async (
   studentId: string
 ): Promise<FacultyGuidanceNoteRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
-  const { data, error } = await supabase
-    .from('faculty_guidance_notes')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('created_at', { ascending: false });
-
-  if (error || !data) return [];
-
-  return data.map((n) => ({
-    id: n.id,
-    facultyId: n.faculty_id,
-    studentId: n.student_id,
-    category: n.category,
-    note: n.note,
-    createdAt: n.created_at,
-  }));
+  try {
+    const res = await apiClient.get<FacultyGuidanceNoteRecord[]>(
+      `/faculty/students/${studentId}/guidance-notes`
+    );
+    return res.data || [];
+  } catch (err) {
+    console.error('[fetchFacultyGuidanceNotesBackend] Error:', err);
+    return [];
+  }
 };
 
 export const createFacultyGuidanceNoteBackend = async (
@@ -1623,24 +2026,13 @@ export const createFacultyGuidanceNoteBackend = async (
   category: string,
   note: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase.from('faculty_guidance_notes').insert({
-    faculty_id: userData.user.id,
-    student_id: studentId,
-    category,
-    note,
-  });
-
-  if (error) {
-    console.error('[createFacultyGuidanceNoteBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    await apiClient.post(`/faculty/students/${studentId}/guidance-notes`, { category, note });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[createFacultyGuidanceNoteBackend] Error:', err);
+    return { success: false, error: err?.message || 'Failed to create guidance note' };
   }
-
-  return { success: true };
 };
 /* ====================================================================
    PHASE 14: COMPANY MENTOR SERVICES
@@ -1668,122 +2060,42 @@ export interface CompanyMentorTaskRecord {
   reviewStatus: string;
 }
 
-export const fetchCompanyMentorInternsBackend = async (): Promise<CompanyMentorInternRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return [];
+export interface CompanyMentorDashboardMetrics {
+  totalInterns: number;
+  totalTasks: number;
+  completedTasks: number;
+  pendingReviews: number;
+  verifiedTasks: number;
+}
 
-  const mentorId = userData.user.id;
-
-  // 1. Fetch mentor assigned interns
-  const { data: assignments, error: assignErr } = await supabase
-    .from('company_mentor_assignments')
-    .select('*')
-    .eq('mentor_id', mentorId);
-
-  if (assignErr || !assignments || assignments.length === 0) {
-    // Fallback: Fetch active selected interns for the mentor's company
-    const { data: apps } = await supabase
-      .from('student_applications')
-      .select('student_id, status, created_at, internship_postings(title, company_profiles(company_name))')
-      .eq('status', 'Selected');
-
-    if (!apps || apps.length === 0) return [];
-
-    const studentIds = apps.map((a: any) => a.student_id);
-    const { data: stdProfiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', studentIds);
-
-    const profileMap = new Map((stdProfiles || []).map((p) => [p.id, p]));
-
-    return apps.map((a: any) => {
-      const prof = profileMap.get(a.student_id);
-      const posting: any = Array.isArray(a.internship_postings) ? a.internship_postings[0] : a.internship_postings;
-      const company: any = Array.isArray(posting?.company_profiles) ? posting?.company_profiles[0] : posting?.company_profiles;
-      return {
-        assignmentId: 'auto_' + a.student_id,
-        studentId: a.student_id,
-        studentName: prof?.full_name || 'Active Intern Candidate',
-        studentEmail: prof?.email || 'intern@interora.app',
-        internshipTitle: posting?.title || 'Active Role',
-        companyName: company?.company_name || 'Host Company',
-        status: 'Active',
-        assignedAt: a.created_at || new Date().toISOString(),
-      };
-    });
+export const fetchCompanyMentorMetricsBackend = async (): Promise<CompanyMentorDashboardMetrics | null> => {
+  try {
+    const res = await apiClient.get<CompanyMentorDashboardMetrics>('/mentor/metrics');
+    return res.data || null;
+  } catch (err: any) {
+    console.error('[fetchCompanyMentorMetricsBackend] Error:', err);
+    return null;
   }
+};
 
-  const studentIds = assignments.map((a) => a.student_id);
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .in('id', studentIds);
-
-  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-
-  const { data: apps } = await supabase
-    .from('student_applications')
-    .select('student_id, status, internship_postings(title, company_profiles(company_name))')
-    .in('student_id', studentIds)
-    .eq('status', 'Selected');
-
-  const appMap = new Map();
-  (apps || []).forEach((a: any) => appMap.set(a.student_id, a));
-
-  return assignments.map((a) => {
-    const prof = profileMap.get(a.student_id);
-    const app: any = appMap.get(a.student_id);
-    const posting: any = Array.isArray(app?.internship_postings) ? app?.internship_postings[0] : app?.internship_postings;
-    const company: any = Array.isArray(posting?.company_profiles) ? posting?.company_profiles[0] : posting?.company_profiles;
-    return {
-      assignmentId: a.id,
-      studentId: a.student_id,
-      studentName: prof?.full_name || 'Assigned Intern Candidate',
-      studentEmail: prof?.email || 'intern@interora.app',
-      internshipTitle: posting?.title || 'Assigned Internship',
-      companyName: company?.company_name || 'Host Employer',
-      status: a.status,
-      assignedAt: a.assigned_at,
-    };
-  });
+export const fetchCompanyMentorInternsBackend = async (): Promise<CompanyMentorInternRecord[]> => {
+  try {
+    const res = await apiClient.get<CompanyMentorInternRecord[]>('/mentor/interns');
+    return res.data || [];
+  } catch (err: any) {
+    console.error('[fetchCompanyMentorInternsBackend] Error:', err);
+    return [];
+  }
 };
 
 export const fetchCompanyMentorTasksBackend = async (): Promise<CompanyMentorTaskRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
-  const interns = await fetchCompanyMentorInternsBackend();
-  if (interns.length === 0) return [];
-
-  const studentIds = interns.map((i) => i.studentId);
-  const studentMap = new Map(interns.map((i) => [i.studentId, i.studentName]));
-
-  const { data: tasks, error } = await supabase
-    .from('student_tasks')
-    .select('*')
-    .in('student_id', studentIds);
-
-  if (error || !tasks) return [];
-
-  const taskIds = tasks.map((t) => t.id);
-  const { data: reviews } = await supabase
-    .from('company_task_reviews')
-    .select('*')
-    .in('task_id', taskIds);
-
-  const reviewMap = new Map((reviews || []).map((r) => [r.task_id, r.review_status]));
-
-  return tasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    description: t.description || 'Sprint deliverable item',
-    studentId: t.student_id,
-    studentName: studentMap.get(t.student_id) || 'Student Candidate',
-    dueDate: t.due_date || '2026-08-31',
-    completed: t.completed,
-    reviewStatus: reviewMap.get(t.id) || (t.completed ? 'Verified' : 'Pending Review'),
-  }));
+  try {
+    const res = await apiClient.get<CompanyMentorTaskRecord[]>('/mentor/tasks');
+    return res.data || [];
+  } catch (err: any) {
+    console.error('[fetchCompanyMentorTasksBackend] Error:', err);
+    return [];
+  }
 };
 
 export const updateCompanyMentorTaskReviewBackend = async (
@@ -1791,24 +2103,18 @@ export const updateCompanyMentorTaskReviewBackend = async (
   reviewStatus: string,
   feedback?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase.from('company_task_reviews').insert({
-    task_id: taskId,
-    mentor_id: userData.user.id,
-    review_status: reviewStatus,
-    feedback: feedback || 'Reviewed by host mentor.',
-  });
-
-  if (error) {
-    console.error('[updateCompanyMentorTaskReviewBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    const res = await apiClient.post<{ success: boolean }>(`/mentor/tasks/${taskId}/review`, {
+      reviewStatus,
+      feedback,
+    });
+    return { success: res.success ?? true };
+  } catch (err: any) {
+    console.error('[updateCompanyMentorTaskReviewBackend] Error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to update task review';
+    return { success: false, error: errorMsg };
   }
-
-  return { success: true };
 };
 /* ====================================================================
    PHASE 15: ADMIN PORTAL SERVICES
@@ -1818,309 +2124,205 @@ export interface AdminDashboardMetrics {
   totalStudents: number;
   totalCompanies: number;
   activeInternsCount: number;
+  activeInternships?: number;
   pposPendingCount: number;
   certsPendingCount: number;
   pendingApplications: number;
   pendingCompanies: number;
+  completedInternsCount?: number;
+  totalApplicationsCount?: number;
+  selectedApplicationsCount?: number;
+  rejectedApplicationsCount?: number;
+  totalPposCount?: number;
+  totalCertificatesCount?: number;
+  departmentDistribution?: Array<{
+    department: string;
+    studentCount: number;
+    internshipCount: number;
+  }>;
 }
 
 export const fetchAdminDashboardMetricsBackend = async (): Promise<AdminDashboardMetrics> => {
-  if (!isSupabaseConfigured()) {
+  try {
+    const res = await apiClient.get<any>('/admin/metrics');
+    const data = res.data?.data || res.data;
+    return {
+      totalStudents: data?.totalStudents ?? 0,
+      totalCompanies: data?.totalCompanies ?? 0,
+      activeInternsCount: data?.activeInternsCount ?? data?.activeInternships ?? 0,
+      activeInternships: data?.activeInternships ?? data?.activeInternsCount ?? 0,
+      pposPendingCount: data?.pposPendingCount ?? 0,
+      certsPendingCount: data?.certsPendingCount ?? 0,
+      pendingApplications: data?.pendingApplications ?? 0,
+      pendingCompanies: data?.pendingCompanies ?? 0,
+      completedInternsCount: data?.completedInternsCount ?? 0,
+      totalApplicationsCount: data?.totalApplicationsCount ?? 0,
+      selectedApplicationsCount: data?.selectedApplicationsCount ?? 0,
+      rejectedApplicationsCount: data?.rejectedApplicationsCount ?? 0,
+      totalPposCount: data?.totalPposCount ?? 0,
+      totalCertificatesCount: data?.totalCertificatesCount ?? 0,
+      departmentDistribution: data?.departmentDistribution ?? [],
+    };
+  } catch (err: any) {
+    console.error('[fetchAdminDashboardMetricsBackend] Error:', err);
     return {
       totalStudents: 0,
       totalCompanies: 0,
       activeInternsCount: 0,
+      activeInternships: 0,
       pposPendingCount: 0,
       certsPendingCount: 0,
       pendingApplications: 0,
       pendingCompanies: 0,
+      completedInternsCount: 0,
+      totalApplicationsCount: 0,
+      selectedApplicationsCount: 0,
+      rejectedApplicationsCount: 0,
+      totalPposCount: 0,
+      totalCertificatesCount: 0,
+      departmentDistribution: [],
     };
   }
-
-  const { count: stdCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
-  const { count: compCount } = await supabase.from('company_profiles').select('*', { count: 'exact', head: true });
-  const { count: selectedCount } = await supabase.from('student_applications').select('*', { count: 'exact', head: true }).eq('status', 'Selected');
-  const { count: pendingAppsCount } = await supabase.from('student_applications').select('*', { count: 'exact', head: true }).eq('status', 'Submitted');
-  const { count: pendingCompsCount } = await supabase.from('company_profiles').select('*', { count: 'exact', head: true }).eq('verified', false);
-  const { count: certsCount } = await supabase.from('student_certificates').select('*', { count: 'exact', head: true });
-
-  return {
-    totalStudents: stdCount ?? 0,
-    totalCompanies: compCount ?? 0,
-    activeInternsCount: selectedCount ?? 0,
-    pposPendingCount: 0,
-    certsPendingCount: certsCount ?? 0,
-    pendingApplications: pendingAppsCount ?? 0,
-    pendingCompanies: pendingCompsCount ?? 0,
-  };
 };
 
-export const updateAdminCompanyApprovalBackend = async (
-  companyId: string,
-  approved: boolean
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-
-  const { error } = await supabase
-    .from('company_profiles')
-    .update({ verified: approved })
-    .eq('id', companyId);
-
-  if (error) {
-    console.error('[updateAdminCompanyApprovalBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
-};
-
-/* ====================================================================
-   INTERNSHIP TASKS & MILESTONES (COMPANY LEVEL)
-   ==================================================================== */
-
-export interface InternshipTaskInput {
-  title: string;
-  description?: string;
-  priority?: string;
-  dueDate?: string;
-  status?: string;
-}
-
-export interface InternshipMilestoneInput {
-  title: string;
-  description?: string;
-  targetDate?: string;
-  status?: string;
-}
-
-export interface InternshipTaskRecord {
+export interface AdminCertificateRecord {
   id: string;
+  recipientName: string;
+  recipientEmail: string;
+  internshipTitle: string;
+  certificateNumber: string;
+  issuedDate: string;
+  signatory: string;
+  status: string;
+  qrToken?: string;
+}
+
+export const fetchCertificatesBackend = async (): Promise<AdminCertificateRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/certificates');
+    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return items.map((c: any) => ({
+      id: c.id,
+      recipientName: c.student?.profile?.fullName || c.recipientName || 'Student Name',
+      recipientEmail: c.student?.profile?.email || c.recipientEmail || 'student@university.edu',
+      internshipTitle: c.assignment?.internship?.title || c.internshipTitle || 'Internship',
+      certificateNumber: c.certificateNumber || '',
+      issuedDate: c.issueDate ? new Date(c.issueDate).toLocaleDateString() : (c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A'),
+      signatory: c.signatoryName || 'Head of Placements',
+      status: c.status ? (c.status.charAt(0).toUpperCase() + c.status.slice(1)) : 'Active',
+      qrToken: c.qrToken,
+    }));
+  } catch (err: any) {
+    console.error('[fetchCertificatesBackend] Error:', err);
+    return [];
+  }
+};
+
+export interface AdminPPORecord {
+  id: string;
+  internId: string;
+  studentName: string;
+  studentEmail: string;
+  department: string;
+  role: string;
+  ctc: string;
+  company: string;
+  joiningDate?: string;
+  status: string;
+  adminApprovalStatus: string;
+  location?: string;
+  bondTerms?: string;
+}
+
+export const fetchPPOOffersBackend = async (): Promise<AdminPPORecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/ppo-offers');
+    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return items.map((p: any) => ({
+      id: p.id,
+      internId: p.studentId || p.student?.id || '',
+      studentName: p.student?.profile?.fullName || 'Student Candidate',
+      studentEmail: p.student?.profile?.email || 'student@university.edu',
+      department: p.student?.course || 'Engineering',
+      role: p.positionTitle || p.assignment?.internship?.title || 'Associate',
+      ctc: p.salaryPackage || '₹12,00,000 LPA',
+      company: p.company?.companyName || 'Host Company',
+      joiningDate: p.joiningDate ? new Date(p.joiningDate).toLocaleDateString() : 'Immediate',
+      status: p.status === 'offered' ? 'Offered' : (p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : 'Pending'),
+      adminApprovalStatus: p.adminApprovalStatus || 'pending',
+      location: p.location || 'Remote',
+      bondTerms: p.bondTerms || 'None',
+    }));
+  } catch (err: any) {
+    console.error('[fetchPPOOffersBackend] Error:', err);
+    return [];
+  }
+};
+
+export const updatePPOOfferBackend = async (
+  ppoId: string,
+  input: { adminApprovalStatus?: 'approved' | 'rejected'; status?: string }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch(`/ppo-offers/${ppoId}`, input);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[updatePPOOfferBackend] Error:', err);
+    return { success: false, error: err.response?.data?.message || err.message || 'Failed to update PPO offer.' };
+  }
+};
+
+export interface AdminApplicationRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  department: string;
   internshipId: string;
-  title: string;
-  description?: string;
-  priority?: string;
-  dueDate?: string;
+  internshipTitle: string;
+  companyName: string;
+  duration: string;
+  stipend: string;
+  facultyApprovalStatus?: string;
+  applicationStatus: string;
+  appliedDate: string;
+  resumeUrl?: string | null;
+  coverLetter?: string | null;
+}
+
+export const fetchAdminApplicationsBackend = async (): Promise<AdminApplicationRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/admin/applications');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchAdminApplicationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export interface AdminUserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  rawRole: string;
+  organization: string;
   status: string;
   createdAt: string;
 }
 
-export interface InternshipMilestoneRecord {
-  id: string;
-  internshipId: string;
-  title: string;
-  description?: string;
-  targetDate?: string;
-  status: string;
-  createdAt: string;
-}
-
-// Tasks
-export const createInternshipTaskBackend = async (
-  internshipId: string,
-  input: InternshipTaskInput
-): Promise<{ success: boolean; data?: InternshipTaskRecord; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-
-  const { data, error } = await supabase
-    .from('internship_tasks')
-    .insert({
-      internship_id: internshipId,
-      title: input.title,
-      description: input.description || null,
-      priority: input.priority || null,
-      due_date: input.dueDate || null,
-      status: input.status || 'Pending',
-    })
-    .select('*')
-    .single();
-
-  if (error) {
-    console.error('[createInternshipTaskBackend] Error:', error);
-    return { success: false, error: error.message };
+export const fetchAdminUsersBackend = async (): Promise<AdminUserRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/admin/users');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchAdminUsersBackend] Error:', err);
+    return [];
   }
-
-  return {
-    success: true,
-    data: {
-      id: data.id,
-      internshipId: data.internship_id,
-      title: data.title,
-      description: data.description,
-      priority: data.priority,
-      dueDate: data.due_date,
-      status: data.status,
-      createdAt: data.created_at,
-    },
-  };
 };
 
-export const fetchInternshipTasksBackend = async (
-  internshipId: string
-): Promise<InternshipTaskRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
-  const { data, error } = await supabase
-    .from('internship_tasks')
-    .select('*')
-    .eq('internship_id', internshipId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) return [];
-
-  return data.map((t) => ({
-    id: t.id,
-    internshipId: t.internship_id,
-    title: t.title,
-    description: t.description,
-    priority: t.priority,
-    dueDate: t.due_date,
-    status: t.status,
-    createdAt: t.created_at,
-  }));
-};
-
-export const updateInternshipTaskBackend = async (
-  taskId: string,
-  input: Partial<InternshipTaskInput>
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-
-  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
-  if (input.title !== undefined) payload.title = input.title;
-  if (input.description !== undefined) payload.description = input.description;
-  if (input.priority !== undefined) payload.priority = input.priority;
-  if (input.dueDate !== undefined) payload.due_date = input.dueDate;
-  if (input.status !== undefined) payload.status = input.status;
-
-  const { error } = await supabase
-    .from('internship_tasks')
-    .update(payload)
-    .eq('id', taskId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-};
-
-export const deleteInternshipTaskBackend = async (
-  taskId: string
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-  const { error } = await supabase.from('internship_tasks').delete().eq('id', taskId);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-};
-
-// Milestones
-export const createInternshipMilestoneBackend = async (
-  internshipId: string,
-  input: InternshipMilestoneInput
-): Promise<{ success: boolean; data?: InternshipMilestoneRecord; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-
-  const { data, error } = await supabase
-    .from('internship_milestones')
-    .insert({
-      internship_id: internshipId,
-      title: input.title,
-      description: input.description || null,
-      target_date: input.targetDate || null,
-      status: input.status || 'Pending',
-    })
-    .select('*')
-    .single();
-
-  if (error) {
-    console.error('[createInternshipMilestoneBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return {
-    success: true,
-    data: {
-      id: data.id,
-      internshipId: data.internship_id,
-      title: data.title,
-      description: data.description,
-      targetDate: data.target_date,
-      status: data.status,
-      createdAt: data.created_at,
-    },
-  };
-};
-
-export const fetchInternshipMilestonesBackend = async (
-  internshipId: string
-): Promise<InternshipMilestoneRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
-  const { data, error } = await supabase
-    .from('internship_milestones')
-    .select('*')
-    .eq('internship_id', internshipId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) return [];
-
-  return data.map((m) => ({
-    id: m.id,
-    internshipId: m.internship_id,
-    title: m.title,
-    description: m.description,
-    targetDate: m.target_date,
-    status: m.status,
-    createdAt: m.created_at,
-  }));
-};
-
-export const updateInternshipMilestoneBackend = async (
-  milestoneId: string,
-  input: Partial<InternshipMilestoneInput>
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-
-  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
-  if (input.title !== undefined) payload.title = input.title;
-  if (input.description !== undefined) payload.description = input.description;
-  if (input.targetDate !== undefined) payload.target_date = input.targetDate;
-  if (input.status !== undefined) payload.status = input.status;
-
-  const { error } = await supabase
-    .from('internship_milestones')
-    .update(payload)
-    .eq('id', milestoneId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-};
-
-export const deleteInternshipMilestoneBackend = async (
-  milestoneId: string
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-  const { error } = await supabase.from('internship_milestones').delete().eq('id', milestoneId);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-};
-
-// Faculty Rating
-export const updateApplicationFacultyRatingBackend = async (
-  applicationId: string,
-  facultyRating: number
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured.' };
-
-  const { error } = await supabase
-    .from('student_applications')
-    .update({ faculty_rating: facultyRating, updated_at: new Date().toISOString() })
-    .eq('id', applicationId);
-
-  if (error) {
-    console.error('[updateApplicationFacultyRatingBackend] Error:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
-};
 // Direct Industry/Company Addition by Admin
 export const createCompanyDirectBackend = async (company: {
   companyName: string;
@@ -2130,35 +2332,14 @@ export const createCompanyDirectBackend = async (company: {
   phone: string;
   website: string;
   status: 'Approved' | 'Pending';
+  tempPassword?: string;
 }): Promise<{ success: boolean; data?: any; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: true };
-  }
-
   try {
-    const { data, error } = await supabase
-      .from('company_profiles')
-      .insert({
-        company_name: company.companyName,
-        industry_domain: company.industryDomain,
-        contact_person: company.contactPerson,
-        official_email: company.email,
-        phone: company.phone,
-        website: company.website,
-        approval_status: company.status === 'Approved' ? 'approved' : 'pending',
-        verified: company.status === 'Approved',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.warn('[createCompanyDirectBackend] Supabase direct notice:', error.message);
-      return { success: true };
-    }
-    return { success: true, data };
+    const res = await apiClient.post<any>('/admin/companies', company);
+    return { success: true, data: res.data };
   } catch (err: any) {
-    console.warn('[createCompanyDirectBackend] Handled:', err);
-    return { success: true };
+    console.error('[createCompanyDirectBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to create company.' };
   }
 };
 
@@ -2176,57 +2357,25 @@ export interface FacultyDashboardMetrics {
 
 
 export const fetchFacultyDashboardMetricsBackend = async (): Promise<FacultyDashboardMetrics> => {
-  if (!isSupabaseConfigured()) {
-    return {
-      totalAssignedStudents: 14,
-      activeInternshipsCount: 9,
-      pendingApplicationReviews: 3,
-      completedEvaluationsCount: 8,
-      placementRate: 88,
-    };
-  }
-
   try {
-    const { count: stdCount } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'student');
-
-    const { count: selectedCount } = await supabase
-      .from('student_applications')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'Selected');
-
-    const { count: pendingCount } = await supabase
-      .from('student_applications')
-      .select('*', { count: 'exact', head: true })
-      .in('status', ['Submitted', 'Shortlisted', 'Pending']);
-
-    const { count: evalCount } = await supabase
-      .from('student_evaluations')
-      .select('*', { count: 'exact', head: true });
-
-    const totalStudents = (stdCount && stdCount > 0) ? stdCount : 14;
-    const activeInterns = (selectedCount && selectedCount > 0) ? selectedCount : 9;
-    const pendingReviews = (pendingCount && pendingCount > 0) ? pendingCount : 3;
-    const completedEvals = (evalCount && evalCount > 0) ? evalCount : 8;
-    const placementComplianceRate = Math.min(100, Math.round((activeInterns / totalStudents) * 100)) || 88;
-
-    return {
-      totalAssignedStudents: totalStudents,
-      activeInternshipsCount: activeInterns,
-      pendingApplicationReviews: pendingReviews,
-      completedEvaluationsCount: completedEvals,
-      placementRate: placementComplianceRate,
-    };
+    const res = await apiClient.get<FacultyDashboardMetrics>('/faculty/metrics');
+    return (
+      res.data || {
+        totalAssignedStudents: 0,
+        activeInternshipsCount: 0,
+        pendingApplicationReviews: 0,
+        completedEvaluationsCount: 0,
+        placementRate: 0,
+      }
+    );
   } catch (err) {
     console.error('[fetchFacultyDashboardMetricsBackend] Error:', err);
     return {
-      totalAssignedStudents: 14,
-      activeInternshipsCount: 9,
-      pendingApplicationReviews: 3,
-      completedEvaluationsCount: 8,
-      placementRate: 88,
+      totalAssignedStudents: 0,
+      activeInternshipsCount: 0,
+      pendingApplicationReviews: 0,
+      completedEvaluationsCount: 0,
+      placementRate: 0,
     };
   }
 };
@@ -2260,106 +2409,47 @@ export interface FacultyMentorRecord {
 }
 
 export const fetchFacultyMentorsBackend = async (): Promise<FacultyMentorRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
   try {
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'faculty')
-      .order('created_at', { ascending: false });
-
-    if (error || !profiles || profiles.length === 0) return [];
-
-    const facultyIds = profiles.map((p) => p.id);
-    const { data: assignments } = await supabase
-      .from('faculty_student_assignments')
-      .select('faculty_id');
-
-    const countMap = new Map<string, number>();
-    (assignments || []).forEach((a: any) => {
-      countMap.set(a.faculty_id, (countMap.get(a.faculty_id) || 0) + 1);
-    });
-
-    return profiles.map((p, idx) => ({
-      id: p.id,
-      facultyId: 'FAC-' + (801 + idx),
-      name: p.full_name || 'Faculty Mentor',
-      email: p.email,
-      phone: p.phone || '+91 98765 11223',
-      department: (p.department || 'CSE') as any,
-      batch: ('CS' + ((idx % 4) + 1)) as any,
-      designation: 'Assistant Professor',
-      tempPassword: 'password@123',
-      assignedStudentCount: countMap.get(p.id) || 18,
-      status: p.account_status === 'inactive' ? 'Inactive' : 'Active',
-    }));
-  } catch (err) {
+    const res = await apiClient.get<FacultyMentorRecord[]>('/admin/faculty');
+    return res.data || [];
+  } catch (err: any) {
     console.error('[fetchFacultyMentorsBackend] Error:', err);
     return [];
   }
 };
 
 export const deleteFacultyMentorBackend = async (id: string): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: true };
-  const { error } = await supabase.from('profiles').delete().eq('id', id);
-  if (error) {
-    console.error('[deleteFacultyMentorBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    await apiClient.delete(`/admin/faculty/${id}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[deleteFacultyMentorBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to delete faculty mentor.' };
   }
-  return { success: true };
 };
 
 export const updateFacultyMentorBackend = async (
   id: string,
-  updates: { name?: string; department?: string; status?: 'Active' | 'Inactive' }
+  updates: { name?: string; department?: string; status?: 'Active' | 'Inactive'; designation?: string; phone?: string }
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: true };
-  const updateData: any = { updated_at: new Date().toISOString() };
-  if (updates.name) updateData.full_name = updates.name;
-  if (updates.department) updateData.department = updates.department;
-  if (updates.status) updateData.account_status = updates.status.toLowerCase();
-
-  const { error } = await supabase.from('profiles').update(updateData).eq('id', id);
-  if (error) {
-    console.error('[updateFacultyMentorBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    await apiClient.patch(`/admin/faculty/${id}`, updates);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[updateFacultyMentorBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to update faculty mentor.' };
   }
-  return { success: true };
 };
 
 export const registerFacultyMentorBackend = async (
   input: FacultyRegistrationInput
 ): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: true };
-  }
-
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email: input.email,
-      password: input.password || 'faculty@123',
-      options: {
-        data: {
-          role: 'faculty',
-          full_name: input.name,
-          faculty_id: input.facultyId,
-          department: input.department,
-          batch: input.batch,
-          designation: input.designation,
-          phone: input.phone,
-        },
-      },
-    });
-
-    if (error) {
-      console.warn('[registerFacultyMentorBackend] Notice:', error.message);
-      return { success: true };
-    }
+    await apiClient.post('/admin/faculty', input);
     return { success: true };
   } catch (err: any) {
-    console.warn('[registerFacultyMentorBackend] Handled:', err);
-    return { success: true };
+    console.error('[registerFacultyMentorBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to register faculty mentor.' };
   }
 };
 
@@ -2376,10 +2466,6 @@ export interface ResumeUploadResult {
 export const uploadStudentResumeBackend = async (
   file: File
 ): Promise<ResumeUploadResult> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured in .env' };
-  }
-
   // 1. PDF Only Validation
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     return { success: false, error: 'Only PDF documents (.pdf) are supported.' };
@@ -2390,49 +2476,16 @@ export const uploadStudentResumeBackend = async (
     return { success: false, error: 'File size exceeds 5MB limit.' };
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) {
-    return { success: false, error: 'User is not authenticated.' };
-  }
-
-  const userId = userData.user.id;
-  const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filePath = "resumes/" + userId + "/" + Date.now() + "_" + sanitizedFileName;
-
   try {
-    const { data: uploadData, error: uploadErr } = await supabase.storage
-      .from('resumes')
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: 'application/pdf',
-      });
+    const formData = new FormData();
+    formData.append('resume', file);
 
-    let publicUrl = '';
-    if (!uploadErr) {
-      const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath);
-      publicUrl = urlData?.publicUrl || '';
-    } else {
-      console.warn('[uploadStudentResumeBackend] Storage bucket warning:', uploadErr.message);
-      publicUrl = "https://zvbxdpasnmkvctcikllr.supabase.co/storage/v1/object/public/resumes/" + filePath;
-    }
-
-    // Update student_profiles with resume details
-    const { error: profileErr } = await supabase
-      .from('student_profiles')
-      .update({
-        bio: "Resume: " + file.name,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-
-    if (profileErr) {
-      console.warn('[uploadStudentResumeBackend] Profile update note:', profileErr.message);
-    }
+    const res = await apiClient.post<{ resumeUrl: string; fileName: string }>('/uploads/resume', formData);
 
     return {
       success: true,
-      resumeUrl: publicUrl,
-      fileName: file.name,
+      resumeUrl: res.data?.resumeUrl,
+      fileName: res.data?.fileName || file.name,
     };
   } catch (err: any) {
     console.error('[uploadStudentResumeBackend] Error:', err);
@@ -2440,83 +2493,58 @@ export const uploadStudentResumeBackend = async (
   }
 };
 
-// Task Proof Upload
-export const uploadTaskProofBackend = async (
-  file: File,
-  taskId: string
-): Promise<{ success: boolean; proofUrl?: string; error?: string }> => {
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase backend is not configured.' };
-  }
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) {
-    return { success: false, error: 'Not authenticated.' };
-  }
-
-  const sanitized = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filePath = "proofs/" + userData.user.id + "/" + taskId + "_" + Date.now() + "_" + sanitized;
-
-  try {
-    const { error: uploadErr } = await supabase.storage
-      .from('proofs')
-      .upload(filePath, file, { upsert: true });
-
-    let proofUrl = '';
-    if (!uploadErr) {
-      const { data } = supabase.storage.from('proofs').getPublicUrl(filePath);
-      proofUrl = data?.publicUrl || '';
-    } else {
-      proofUrl = "https://zvbxdpasnmkvctcikllr.supabase.co/storage/v1/object/public/proofs/" + filePath;
-    }
-
-    // Update student_tasks table
-    await supabase
-      .from('student_tasks')
-      .update({ completed: true, updated_at: new Date().toISOString() })
-      .eq('id', taskId);
-
-    return { success: true, proofUrl };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Proof upload failed.' };
-  }
-};
 
 // Check-out Attendance
 export const checkoutAttendanceRecordBackend = async (
   photoBlob?: Blob,
-  coords?: { latitude: number; longitude: number }
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
+  coords?: { latitude: number; longitude: number; address?: string },
+  assignmentId?: string
+): Promise<{ success: boolean; data?: any; error?: string }> => {
   let photoUrl = '';
   if (photoBlob) {
-    photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_out');
+    try {
+      photoUrl = await uploadAttendancePhotoBackend(photoBlob, 'check_out');
+    } catch (err) {
+      console.warn('[checkoutAttendanceRecordBackend] Photo upload notice:', err);
+    }
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const { error } = await supabase
-    .from('attendance_records')
-    .update({
-      check_out_time: new Date().toISOString(),
-      check_out_photo_url: photoUrl || null,
-      check_out_lat: coords?.latitude || 18.5204,
-      check_out_lng: coords?.longitude || 73.8567,
-      status: 'present',
-    })
-    .eq('student_id', userData.user.id)
-    .eq('attendance_date', todayStr);
-
-  if (error) {
-    console.error('[checkoutAttendanceRecordBackend] Error:', error);
-    return { success: false, error: error.message };
+  try {
+    const res = await apiClient.post<any>('/attendance/check-out', {
+      assignmentId: assignmentId || undefined,
+      checkOutPhotoUrl: photoUrl || undefined,
+      checkOutLat: coords?.latitude,
+      checkOutLng: coords?.longitude,
+      checkOutAddress: coords?.address,
+    });
+    return {
+      success: true,
+      data: res.data,
+    };
+  } catch (err: any) {
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Attendance check-out failed.';
+    return {
+      success: false,
+      error: errorMsg,
+    };
   }
-  return { success: true };
 };
 
-// Student Work Logs Persistence
+// Student Work Logs Persistence (Express Backend)
+export interface StudentWorkLogRecord {
+  id: string;
+  date: string;
+  taskId: string;
+  taskTitle: string;
+  hoursWorked: number;
+  summary: string;
+  completedWork: string;
+  blockers: string;
+  nextPlan: string;
+  createdAt?: string;
+}
+
 export interface WorkLogInput {
   date: string;
   taskId?: string;
@@ -2528,27 +2556,68 @@ export interface WorkLogInput {
   nextPlan?: string;
 }
 
-export const createStudentWorkLogBackend = async (
-  input: WorkLogInput
-): Promise<{ success: boolean; error?: string }> => {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Backend not configured' };
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase.from('student_tasks').insert({
-    student_id: userData.user.id,
-    title: "[WorkLog] " + input.taskTitle + " (" + input.hoursWorked + " hrs)",
-    description: "Completed: " + input.completedWork + " | Blockers: " + (input.blockers || 'None') + " | Next: " + (input.nextPlan || 'Ongoing'),
-    due_date: input.date,
-    completed: true,
-  });
-
-  if (error) {
-    console.error('[createStudentWorkLogBackend] Error:', error);
-    return { success: false, error: error.message };
+export const fetchStudentWorkLogsBackend = async (): Promise<StudentWorkLogRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/work-logs');
+    const logs: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return logs.map((l: any) => ({
+      id: l.id,
+      date: l.logDate ? new Date(l.logDate).toISOString().slice(0, 10) : '',
+      taskId: l.taskId || '',
+      taskTitle: l.taskTitle || 'Daily Work',
+      hoursWorked: Number(l.hoursWorked ?? 0),
+      summary: l.completedWork || '',
+      completedWork: l.completedWork || '',
+      blockers: l.blockers || 'None',
+      nextPlan: l.nextPlan || 'Continue tasks',
+      createdAt: l.createdAt,
+    }));
+  } catch (err: any) {
+    console.error('[fetchStudentWorkLogsBackend] Express error:', err);
+    return [];
   }
+};
 
-  return { success: true };
+export const createStudentWorkLogBackend = async (
+  input: WorkLogInput,
+  explicitAssignmentId?: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    let assignmentId = explicitAssignmentId;
+
+    if (!assignmentId) {
+      const active = await fetchActiveStudentInternshipBackend();
+      if (!active?.assignmentId) {
+        return {
+          success: false,
+          error: 'No active internship assignment found. Cannot log work without an active assignment.',
+        };
+      }
+      assignmentId = active.assignmentId;
+    }
+
+    const payload: any = {
+      assignmentId,
+      taskTitle: input.taskTitle,
+      logDate: input.date,
+      hoursWorked: Number(input.hoursWorked),
+      completedWork: input.completedWork,
+      blockers: input.blockers || 'None',
+      nextPlan: input.nextPlan || 'Continue sprint tasks',
+    };
+
+    if (input.taskId && input.taskId.length === 36) {
+      payload.taskId = input.taskId;
+    }
+
+    await apiClient.post('/work-logs', payload);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[createStudentWorkLogBackend] Error:', err);
+    const errorMsg =
+      err.response?.data?.message || err.message || 'Failed to persist work log.';
+    return { success: false, error: errorMsg };
+  }
 };
 
 
@@ -2581,92 +2650,893 @@ export interface FacultyStudentAttendanceRecord {
 }
 
 export const fetchFacultyAttendanceMonitoringBackend = async (): Promise<FacultyStudentAttendanceRecord[]> => {
-  if (!isSupabaseConfigured()) return [];
-
   try {
-    // 1. Fetch student profiles
-    const { data: stdProfiles, error: stdErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, department')
-      .eq('role', 'student');
-
-    if (stdErr || !stdProfiles || stdProfiles.length === 0) return [];
-
-    const studentIds = stdProfiles.map((p) => p.id);
-
-    // 2. Fetch applications for company & role
-    const { data: apps } = await supabase
-      .from('student_applications')
-      .select('student_id, status, internship_postings(title, company_profiles(company_name))')
-      .in('student_id', studentIds);
-
-    const appMap = new Map();
-    (apps || []).forEach((a: any) => appMap.set(a.student_id, a));
-
-    // 3. Fetch attendance records
-    const { data: attRecords } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .in('student_id', studentIds)
-      .order('attendance_date', { ascending: false });
-
-    const attGrouped = new Map<string, any[]>();
-    (attRecords || []).forEach((r) => {
-      if (!attGrouped.has(r.student_id)) attGrouped.set(r.student_id, []);
-      attGrouped.get(r.student_id)!.push(r);
-    });
-
-    return stdProfiles.map((p, idx) => {
-      const app: any = appMap.get(p.id);
-      const posting: any = Array.isArray(app?.internship_postings) ? app?.internship_postings[0] : app?.internship_postings;
-      const company: any = Array.isArray(posting?.company_profiles) ? posting?.company_profiles[0] : posting?.company_profiles;
-      const records = attGrouped.get(p.id) || [];
-
-      const presentCount = records.filter((r) => r.status === 'present' || r.status === 'late').length;
-      const totalCount = Math.max(records.length, 12);
-      const absentCount = totalCount - presentCount;
-
-      const recentMapped = records.slice(0, 5).map((r) => ({
-        date: r.attendance_date,
-        status: (r.status === 'present' ? 'Present' : r.status === 'late' ? 'Late' : 'Absent') as any,
-        checkInTime: r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
-        checkOutTime: r.check_out_time ? new Date(r.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '05:00 PM',
-        checkInPhotoUrl: r.check_in_photo_url,
-        checkInLat: r.check_in_lat || 18.5204,
-        checkInLng: r.check_in_lng || 73.8567,
-        checkOutPhotoUrl: r.check_out_photo_url,
-        checkOutLat: r.check_out_lat || 18.5204,
-        checkOutLng: r.check_out_lng || 73.8567,
-        locationAddress: r.location_address || 'IIIT Campus Tech Park, Pune (GPS Verified)',
-      }));
-
-      // Fallback sample recent entries if user has no DB attendance yet
-      if (recentMapped.length === 0) {
-        recentMapped.push(
-          { date: '2026-08-20', status: 'Present' as any, checkInTime: '08:58 AM', checkOutTime: '05:30 PM', checkInPhotoUrl: undefined, checkInLat: 18.5204, checkInLng: 73.8567, checkOutPhotoUrl: undefined, checkOutLat: 18.5204, checkOutLng: 73.8567, locationAddress: 'Campus Tech Park, Pune' },
-          { date: '2026-08-19', status: 'Present' as any, checkInTime: '09:02 AM', checkOutTime: '05:35 PM', checkInPhotoUrl: undefined, checkInLat: 18.5204, checkInLng: 73.8567, checkOutPhotoUrl: undefined, checkOutLat: 18.5204, checkOutLng: 73.8567, locationAddress: 'Campus Tech Park, Pune' },
-          { date: '2026-08-18', status: 'Present' as any, checkInTime: '08:55 AM', checkOutTime: '05:40 PM', checkInPhotoUrl: undefined, checkInLat: 18.5204, checkInLng: 73.8567, checkOutPhotoUrl: undefined, checkOutLat: 18.5204, checkOutLng: 73.8567, locationAddress: 'Campus Tech Park, Pune' }
-        );
-      }
-
-      return {
-        id: p.id,
-        studentId: p.id,
-        studentName: p.full_name || 'Student Candidate',
-        email: p.email || 'student@interora.app',
-        company: company?.company_name || 'TechCorp Solutions',
-        role: posting?.title || 'Full Stack Intern',
-        workMode: (idx % 2 === 0 ? 'On-site' : 'Remote') as any,
-        attendance: {
-          workingDays: totalCount,
-          present: Math.max(presentCount, 10),
-          absent: Math.max(absentCount, 1),
-          recent: recentMapped,
-        },
-      };
-    });
+    const res = await apiClient.get<FacultyStudentAttendanceRecord[]>('/faculty/attendance');
+    return res.data || [];
   } catch (err) {
     console.error('[fetchFacultyAttendanceMonitoringBackend] Error:', err);
     return [];
+  }
+};
+
+/* ====================================================================
+   SLICE 21: FACULTY API SERVICES
+   ==================================================================== */
+
+// 1. Faculty Applications Oversight & Decision
+export interface FacultyApplicationItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  email: string;
+  role: string;
+  company: string;
+  appliedDate: string;
+  applicationStatus: 'Pending' | 'Approved' | 'Rejected';
+  rawStatus: string;
+  skills: string[];
+  coverMessage: string;
+  facultyRating?: number;
+}
+
+export const fetchFacultyApplicationsBackend = async (): Promise<FacultyApplicationItem[]> => {
+  try {
+    const res = await apiClient.get<any>('/faculty/applications');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchFacultyApplicationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const decideFacultyApplicationBackend = async (
+  applicationId: string,
+  decision: 'approve' | 'reject',
+  rating?: number
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>(`/faculty/applications/${applicationId}/decision`, {
+      decision,
+      rating,
+    });
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    console.error('[decideFacultyApplicationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to record application decision.',
+    };
+  }
+};
+
+// 2. Assigned Students
+export type FacultyAssignedStudentItem = FacultyAssignedStudentRecord;
+
+// 3. Evaluations (Faculty Creation & Cross-Verification)
+export interface EvaluationRecord {
+  id: string;
+  assignmentId: string;
+  evaluatorId: string;
+  evaluatorRole: string;
+  evaluationType: string;
+  evaluationPeriod?: string;
+  technicalSkills?: number;
+  qualityOfWork?: number;
+  problemSolving?: number;
+  communication?: number;
+  teamwork?: number;
+  professionalism?: number;
+  timeManagement?: number;
+  initiative?: number;
+  overallRating?: number;
+  overallScore?: number;
+  criteriaScores?: Record<string, any>;
+  strengths?: string | null;
+  improvementAreas?: string | null;
+  comments?: string | null;
+  notes?: string | null;
+  recommendation?: string | null;
+  status: string;
+  crossVerified?: boolean;
+  crossVerifiedAt?: string | null;
+  discrepancyNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  assignment?: {
+    id: string;
+    studentId: string;
+    companyId?: string;
+    internshipId?: string;
+    facultyMentorId?: string | null;
+    industryMentorId?: string | null;
+    status?: string;
+    student?: {
+      id: string;
+      studentId?: string;
+      fullName?: string;
+      email?: string;
+      enrollmentNumber?: string;
+      course?: string;
+      studentProfile?: {
+        department?: string;
+        batchYear?: string;
+      };
+      profile?: {
+        id: string;
+        fullName: string;
+        email: string;
+      };
+    };
+    company?: {
+      id?: string;
+      companyName?: string;
+    };
+    internship?: {
+      id?: string;
+      title?: string;
+    };
+    posting?: {
+      title?: string;
+      company?: {
+        companyName?: string;
+      };
+    };
+  };
+  evaluator?: {
+    id: string;
+    fullName: string;
+    role: string;
+    email: string;
+  };
+  crossVerifiedBy?: {
+    id: string;
+    profile?: {
+      fullName: string;
+    };
+  };
+}
+
+export const fetchEvaluationsBackend = async (
+  filters?: { assignmentId?: string; studentId?: string; evaluationType?: string; status?: string }
+): Promise<EvaluationRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/evaluations', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchEvaluationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const createEvaluationBackend = async (input: {
+  assignmentId: string;
+  evaluationType: 'mid_term' | 'final' | 'monthly' | 'milestone_review' | string;
+  evaluationPeriod?: string;
+  technicalSkills?: number;
+  qualityOfWork?: number;
+  problemSolving?: number;
+  communication?: number;
+  teamwork?: number;
+  professionalism?: number;
+  timeManagement?: number;
+  initiative?: number;
+  overallRating?: number;
+  overallScore?: number;
+  criteriaScores?: Record<string, any>;
+  strengths?: string;
+  improvementAreas?: string;
+  comments?: string;
+  notes?: string;
+  status?: 'draft' | 'submitted';
+}): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/evaluations', input);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    console.error('[createEvaluationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to submit evaluation.',
+    };
+  }
+};
+
+export const updateEvaluationStatusBackend = async (
+  id: string,
+  input: {
+    status: 'draft' | 'submitted' | 'pending_verification' | 'verified' | 'correction_required';
+    discrepancyNotes?: string;
+  }
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/evaluations/${id}/status`, input);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    console.error('[updateEvaluationStatusBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update evaluation status.',
+    };
+  }
+};
+
+// 4. Health Scores
+export interface HealthScoreRecord {
+  id: string;
+  assignmentId: string;
+  snapshotDate: string;
+  attendanceScore: number;
+  taskCompletionScore: number;
+  milestoneScore: number;
+  workLogScore: number;
+  compositeScore: number;
+  riskStatus: 'healthy' | 'needs_attention' | 'critical';
+  assignment?: {
+    id: string;
+    studentId: string;
+    student?: {
+      id: string;
+      studentId: string;
+      profile?: {
+        fullName: string;
+        email: string;
+      };
+    };
+    company?: {
+      companyName: string;
+    };
+    internship?: {
+      title: string;
+      workMode: string;
+    };
+  };
+}
+
+export const fetchHealthScoresBackend = async (): Promise<HealthScoreRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/health-scores');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchHealthScoresBackend] Error:', err);
+    return [];
+  }
+};
+
+// 5. Placement Readiness
+export interface PlacementReadinessRecord {
+  id: string;
+  studentId: string;
+  readinessScore: number;
+  readinessStatus?: string;
+  skillScore: number;
+  internshipScore: number;
+  evaluationScore: number;
+  computedAt: string;
+  student?: {
+    id: string;
+    studentId: string;
+    course: string;
+    batchYear: string;
+    department?: {
+      id: string;
+      name: string;
+      code: string;
+    };
+    profile?: {
+      id: string;
+      fullName: string;
+      email: string;
+    };
+  };
+}
+
+export const fetchPlacementReadinessBackend = async (): Promise<PlacementReadinessRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/placement-readiness');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchPlacementReadinessBackend] Error:', err);
+    return [];
+  }
+};
+
+// 6. Faculty Profile Update
+export interface UpdateFacultyProfileInput {
+  fullName?: string;
+  phone?: string | null;
+  designation?: string;
+  cabinLocation?: string;
+}
+
+export const updateFacultyProfileBackend = async (
+  input: UpdateFacultyProfileInput
+): Promise<{ success: boolean; data?: AuthUser; error?: string }> => {
+  try {
+    const res = await apiClient.patch<AuthUser>('/auth/me', input);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    console.error('[updateFacultyProfileBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update faculty profile.',
+    };
+  }
+};
+
+/* ====================================================================
+   SLICE 22: COMPANY UI BACKEND SERVICES
+   ==================================================================== */
+
+// 1. Company Profile
+export interface UpdateCompanyProfileInput {
+  companyName?: string;
+  industryDomain?: string;
+  contactPerson?: string;
+  phone?: string;
+  website?: string;
+  companyAddress?: string;
+  geoLat?: number;
+  geoLng?: number;
+  geoFenceRadiusM?: number;
+  avatarUrl?: string;
+}
+
+export const updateCompanyProfileBackend = async (
+  input: UpdateCompanyProfileInput
+): Promise<{ success: boolean; data?: AuthUser; error?: string }> => {
+  try {
+    const res = await apiClient.patch<AuthUser>('/auth/me', input);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    console.error('[updateCompanyProfileBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update company profile.',
+    };
+  }
+};
+
+// 2. Company Mentors
+export interface CompanyMentorBackendRecord {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  department: string;
+  designation: string;
+  status: 'Active' | 'Inactive';
+  expertiseAreas?: string[];
+  assignedInternships?: Array<{
+    assignmentId: string;
+    internshipId: string;
+    title: string;
+    status: string;
+    studentName: string;
+    studentEmail: string;
+  }>;
+  assignedInternship?: { id: string; title: string } | null;
+  assignedInternsCount?: number;
+}
+
+export const fetchCompanyMentorsBackend = async (): Promise<CompanyMentorBackendRecord[]> => {
+  try {
+    const res = await apiClient.get<any>('/company/mentors');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyMentorsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const createCompanyMentorBackend = async (
+  input: { name: string; email: string; phone?: string; department?: string; designation: string; expertiseAreas?: string[]; password?: string }
+): Promise<{ success: boolean; data?: CompanyMentorBackendRecord; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/company/mentors', input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[createCompanyMentorBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to create industry mentor.',
+    };
+  }
+};
+
+export const updateCompanyMentorBackend = async (
+  mentorId: string,
+  input: { name?: string; phone?: string; department?: string; designation?: string; status?: string; expertiseAreas?: string[] }
+): Promise<{ success: boolean; data?: CompanyMentorBackendRecord; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/company/mentors/${mentorId}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[updateCompanyMentorBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update industry mentor.',
+    };
+  }
+};
+
+export const assignCompanyMentorBackend = async (
+  mentorId: string,
+  internshipId?: string | null
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.post<any>(`/company/mentors/${mentorId}/assign`, { internshipId });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[assignCompanyMentorBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to assign mentor to internship.',
+    };
+  }
+};
+
+// 3. Company Tasks & Submissions
+export const fetchCompanyTasksBackend = async (
+  filters?: { assignmentId?: string; studentId?: string; status?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/tasks', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyTasksBackend] Error:', err);
+    return [];
+  }
+};
+
+export const reviewCompanyTaskSubmissionBackend = async (
+  taskId: string,
+  submissionId: string,
+  input: { reviewStatus: 'verified' | 'correction_required' | 'rejected'; feedback?: string }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch<any>(`/tasks/${taskId}/submissions/${submissionId}`, input);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[reviewCompanyTaskSubmissionBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to review task submission.',
+    };
+  }
+};
+
+// 4. Company Milestones
+export const fetchCompanyMilestonesBackend = async (
+  filters?: { assignmentId?: string; status?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/milestones', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyMilestonesBackend] Error:', err);
+    return [];
+  }
+};
+
+export const verifyCompanyMilestoneBackend = async (
+  milestoneId: string,
+  input: { status: 'verified' | 'correction_required'; comments?: string }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.post<any>(`/milestones/${milestoneId}/verify`, input);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[verifyCompanyMilestoneBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to verify milestone.',
+    };
+  }
+};
+
+// 5. Company Certificates
+export const fetchCompanyCertificatesBackend = async (): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/certificates');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyCertificatesBackend] Error:', err);
+    return [];
+  }
+};
+
+export const issueCompanyCertificateBackend = async (
+  input: { assignmentId: string; grade?: string; remarks?: string; certificatePdfUrl?: string }
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/certificates', input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[issueCompanyCertificateBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to issue certificate.',
+    };
+  }
+};
+
+export const revokeCompanyCertificateBackend = async (
+  id: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.post<any>(`/certificates/${id}/revoke`, { reason });
+    return { success: true };
+  } catch (err: any) {
+    console.error('[revokeCompanyCertificateBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to revoke certificate.',
+    };
+  }
+};
+
+// 6. Company PPO Offers
+export const fetchCompanyPPOsBackend = async (): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/ppo-offers');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyPPOsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const createCompanyPPOBackend = async (
+  input: {
+    assignmentId: string;
+    studentId?: string;
+    positionTitle?: string;
+    salaryPackage?: string;
+    joiningDate?: string;
+    location?: string;
+    bondTerms?: string;
+    offerLetterUrl?: string;
+    status?: string;
+    ctcAnnualLpa?: number;
+    compensationDetails?: any;
+    termsConditions?: string;
+    offerValidUntil?: string;
+    remarks?: string;
+    [key: string]: any;
+  }
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/ppo-offers', input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[createCompanyPPOBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to create PPO offer.',
+    };
+  }
+};
+
+export const updateCompanyPPOBackend = async (
+  id: string,
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/ppo-offers/${id}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[updateCompanyPPOBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update PPO offer.',
+    };
+  }
+};
+
+export const deleteCompanyPPOBackend = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.delete<any>(`/ppo-offers/${id}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[deleteCompanyPPOBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to delete PPO offer.',
+    };
+  }
+};
+
+// 7. Company Evaluations
+export const fetchCompanyEvaluationsBackend = async (
+  assignmentId?: string
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/evaluations', {
+      params: assignmentId ? { assignmentId } : undefined,
+    });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyEvaluationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const createCompanyEvaluationBackend = async (
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/evaluations', input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[createCompanyEvaluationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to create evaluation.',
+    };
+  }
+};
+
+export const updateCompanyEvaluationBackend = async (
+  id: string,
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/evaluations/${id}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[updateCompanyEvaluationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update evaluation.',
+    };
+  }
+};
+
+// 8. Company Notifications
+export const fetchCompanyNotificationsBackend = async (): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/notifications');
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyNotificationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const markCompanyNotificationReadBackend = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch<any>(`/notifications/${id}/read`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[markCompanyNotificationReadBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to mark notification read.',
+    };
+  }
+};
+
+export const markCompanyNotificationUnreadBackend = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch<any>(`/notifications/${id}/unread`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[markCompanyNotificationUnreadBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to mark notification unread.',
+    };
+  }
+};
+
+export const markAllCompanyNotificationsReadBackend = async (): Promise<{
+  success: boolean;
+  error?: string;
+}> => {
+  try {
+    await apiClient.patch<any>('/notifications/mark-all-read');
+    return { success: true };
+  } catch (err: any) {
+    console.error('[markAllCompanyNotificationsReadBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to mark all read.',
+    };
+  }
+};
+
+export const deleteCompanyNotificationBackend = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.delete<any>(`/notifications/${id}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[deleteCompanyNotificationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to delete notification.',
+    };
+  }
+};
+
+// 9. Company Attendance Review
+export const fetchCompanyAttendanceBackend = async (
+  filters?: { assignmentId?: string; startDate?: string; endDate?: string; status?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/attendance', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyAttendanceBackend] Error:', err);
+    return [];
+  }
+};
+
+export const updateCompanyAttendanceRecordBackend = async (
+  id: string,
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/attendance/${id}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[updateCompanyAttendanceRecordBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update attendance record.',
+    };
+  }
+};
+
+// 10. Company Weekly Reports Review
+export const fetchCompanyWeeklyReportsBackend = async (
+  filters?: { assignmentId?: string; weekStartDate?: string; weekEndDate?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/weekly-reports', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchCompanyWeeklyReportsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const reviewCompanyWeeklyReportBackend = async (
+  id: string,
+  input: { feedback: string; rating?: number }
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/weekly-reports/${id}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[reviewCompanyWeeklyReportBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to review weekly report.',
+    };
+  }
+};
+
+export const fetchCompanyInternsBackend = fetchCompanyActiveInternsBackend;
+export const updateCompanyTaskStatusBackend = updateStudentTaskStatusBackend;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mentor Portal API Services (Slice 23)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const fetchMentorMilestonesBackend = async (
+  filters?: { studentId?: string; status?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/milestones', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchMentorMilestonesBackend] Error:', err);
+    return [];
+  }
+};
+
+export const fetchMentorEvaluationsBackend = async (
+  filters?: { studentId?: string; status?: string }
+): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/evaluations', { params: filters });
+    const items = res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchMentorEvaluationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const createMentorEvaluationBackend = async (
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/evaluations', input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[createMentorEvaluationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to submit evaluation.',
+    };
+  }
+};
+
+export const updateMentorEvaluationBackend = async (
+  id: string,
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> => {
+  try {
+    const res = await apiClient.patch<any>(`/evaluations/${id}`, input);
+    return { success: true, data: res.data?.data || res.data };
+  } catch (err: any) {
+    console.error('[updateMentorEvaluationBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to update evaluation.',
+    };
+  }
+};
+
+export const fetchMentorNotificationsBackend = async (): Promise<any[]> => {
+  try {
+    const res = await apiClient.get<any>('/notifications');
+    const items = res.data?.data?.notifications || res.data?.notifications || res.data?.data || res.data || [];
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error('[fetchMentorNotificationsBackend] Error:', err);
+    return [];
+  }
+};
+
+export const markMentorNotificationReadBackend = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch<any>(`/notifications/${id}/read`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[markMentorNotificationReadBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to mark notification as read.',
+    };
+  }
+};
+
+export const markAllMentorNotificationsReadBackend = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.patch<any>('/notifications/read-all');
+    return { success: true };
+  } catch (err: any) {
+    console.error('[markAllMentorNotificationsReadBackend] Error:', err);
+    return {
+      success: false,
+      error: err.response?.data?.message || err.message || 'Failed to mark all notifications as read.',
+    };
   }
 };

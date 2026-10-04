@@ -1,48 +1,70 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Button, Input } from '@/components';
-import { CheckCircle2, XCircle, Search, Award, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, XCircle, Search, Award, ShieldCheck, AlertCircle } from 'lucide-react';
 import {
-  mockCompanyPPOs,
-  mockFacultyStudents,
-  mockCompanyInternships,
-  setMockCompanyPPOs,
-  type CompanyPPOData,
-} from '@/features/faculty/mockData';
+  fetchPPOOffersBackend,
+  updatePPOOfferBackend,
+  type AdminPPORecord,
+} from '@/services/api/backendService';
 
 export const AdminPPOs: React.FC = () => {
-  const [ppos, setPpos] = useState<CompanyPPOData[]>(mockCompanyPPOs);
+  const [ppos, setPpos] = useState<AdminPPORecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
 
-  const fullPpoList = ppos.map((ppo) => {
-    const student = mockFacultyStudents.find((s) => s.id === ppo.internId);
-    const internship = mockCompanyInternships.find((i) => i.id === ppo.internshipId);
-    return {
-      ...ppo,
-      studentName: student?.studentName || 'Sarah Smith',
-      department: student?.department || 'CSE',
-      role: ppo.jobRole || internship?.title || 'Junior Developer',
-      ctc: ppo.ctc || '₹12,00,000 LPA',
-      company: internship?.domain || 'TechCorp Solutions',
-    };
-  });
+  const loadPPOs = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchPPOOffersBackend();
+      setPpos(data);
+    } catch (err: any) {
+      console.error('[AdminPPOs] Error loading PPOs:', err);
+      setError('Failed to load PPO offers from server.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredPpos = fullPpoList.filter(
+  useEffect(() => {
+    loadPPOs();
+  }, []);
+
+  const filteredPpos = ppos.filter(
     (p) =>
       p.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.company.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleTpoApprove = (ppoId: string) => {
-    const updated = ppos.map((p) => (p.id === ppoId ? { ...p, status: 'Offered' as const } : p));
-    setPpos(updated);
-    setMockCompanyPPOs(updated);
+  const handleTpoApprove = async (ppoId: string) => {
+    try {
+      setActionId(ppoId);
+      const res = await updatePPOOfferBackend(ppoId, { adminApprovalStatus: 'approved', status: 'approved' });
+      if (res.success) {
+        await loadPPOs();
+      } else {
+        alert(res.error || 'Failed to approve PPO.');
+      }
+    } finally {
+      setActionId(null);
+    }
   };
 
-  const handleTpoReject = (ppoId: string) => {
-    const updated = ppos.map((p) => (p.id === ppoId ? { ...p, status: 'Not Converted' as const } : p));
-    setPpos(updated);
-    setMockCompanyPPOs(updated);
+  const handleTpoReject = async (ppoId: string) => {
+    try {
+      setActionId(ppoId);
+      const res = await updatePPOOfferBackend(ppoId, { adminApprovalStatus: 'rejected', status: 'rejected' });
+      if (res.success) {
+        await loadPPOs();
+      } else {
+        alert(res.error || 'Failed to reject PPO.');
+      }
+    } finally {
+      setActionId(null);
+    }
   };
 
   return (
@@ -63,68 +85,96 @@ export const AdminPPOs: React.FC = () => {
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3 font-semibold">Student Name</th>
-                <th className="p-3 font-semibold">Department</th>
-                <th className="p-3 font-semibold">Offer Role & CTC</th>
-                <th className="p-3 font-semibold">Company</th>
-                <th className="p-3 font-semibold">Status</th>
-                <th className="p-3 font-semibold text-right">TPO Verification</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredPpos.map((ppo) => (
-                <tr key={ppo.id} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>{ppo.studentName}</span>
-                  </td>
-                  <td className="p-3">
-                    <Badge variant="sky">{ppo.department}</Badge>
-                  </td>
-                  <td className="p-3 text-slate-700">
-                    <span className="font-semibold block">{ppo.role}</span>
-                    <span className="text-[10px] text-emerald-600 font-bold">{ppo.ctc}</span>
-                  </td>
-                  <td className="p-3 text-slate-600">{ppo.company}</td>
-                  <td className="p-3">
-                    <Badge variant={ppo.status === 'Offered' ? 'emerald' : ppo.status === 'Not Converted' ? 'rose' : 'amber'}>
-                      <ShieldCheck className="w-3 h-3 mr-1 inline" /> {ppo.status}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {ppo.status !== 'Offered' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-emerald-600 hover:bg-emerald-50 text-[11px] p-1.5"
-                          onClick={() => handleTpoApprove(ppo.id)}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve PPO
-                        </Button>
-                      )}
-                      {ppo.status !== 'Not Converted' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-rose-600 hover:bg-rose-50 text-[11px] p-1.5"
-                          onClick={() => handleTpoReject(ppo.id)}
-                        >
-                          <XCircle className="w-3.5 h-3.5 mr-1" /> Reject PPO
-                        </Button>
-                      )}
-                    </div>
-                  </td>
+        {error ? (
+          <div className="py-12 text-center text-rose-500">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <p className="font-semibold">{error}</p>
+          </div>
+        ) : loading ? (
+          <div className="py-12 text-center text-slate-400">
+            <Award className="w-8 h-8 mx-auto mb-2 animate-pulse text-indigo-400" />
+            <p>Loading Pre-Placement Offers...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                  <th className="p-3 font-semibold">Student Name</th>
+                  <th className="p-3 font-semibold">Department</th>
+                  <th className="p-3 font-semibold">Offer Role & CTC</th>
+                  <th className="p-3 font-semibold">Company</th>
+                  <th className="p-3 font-semibold">Status</th>
+                  <th className="p-3 font-semibold text-right">TPO Verification</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredPpos.length > 0 ? (
+                  filteredPpos.map((ppo) => {
+                    const isApproved = ppo.adminApprovalStatus === 'approved' || ppo.status.toLowerCase() === 'offered' || ppo.status.toLowerCase() === 'approved';
+                    const isRejected = ppo.adminApprovalStatus === 'rejected' || ppo.status.toLowerCase() === 'rejected' || ppo.status.toLowerCase() === 'not converted';
+
+                    return (
+                      <tr key={ppo.id} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                          <Award className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <span>{ppo.studentName}</span>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="sky">{ppo.department}</Badge>
+                        </td>
+                        <td className="p-3 text-slate-700">
+                          <span className="font-semibold block">{ppo.role}</span>
+                          <span className="text-[10px] text-emerald-600 font-bold">{ppo.ctc}</span>
+                        </td>
+                        <td className="p-3 text-slate-600">{ppo.company}</td>
+                        <td className="p-3">
+                          <Badge variant={isApproved ? 'emerald' : isRejected ? 'rose' : 'amber'}>
+                            <ShieldCheck className="w-3 h-3 mr-1 inline" /> {ppo.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {!isApproved && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={actionId === ppo.id}
+                                className="text-emerald-600 hover:bg-emerald-50 text-[11px] p-1.5"
+                                onClick={() => handleTpoApprove(ppo.id)}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve PPO
+                              </Button>
+                            )}
+                            {!isRejected && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={actionId === ppo.id}
+                                className="text-rose-600 hover:bg-rose-50 text-[11px] p-1.5"
+                                onClick={() => handleTpoReject(ppo.id)}
+                              >
+                                <XCircle className="w-3.5 h-3.5 mr-1" /> Reject PPO
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                      No Pre-Placement Offers found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
 };
+

@@ -1,6 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, Card, Badge, ProgressBar, StatCard, EmptyState } from '@/components';
-import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
 import {
   initialMockMilestones,
   initialMockEvaluations,
@@ -12,16 +11,115 @@ import {
 } from './data/mockMilestones';
 import { Compass, CheckCircle2, Clock, Calendar, Award, UserCheck, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  fetchActiveStudentInternshipBackend,
+  fetchStudentMilestonesBackend,
+  fetchStudentEvaluationsBackend,
+  type ActiveStudentInternshipRecord,
+} from '@/services/api/backendService';
 
 export const MilestonesPage: React.FC = () => {
-  const activeInternship = mockActiveInternshipData;
-  const [milestones] = useState<MilestoneRecord[]>(initialMockMilestones);
-  const [evaluations] = useState<EvaluationRecord[]>(initialMockEvaluations);
+  const [activeInternship, setActiveInternship] = useState<ActiveStudentInternshipRecord | null>(null);
+  const [milestones, setMilestones] = useState<MilestoneRecord[]>(initialMockMilestones);
+  const [evaluations, setEvaluations] = useState<EvaluationRecord[]>(initialMockEvaluations);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadMilestoneData = async () => {
+    try {
+      const [act, rawMilestones, rawEvaluations] = await Promise.all([
+        fetchActiveStudentInternshipBackend(),
+        fetchStudentMilestonesBackend(),
+        fetchStudentEvaluationsBackend(),
+      ]);
+
+      if (act) {
+        setActiveInternship(act);
+      }
+
+      if (rawMilestones && rawMilestones.length > 0) {
+        const mapped: MilestoneRecord[] = rawMilestones.map((m, idx) => ({
+          id: m.id,
+          title: m.title,
+          description: m.description || '',
+          phase: `Phase ${idx + 1}`,
+          status:
+            m.status === 'completed'
+              ? 'completed'
+              : m.status === 'in_progress'
+              ? 'current'
+              : 'upcoming',
+          startDate: act?.startDate || '2026-06-01',
+          dueDate: m.dueDate || '2026-08-31',
+          completedDate: m.completedAt?.slice(0, 10),
+          totalTasks: 4,
+          completedTasks: m.status === 'completed' ? 4 : m.status === 'in_progress' ? 2 : 0,
+          mentorName: act?.mentorName || 'Host Mentor',
+        }));
+        setMilestones(mapped);
+      } else if (!act) {
+        setMilestones([]);
+      }
+
+      if (rawEvaluations && rawEvaluations.length > 0) {
+        const mappedEvals: EvaluationRecord[] = rawEvaluations.map((e) => ({
+          id: e.id,
+          title: 'Internship Performance Review',
+          type: 'Mid-Term Review',
+          status: 'completed',
+          evaluationDate: e.createdAt ? e.createdAt.slice(0, 10) : undefined,
+          evaluatorName: act?.mentorName || 'Host Mentor',
+          evaluatorRole: act?.mentorRole || 'Technical Lead',
+          technicalSkills: Math.min(10, Math.round(Number(e.rating || 4) * 2)),
+          problemSolving: Math.min(10, Math.round(Number(e.rating || 4) * 2)),
+          communication: Math.min(10, Math.round(Number(e.rating || 4) * 2)),
+          professionalism: Math.min(10, Math.round(Number(e.rating || 4) * 2)),
+          feedback: e.feedback || 'Consistent performance across sprint deliverables.',
+          strengths: ['API integration', 'Problem solving', 'Timely submissions'],
+          areasForImprovement: ['Deeper unit test coverage'],
+        }));
+        setEvaluations(mappedEvals);
+      } else if (!act) {
+        setEvaluations([]);
+      }
+    } catch (err) {
+      console.error('[MilestonesPage] Error loading milestone data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMilestoneData();
+
+    const handleFocus = () => {
+      loadMilestoneData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   const overallMetrics = useMemo(() => calculateOverallProgress(milestones), [milestones]);
 
   const currentMilestone = overallMetrics.currentMilestone;
   const upcomingMilestones = useMemo(() => milestones.filter((m) => m.status === 'upcoming'), [milestones]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Milestones & Evaluations"
+          description="Track your internship progress, milestones, and performance evaluations."
+        />
+        <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-medium">Loading milestone progress...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeInternship) {
     return (
@@ -59,7 +157,7 @@ export const MilestonesPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="text-base font-bold text-slate-900">{activeInternship.internshipTitle}</h3>
+              <h3 className="text-base font-bold text-slate-900">{activeInternship.title || (activeInternship as any).internshipTitle}</h3>
               <Badge variant="emerald">Active Enrollment</Badge>
             </div>
             <p className="text-slate-600 font-semibold mt-0.5">

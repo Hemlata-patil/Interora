@@ -1,14 +1,60 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button } from '@/components';
 import { mockInternships } from './data/mockInternships';
-import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, Building2, CheckCircle2, Sparkles } from 'lucide-react';
+import { fetchInternshipPostingByIdBackend } from '@/services/api/backendService';
+import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, Building2, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
 
 export const InternshipDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const internship = mockInternships.find((item) => item.id === id);
+  const [internship, setInternship] = useState<any | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        const remote = await fetchInternshipPostingByIdBackend(id);
+        if (remote) {
+          setInternship(remote);
+          return;
+        }
+      }
+      const fallback = mockInternships.find((item) => item.id === id);
+      setInternship(fallback || null);
+    } catch (err) {
+      console.error('[InternshipDetailsPage] Error loading posting:', err);
+      const fallback = mockInternships.find((item) => item.id === id);
+      setInternship(fallback || null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Loading Opportunity..." description="Fetching internship details from backend..." />
+        <Card>
+          <div className="p-12 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+            <p className="text-xs text-slate-500 mt-2">Loading posting information...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!internship) {
     return (
@@ -62,7 +108,7 @@ export const InternshipDetailsPage: React.FC = () => {
               <div className="pt-2">
                 <h4 className="font-bold text-slate-900 text-sm mb-2">Key Responsibilities</h4>
                 <ul className="space-y-1.5 list-disc list-inside text-slate-600">
-                  {internship.responsibilities.map((resp, idx) => (
+                  {internship.responsibilities.map((resp: string, idx: number) => (
                     <li key={idx}>{resp}</li>
                   ))}
                 </ul>
@@ -71,7 +117,7 @@ export const InternshipDetailsPage: React.FC = () => {
               <div className="pt-2">
                 <h4 className="font-bold text-slate-900 text-sm mb-2">Requirements & Qualifications</h4>
                 <ul className="space-y-1.5 list-disc list-inside text-slate-600">
-                  {internship.requirements.map((req, idx) => (
+                  {internship.requirements.map((req: string, idx: number) => (
                     <li key={idx}>{req}</li>
                   ))}
                 </ul>
@@ -80,7 +126,7 @@ export const InternshipDetailsPage: React.FC = () => {
               <div className="pt-2">
                 <h4 className="font-bold text-slate-900 text-sm mb-2">What You Will Learn</h4>
                 <ul className="space-y-1.5 list-disc list-inside text-slate-600">
-                  {internship.learningOutcomes.map((out, idx) => (
+                  {internship.learningOutcomes.map((out: string, idx: number) => (
                     <li key={idx}>{out}</li>
                   ))}
                 </ul>
@@ -91,7 +137,7 @@ export const InternshipDetailsPage: React.FC = () => {
           {/* Required Skills Card */}
           <Card title="Required Skills & Competencies">
             <div className="flex flex-wrap gap-2">
-              {internship.skills.map((skill, idx) => (
+              {internship.skills.map((skill: string, idx: number) => (
                 <Badge key={idx} variant="indigo" className="text-xs px-3 py-1 font-medium">
                   {skill}
                 </Badge>

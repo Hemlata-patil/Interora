@@ -14,6 +14,7 @@ import {
 export const MarketplacePage: React.FC = () => {
   const [internships, setInternships] = useState<InternshipPostingRecord[]>([]);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [alertMsg, setAlertMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filters, setFilters] = useState<InternshipFilterState>({
@@ -25,12 +26,18 @@ export const MarketplacePage: React.FC = () => {
   });
 
   const loadData = async () => {
-    const remoteListings = await fetchInternshipPostingsBackend();
-    setInternships(remoteListings);
-
-    const studentApps = await fetchStudentApplicationsBackend();
-    const appliedSet = new Set(studentApps.map((a) => a.internshipId));
-    setAppliedIds(appliedSet);
+    setLoading(true);
+    try {
+      const [remoteListings, studentApps] = await Promise.all([
+        fetchInternshipPostingsBackend(),
+        fetchStudentApplicationsBackend(),
+      ]);
+      setInternships(remoteListings);
+      const appliedSet = new Set(studentApps.map((a) => a.internshipId));
+      setAppliedIds(appliedSet);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -46,6 +53,12 @@ export const MarketplacePage: React.FC = () => {
     }
     setAlertMsg({ type: 'success', text: 'Application submitted successfully!' });
     setAppliedIds((prev) => new Set(prev).add(internshipId));
+    try {
+      const studentApps = await fetchStudentApplicationsBackend();
+      setAppliedIds(new Set(studentApps.map((a) => a.internshipId)));
+    } catch {
+      // Optimistic set already updated
+    }
   };
 
   const handleResetFilters = () => {
@@ -101,7 +114,12 @@ export const MarketplacePage: React.FC = () => {
       </div>
 
       {/* Internship Grid */}
-      {filteredInternships.length > 0 ? (
+      {loading ? (
+        <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-medium">Loading available internships...</span>
+        </div>
+      ) : filteredInternships.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredInternships.map((internship) => (
             <InternshipCard

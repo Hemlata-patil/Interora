@@ -1,23 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader, Card, Button, Badge, Input } from '@/components';
-import { Users, Mail, Phone, Briefcase, Plus, Search, Edit, X } from 'lucide-react';
+import { Users, Mail, Phone, Briefcase, Plus, Search, Edit, X, Loader2 } from 'lucide-react';
 import { 
-  mockCompanyMentors, 
-  setMockCompanyMentors,
-  mockCompanyInternships,
-  setMockCompanyInternships
-} from '../faculty/mockData';
-import type { CompanyMentorData } from '../faculty/mockData';
+  fetchCompanyMentorsBackend, 
+  createCompanyMentorBackend, 
+  assignCompanyMentorBackend,
+  fetchInternshipPostingsBackend,
+  type CompanyMentorBackendRecord 
+} from '@/services/api/backendService';
+import { mockCompanyMentors, mockCompanyInternships } from '../faculty/mockData';
 
 export const MentorManagement: React.FC = () => {
-  const [mentors, setMentors] = useState<CompanyMentorData[]>(mockCompanyMentors);
-  const [internships, setInternships] = useState(mockCompanyInternships);
+  const [mentors, setMentors] = useState<CompanyMentorBackendRecord[]>([]);
+  const [internships, setInternships] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals state
   const [isAddMentorOpen, setIsAddMentorOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [selectedMentor, setSelectedMentor] = useState<CompanyMentorData | null>(null);
+  const [selectedMentor, setSelectedMentor] = useState<CompanyMentorBackendRecord | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // New mentor form state
   const [newMentor, setNewMentor] = useState({
@@ -31,61 +35,126 @@ export const MentorManagement: React.FC = () => {
   // Assign state
   const [selectedInternshipId, setSelectedInternshipId] = useState<string>('');
 
-  const assignedMentorsCount = mentors.filter(m => internships.some(i => i.mentorId === m.id)).length;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [mentorList, postingList] = await Promise.all([
+        fetchCompanyMentorsBackend(),
+        fetchInternshipPostingsBackend(),
+      ]);
+
+      if (mentorList && mentorList.length > 0) {
+        setMentors(mentorList);
+      } else {
+        // Fallback to mock data if empty initially
+        const mappedMock = mockCompanyMentors.map(m => ({
+          ...m,
+          expertiseAreas: [],
+          assignedInternships: []
+        }));
+        setMentors(mappedMock as any);
+      }
+
+      if (postingList && postingList.length > 0) {
+        setInternships(postingList);
+      } else {
+        setInternships(mockCompanyInternships);
+      }
+    } catch (err: any) {
+      console.error('[MentorManagement] Error loading data:', err);
+      setError('Failed to load mentors.');
+      setMentors(mockCompanyMentors as any);
+      setInternships(mockCompanyInternships);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const assignedMentorsCount = useMemo(() => {
+    return mentors.filter(m => {
+      if (m.assignedInternships && m.assignedInternships.length > 0) return true;
+      if (m.assignedInternship) return true;
+      return internships.some(i => i.mentorId === m.id);
+    }).length;
+  }, [mentors, internships]);
+
   const unassignedMentorsCount = mentors.length - assignedMentorsCount;
 
-  const filteredMentors = mentors.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    m.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMentors = useMemo(() => {
+    return mentors.filter(m => 
+      m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      m.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.department && m.department.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [mentors, searchTerm]);
 
-  const handleAddMentor = () => {
-    const nextId = `MNT-00${mentors.length + 1}`;
-    const mentorToAdd: CompanyMentorData = {
-      id: nextId,
-      name: newMentor.name,
-      email: newMentor.email,
-      phone: newMentor.phone,
-      department: newMentor.department,
-      designation: newMentor.designation,
-      status: 'Active'
-    };
+  const handleAddMentor = async () => {
+    if (!newMentor.name || !newMentor.email || !newMentor.designation) return;
+    setActionLoading(true);
+    try {
+      const res = await createCompanyMentorBackend({
+        name: newMentor.name,
+        email: newMentor.email,
+        phone: newMentor.phone || undefined,
+        department: newMentor.department || undefined,
+        designation: newMentor.designation,
+      });
 
-    const updatedMentors = [...mentors, mentorToAdd];
-    setMentors(updatedMentors);
-    setMockCompanyMentors(updatedMentors);
-    setIsAddMentorOpen(false);
-    setNewMentor({ name: '', email: '', phone: '', department: '', designation: '' });
+      if (res.success && res.data) {
+        setMentors(prev => [res.data!, ...prev]);
+        setIsAddMentorOpen(false);
+        setNewMentor({ name: '', email: '', phone: '', department: '', designation: '' });
+      } else {
+        alert(res.error || 'Failed to add mentor.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error adding mentor.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const openAssignModal = (mentor: CompanyMentorData) => {
+  const openAssignModal = (mentor: CompanyMentorBackendRecord) => {
     setSelectedMentor(mentor);
-    // Find if already assigned
-    const currentAssignment = internships.find(i => i.mentorId === mentor.id);
-    setSelectedInternshipId(currentAssignment ? currentAssignment.id : '');
+    // Find current assigned internship
+    let currId = '';
+    if (mentor.assignedInternships && mentor.assignedInternships.length > 0) {
+      currId = mentor.assignedInternships[0].internshipId;
+    } else if (mentor.assignedInternship) {
+      currId = mentor.assignedInternship.id;
+    } else {
+      const current = internships.find(i => i.mentorId === mentor.id);
+      currId = current ? current.id : '';
+    }
+    setSelectedInternshipId(currId);
     setIsAssignOpen(true);
   };
 
-  const handleAssignInternship = () => {
+  const handleAssignInternship = async () => {
     if (!selectedMentor) return;
-
-    const updatedInternships = internships.map(i => {
-      // If this internship is the newly selected one, assign the mentor
-      if (i.id === selectedInternshipId) {
-        return { ...i, mentorId: selectedMentor.id };
+    setActionLoading(true);
+    try {
+      const res = await assignCompanyMentorBackend(
+        selectedMentor.id,
+        selectedInternshipId || null
+      );
+      if (res.success) {
+        await loadData();
+        setIsAssignOpen(false);
+        setSelectedMentor(null);
+      } else {
+        alert(res.error || 'Failed to assign mentor.');
       }
-      // If this internship was previously assigned to this mentor but isn't anymore, clear it
-      if (i.mentorId === selectedMentor.id && i.id !== selectedInternshipId) {
-        return { ...i, mentorId: undefined };
-      }
-      return i;
-    });
-
-    setInternships(updatedInternships);
-    setMockCompanyInternships(updatedInternships);
-    setIsAssignOpen(false);
-    setSelectedMentor(null);
+    } catch (err: any) {
+      alert(err.message || 'Error assigning mentor.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -143,77 +212,90 @@ export const MentorManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-white border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-slate-600">Mentor</th>
-                <th className="px-4 py-3 font-semibold text-slate-600">Contact</th>
-                <th className="px-4 py-3 font-semibold text-slate-600">Department</th>
-                <th className="px-4 py-3 font-semibold text-slate-600">Assigned Internship</th>
-                <th className="px-4 py-3 font-semibold text-slate-600">Status</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredMentors.map(mentor => {
-                const assignedInternship = internships.find(i => i.mentorId === mentor.id);
-                
-                return (
-                  <tr key={mentor.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          {mentor.name.charAt(0)}
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading mentors...
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-rose-600">{error}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-white border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-600">Mentor</th>
+                  <th className="px-4 py-3 font-semibold text-slate-600">Contact</th>
+                  <th className="px-4 py-3 font-semibold text-slate-600">Department</th>
+                  <th className="px-4 py-3 font-semibold text-slate-600">Assigned Internship</th>
+                  <th className="px-4 py-3 font-semibold text-slate-600">Status</th>
+                  <th className="px-4 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredMentors.map(mentor => {
+                  const assignedTitle = mentor.assignedInternships && mentor.assignedInternships.length > 0
+                    ? mentor.assignedInternships[0].title
+                    : mentor.assignedInternship?.title || 
+                      internships.find(i => i.mentorId === mentor.id)?.title;
+                  
+                  const internsCount = mentor.assignedInternships?.length ?? (mentor.assignedInternsCount || 0);
+
+                  return (
+                    <tr key={mentor.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            {mentor.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900">{mentor.name}</p>
+                            <p className="text-xs text-slate-500 font-mono truncate max-w-[140px]">{mentor.id}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-slate-900">{mentor.name}</p>
-                          <p className="text-xs text-slate-500 font-mono">{mentor.id}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1 text-slate-600">
+                          <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-slate-400" /> {mentor.email}</div>
+                          {mentor.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" /> {mentor.phone}</div>}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1 text-slate-600">
-                        <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-slate-400" /> {mentor.email}</div>
-                        {mentor.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" /> {mentor.phone}</div>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-slate-900">{mentor.designation}</p>
-                      <p className="text-xs text-slate-500">{mentor.department}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      {assignedInternship ? (
-                        <div className="flex flex-col">
-                          <span className="font-medium text-indigo-700">{assignedInternship.title}</span>
-                          <span className="text-xs text-slate-500">Selected Interns: {assignedInternship.applicationCount > 0 ? Math.floor(assignedInternship.applicationCount / 3) : 0}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-slate-900">{mentor.designation}</p>
+                        <p className="text-xs text-slate-500">{mentor.department}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {assignedTitle ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium text-indigo-700">{assignedTitle}</span>
+                            <span className="text-xs text-slate-500">Assigned Interns: {internsCount}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-xs">No internship assigned</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={mentor.status === 'Active' ? 'emerald' : 'neutral'}>{mentor.status}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => openAssignModal(mentor)}>Assign</Button>
+                          <Button variant="ghost" size="sm" className="px-2"><Edit className="w-4 h-4 text-slate-400" /></Button>
                         </div>
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">No internship assigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={mentor.status === 'Active' ? 'emerald' : 'neutral'}>{mentor.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openAssignModal(mentor)}>Assign</Button>
-                        <Button variant="ghost" size="sm" className="px-2"><Edit className="w-4 h-4 text-slate-400" /></Button>
-                      </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredMentors.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      No mentors found matching your search.
                     </td>
                   </tr>
-                );
-              })}
-              {filteredMentors.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                    No mentors found matching your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Add Mentor Modal */}
@@ -229,7 +311,7 @@ export const MentorManagement: React.FC = () => {
             
             <div className="p-5 space-y-4 overflow-y-auto">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Full Name</label>
+                <label className="text-sm font-medium text-slate-700">Full Name *</label>
                 <Input 
                   placeholder="e.g. Neha Sharma" 
                   value={newMentor.name}
@@ -238,7 +320,7 @@ export const MentorManagement: React.FC = () => {
               </div>
               
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Email Address</label>
+                <label className="text-sm font-medium text-slate-700">Email Address *</label>
                 <Input 
                   placeholder="e.g. neha@company.com" 
                   type="email"
@@ -266,7 +348,7 @@ export const MentorManagement: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Designation</label>
+                  <label className="text-sm font-medium text-slate-700">Designation *</label>
                   <Input 
                     placeholder="e.g. UX Lead" 
                     value={newMentor.designation}
@@ -278,7 +360,10 @@ export const MentorManagement: React.FC = () => {
             
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
               <Button variant="outline" onClick={() => setIsAddMentorOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddMentor} disabled={!newMentor.name || !newMentor.email}>Save Mentor</Button>
+              <Button onClick={handleAddMentor} disabled={!newMentor.name || !newMentor.email || !newMentor.designation || actionLoading}>
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Save Mentor
+              </Button>
             </div>
           </Card>
         </div>
@@ -298,7 +383,7 @@ export const MentorManagement: React.FC = () => {
             <div className="p-5 space-y-4">
               <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
                 <p className="text-xs text-indigo-600 uppercase tracking-wider mb-1">Mentor</p>
-                <p className="font-semibold text-indigo-900">{selectedMentor.name} <span className="font-normal text-indigo-700">({selectedMentor.id})</span></p>
+                <p className="font-semibold text-indigo-900">{selectedMentor.name} <span className="font-normal text-indigo-700 font-mono text-xs">({selectedMentor.id.slice(0, 8)}...)</span></p>
               </div>
 
               <div className="space-y-1.5">
@@ -319,7 +404,10 @@ export const MentorManagement: React.FC = () => {
             
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
               <Button variant="outline" onClick={() => setIsAssignOpen(false)}>Cancel</Button>
-              <Button onClick={handleAssignInternship}>Save Assignment</Button>
+              <Button onClick={handleAssignInternship} disabled={actionLoading}>
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Save Assignment
+              </Button>
             </div>
           </Card>
         </div>

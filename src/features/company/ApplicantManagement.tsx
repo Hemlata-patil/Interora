@@ -4,9 +4,9 @@ import { Search, CheckCircle2, XCircle, Eye, Award } from 'lucide-react';
 import {
   fetchCompanyApplicantsBackend,
   updateApplicationStatusBackend,
+  getCurrentUserBackend,
   type StudentApplicationRecord,
 } from '@/services/api/backendService';
-import { supabase } from '@/services/supabase/supabaseClient';
 import { mockCompanyApplications } from '../faculty/mockData';
 
 export const ApplicantManagement: React.FC = () => {
@@ -20,15 +20,15 @@ export const ApplicantManagement: React.FC = () => {
 
   const loadApplicants = async () => {
     setLoading(true);
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const user = await getCurrentUserBackend();
 
-    if (userError || !userData?.user) {
-      console.error('[ApplicantManagement] Auth user error:', userError);
+    if (!user) {
+      console.error('[ApplicantManagement] Auth user error: not authenticated');
       setLoading(false);
       return;
     }
 
-    const companyId = userData.user.id;
+    const companyId = user.id;
     console.log('[ApplicantManagement] Authenticated company ID:', companyId);
 
     const remoteApps = await fetchCompanyApplicantsBackend(companyId);
@@ -40,14 +40,6 @@ export const ApplicantManagement: React.FC = () => {
 
   useEffect(() => {
     loadApplicants();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      loadApplicants();
-    });
-
-    return () => {
-      listener?.subscription.unsubscribe();
-    };
   }, []);
 
   const handleUpdateStatus = async (appId: string, newStatus: string) => {
@@ -74,19 +66,19 @@ export const ApplicantManagement: React.FC = () => {
       (a.studentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.internshipTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+    if (statusFilter !== 'all' && (a.status || '').toLowerCase() !== statusFilter.toLowerCase()) return false;
     return matchesSearch;
   });
 
   console.log('[ApplicantManagement] Filtered applicants for render:', filteredApplicants);
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Selected':
+    switch (status?.toLowerCase()) {
+      case 'selected':
         return <Badge variant="emerald">Selected</Badge>;
-      case 'Shortlisted':
+      case 'shortlisted':
         return <Badge variant="indigo">Shortlisted</Badge>;
-      case 'Rejected':
+      case 'rejected':
         return <Badge variant="rose">Rejected</Badge>;
       default:
         return <Badge variant="amber">Submitted</Badge>;
@@ -168,7 +160,7 @@ export const ApplicantManagement: React.FC = () => {
                         <Eye className="w-3.5 h-3.5 mr-1" /> Cover Letter
                       </Button>
 
-                      {app.status !== 'Shortlisted' && app.status !== 'Selected' && (
+                      {(app.status || '').toLowerCase() !== 'shortlisted' && (app.status || '').toLowerCase() !== 'selected' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -180,7 +172,7 @@ export const ApplicantManagement: React.FC = () => {
                         </Button>
                       )}
 
-                      {app.status !== 'Selected' && (
+                      {(app.status || '').toLowerCase() !== 'selected' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -192,7 +184,7 @@ export const ApplicantManagement: React.FC = () => {
                         </Button>
                       )}
 
-                      {app.status !== 'Rejected' && (
+                      {(app.status || '').toLowerCase() !== 'rejected' && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -240,26 +232,29 @@ export const ApplicantManagement: React.FC = () => {
             </div>
             
             {(() => {
-              // Find the mock application data to get the allocator score and faculty rating
+              // Find the mock application data or use database data for allocator score and faculty rating
               const mockData = mockCompanyApplications.find(a => 
                 (a.studentId === selectedApp.studentId && a.internshipId === selectedApp.internshipId) ||
                 a.id === selectedApp.id
               );
               
-              if (!mockData || (!mockData.allocatorMatchScore && !mockData.facultyRating)) return null;
+              const allocatorScore = selectedApp.allocatorMatchScore ?? mockData?.allocatorMatchScore;
+              const facultyRating = selectedApp.facultyRating ?? mockData?.facultyRating;
+
+              if (allocatorScore === undefined && facultyRating === undefined) return null;
               
               return (
                 <div className="flex flex-col sm:flex-row gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200 mt-2">
-                  {mockData.allocatorMatchScore !== undefined && (
+                  {allocatorScore !== undefined && (
                     <div className="flex-1">
                       <span className="text-slate-500 block text-[10px] uppercase font-semibold">AI Allocator Score</span>
-                      <span className="font-bold text-indigo-600 text-base">{mockData.allocatorMatchScore}%</span>
+                      <span className="font-bold text-indigo-600 text-base">{allocatorScore}%</span>
                     </div>
                   )}
-                  {mockData.facultyRating !== undefined && (
+                  {facultyRating !== undefined && (
                     <div className="flex-1">
                       <span className="text-slate-500 block text-[10px] uppercase font-semibold">Faculty Rating</span>
-                      <span className="font-bold text-amber-500 text-base">⭐ {mockData.facultyRating}/5</span>
+                      <span className="font-bold text-amber-500 text-base">⭐ {facultyRating}/5</span>
                     </div>
                   )}
                 </div>

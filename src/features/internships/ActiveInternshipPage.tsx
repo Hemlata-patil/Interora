@@ -1,70 +1,129 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, ProgressBar, Button, EmptyState } from '@/components';
-import { mockActiveInternshipData, type ActiveInternshipDetails } from './data/mockActiveInternship';
-import { initialMockTasks, initialMockWorkLogs } from '@/features/tasks/data/mockTasks';
-import { mockAttendanceHistory, calculateAttendanceMetrics } from '@/features/attendance/data/mockAttendance';
+import { type ActiveInternshipDetails } from './data/mockActiveInternship';
 import { Compass, Calendar, Clock, MapPin, UserCheck, Mail, ArrowRight, CheckCircle2, CheckSquare, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
-import { fetchActiveStudentInternshipBackend } from '@/services/api/backendService';
+import {
+  fetchActiveStudentInternshipBackend,
+  fetchStudentActiveInternshipMetricsBackend,
+  type ActiveInternshipMetrics,
+} from '@/services/api/backendService';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MIGRATION NOTE (Slice 10):
+// - `supabase` import REMOVED — no Supabase auth or table queries remain.
+// - Supabase Realtime subscription to 'student_applications' REMOVED.
+//   Data is now fetched once on mount via GET /api/assignments (Express JWT).
+// - `initialMockTasks` and `initialMockWorkLogs` REMOVED.
+//   Task counts and work-log totals now come from GET /api/tasks and
+//   GET /api/work-logs (both student-scoped by the backend JWT session).
+// - `mockAttendanceHistory` / `calculateAttendanceMetrics` REMOVED.
+//   Attendance percentage now comes from GET /api/attendance/summary/:assignmentId.
+// - journeyPhases, progressPercentage, nextMilestone, nextMilestoneDate
+//   remain partially static/derived because the PostgreSQL assignment schema
+//   does not yet model phase progression or milestone summary for students
+//   in a way that the existing backend exposes directly. These are
+//   documented as REMAINING PARTIAL STATIC DATA in the Slice 10 report.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_METRICS: ActiveInternshipMetrics = {
+  totalTasks: 0,
+  inProgressTasks: 0,
+  completedTasks: 0,
+  totalHoursLogged: 0,
+  currentWeekHours: 0,
+  attendancePercentage: 100,
+  attendanceHealthStatus: 'Excellent',
+};
 
 export const ActiveInternshipPage: React.FC = () => {
-  const [activeData, setActiveData] = useState<ActiveInternshipDetails | null>(mockActiveInternshipData);
+  const [activeData, setActiveData] = useState<ActiveInternshipDetails | null>(null);
+  const [metrics, setMetrics] = useState<ActiveInternshipMetrics>(DEFAULT_METRICS);
   const [loading, setLoading] = useState<boolean>(true);
 
   const loadActiveInternship = async () => {
-    const remoteRecord = await fetchActiveStudentInternshipBackend();
-    if (remoteRecord) {
-      const liveDetails: ActiveInternshipDetails = {
-        internshipId: remoteRecord.internshipId,
-        internshipTitle: remoteRecord.title,
-        companyName: remoteRecord.companyName,
-        location: remoteRecord.location,
-        workMode: 'Remote',
-        internshipType: 'Full-time',
-        duration: remoteRecord.duration,
-        startDate: remoteRecord.appliedAt ? remoteRecord.appliedAt.slice(0, 10) : '2026-08-01',
-        endDate: '2026-11-30',
-        mentorName: 'TPO Assigned Lead',
-        mentorRole: 'Technical Lead',
-        mentorEmail: 'mentor@interora.app',
-        status: 'Active',
-        progressPercentage: 75,
-        currentPhase: 'Phase 2: Project Development & Sprint Execution',
-        totalMilestones: 4,
-        completedMilestones: 2,
-        nextMilestone: 'Sprint Evaluation & Code Review',
-        nextMilestoneDate: '2026-08-31',
-        journeyPhases: [
-          { title: 'Phase 1: Onboarding & Setup', description: 'Access granted & dev environment verified.', status: 'completed' },
-          { title: 'Phase 2: Core Development', description: 'Core features and backend API integration.', status: 'current' },
-          { title: 'Phase 3: Final Project Review & PPO Evaluation', description: 'TPO & Company final evaluation.', status: 'upcoming' },
-        ],
-      };
-      setActiveData(liveDetails);
+    setLoading(true);
+    try {
+      // 1. Fetch assignment from Express backend (student-scoped by JWT cookie)
+      const remoteRecord = await fetchActiveStudentInternshipBackend();
+
+      if (remoteRecord) {
+        // 2. Map the Express assignment record to the existing UI type
+        const liveDetails: ActiveInternshipDetails = {
+          internshipId: remoteRecord.internshipId || remoteRecord.assignmentId,
+          internshipTitle: remoteRecord.title,
+          companyName: remoteRecord.companyName,
+          location: remoteRecord.location,
+          workMode:
+            remoteRecord.workMode === 'on_site'
+              ? 'On-site'
+              : remoteRecord.workMode === 'hybrid'
+              ? 'Hybrid'
+              : 'Remote',
+          internshipType: remoteRecord.internshipType === 'part_time' ? 'Part-time' : 'Full-time',
+          duration: remoteRecord.duration,
+          startDate: remoteRecord.startDate || remoteRecord.appliedAt?.slice(0, 10) || '2026-08-01',
+          endDate: remoteRecord.endDate || '2026-11-30',
+          mentorName: remoteRecord.mentorName,
+          mentorRole: remoteRecord.mentorRole,
+          mentorEmail: remoteRecord.mentorEmail,
+          status: 'Active',
+          progressPercentage: 75,
+          currentPhase: 'Phase 2: Project Development & Sprint Execution',
+          totalMilestones: 4,
+          completedMilestones: 2,
+          nextMilestone: 'Sprint Evaluation & Code Review',
+          nextMilestoneDate: '2026-08-31',
+          journeyPhases: [
+            { title: 'Phase 1: Onboarding & Setup', description: 'Access granted & dev environment verified.', status: 'completed' },
+            { title: 'Phase 2: Core Development', description: 'Core features and backend API integration.', status: 'current' },
+            { title: 'Phase 3: Final Project Review & PPO Evaluation', description: 'TPO & Company final evaluation.', status: 'upcoming' },
+          ],
+        };
+        setActiveData(liveDetails);
+
+        // 3. Concurrently fetch real task counts, work-log totals, attendance
+        //    summary — all scoped to the authenticated student by the backend.
+        const liveMetrics = await fetchStudentActiveInternshipMetricsBackend(
+          remoteRecord.assignmentId
+        );
+        setMetrics(liveMetrics);
+      } else {
+        // No active assignment found — render empty state
+        setActiveData(null);
+        setMetrics(DEFAULT_METRICS);
+      }
+    } catch (err) {
+      console.error('[ActiveInternshipPage] Load error:', err);
+      setActiveData(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Fetch on mount — no Supabase Realtime subscription.
+    // Data is authoritative from the PostgreSQL backend via JWT session.
     loadActiveInternship();
-
-    // Subscribe to Realtime postgres changes on student_applications table
-    const channel = supabase
-      .channel('active_internship_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_applications' },
-        () => {
-          loadActiveInternship();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
+  // ── Loading State ──────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="My Internship"
+          description="Track your current internship and stay updated on your progress."
+        />
+        <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-medium">Loading your internship details...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Empty State ────────────────────────────────────────────────────────────
   if (!activeData) {
     return (
       <div className="space-y-6">
@@ -88,14 +147,8 @@ export const ActiveInternshipPage: React.FC = () => {
     );
   }
 
-  const totalTasks = initialMockTasks.length;
-  const inProgressTasks = initialMockTasks.filter((t) => t.status === 'In Progress').length;
-  const completedTasks = initialMockTasks.filter((t) => t.status === 'Completed').length;
-
-  const totalHoursLogged = initialMockWorkLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
-  const currentWeekHours = initialMockWorkLogs.slice(0, 5).reduce((acc, curr) => acc + curr.hoursWorked, 0);
-
-  const attendanceMetrics = calculateAttendanceMetrics(mockAttendanceHistory);
+  // ── Metric aliases (from real backend data) ────────────────────────────────
+  const { totalTasks, inProgressTasks, completedTasks, totalHoursLogged, currentWeekHours, attendancePercentage, attendanceHealthStatus } = metrics;
 
   return (
     <div className="space-y-6">
@@ -148,7 +201,7 @@ export const ActiveInternshipPage: React.FC = () => {
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
           <div>
             <span className="text-slate-400 block text-[10px] uppercase font-semibold">ATTENDANCE RATE</span>
-            <span className="text-xl font-extrabold text-slate-800">{attendanceMetrics.attendancePercentage}%</span>
+            <span className="text-xl font-extrabold text-slate-800">{attendancePercentage}%</span>
             <span className="text-[10px] text-emerald-600 font-semibold block">Compliant</span>
           </div>
           <Calendar className="w-8 h-8 text-emerald-500 bg-emerald-50 p-1.5 rounded-lg" />
@@ -256,17 +309,17 @@ export const ActiveInternshipPage: React.FC = () => {
                   <Calendar className="w-4 h-4 text-emerald-600" />
                   <h4 className="font-bold text-slate-900 text-sm">Attendance</h4>
                 </div>
-                <Badge variant="emerald">{attendanceMetrics.attendancePercentage}%</Badge>
+                <Badge variant="emerald">{attendancePercentage}%</Badge>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
                   <span className="text-slate-400 block text-[10px]">ATTENDANCE %</span>
-                  <span className="text-base font-bold text-emerald-600">{attendanceMetrics.attendancePercentage}%</span>
+                  <span className="text-base font-bold text-emerald-600">{attendancePercentage}%</span>
                 </div>
                 <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg">
                   <span className="text-emerald-600 block text-[10px]">HEALTH</span>
-                  <span className="text-xs font-bold text-emerald-700 truncate block mt-0.5">{attendanceMetrics.healthStatus}</span>
+                  <span className="text-xs font-bold text-emerald-700 truncate block mt-0.5">{attendanceHealthStatus}</span>
                 </div>
               </div>
             </div>

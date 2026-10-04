@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   PageHeader, 
   StatCard, 
@@ -10,16 +10,129 @@ import {
   Select,
   EmptyState
 } from '@/components';
-import { mockFacultyStudents } from './mockData';
-import type { SharedStudentData, FacultyEvaluation } from './mockData';
-import { FileCheck, Star, Clock, CheckCircle2, FileSignature } from 'lucide-react';
+import { FileCheck, Star, Clock, CheckCircle2, FileSignature, Loader2, AlertCircle } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
+import {
+  fetchFacultyAssignedStudentsBackend,
+  fetchEvaluationsBackend,
+  createEvaluationBackend,
+  type FacultyAssignedStudentItem,
+  type EvaluationRecord,
+} from '@/services/api/backendService';
+
+export interface EvaluatedStudentItem {
+  id: string;
+  assignmentId?: string;
+  studentId: string;
+  studentName: string;
+  company: string;
+  role: string;
+  facultyEvaluation?: {
+    technicalSkills: number;
+    communication: number;
+    professionalism: number;
+    problemSolving: number;
+    overallRating: number;
+    writtenFeedback: string;
+    status: 'Pending' | 'Completed';
+    lastEvaluated?: string;
+  };
+}
 
 export const StudentEvaluations: React.FC = () => {
-  const [students, setStudents] = useState<SharedStudentData[]>(mockFacultyStudents);
+  const [students, setStudents] = useState<EvaluatedStudentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<EvaluatedStudentItem | null>(null);
+  const [evalForm, setEvalForm] = useState<{
+    technicalSkills: number;
+    communication: number;
+    professionalism: number;
+    problemSolving: number;
+    overallRating: number;
+    writtenFeedback: string;
+    status: 'Pending' | 'Completed';
+  }>({
+    technicalSkills: 0,
+    communication: 0,
+    professionalism: 0,
+    problemSolving: 0,
+    overallRating: 0,
+    writtenFeedback: '',
+    status: 'Pending'
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [assignedRes, evalsRes] = await Promise.all([
+        fetchFacultyAssignedStudentsBackend(),
+        fetchEvaluationsBackend(),
+      ]);
+
+      const facultyEvals = (evalsRes || []).filter(e => e.evaluatorRole === 'faculty');
+
+      const mapped: EvaluatedStudentItem[] = (assignedRes || []).map(s => {
+        const studentId = s.studentId || s.id || 'ID-STUDENT';
+        const id = s.id || studentId;
+
+        // Find existing faculty evaluation for this assignment or student
+        const existingEval = facultyEvals.find(
+          e => (s.assignmentId && e.assignmentId === s.assignmentId) || 
+               (e.assignment?.studentId && e.assignment.studentId === studentId)
+        );
+
+        let facultyEvaluation: EvaluatedStudentItem['facultyEvaluation'] | undefined = undefined;
+        if (existingEval) {
+          const rawScore = Number(existingEval.overallScore || existingEval.overallRating) || 0;
+          const overallRating = rawScore > 5 ? Number((rawScore / 20).toFixed(1)) : rawScore;
+          const criteria = (existingEval.criteriaScores || {}) as Record<string, any>;
+          const isComplete = existingEval.status === 'submitted' || existingEval.status === 'verified';
+
+          facultyEvaluation = {
+            technicalSkills: Number(criteria.technicalSkills) || Number(existingEval.technicalSkills) || overallRating || 4,
+            communication: Number(criteria.communication) || Number(existingEval.communication) || overallRating || 4,
+            professionalism: Number(criteria.professionalism) || Number(existingEval.professionalism) || overallRating || 4,
+            problemSolving: Number(criteria.problemSolving) || Number(existingEval.problemSolving) || overallRating || 4,
+            overallRating: overallRating || 4,
+            writtenFeedback: existingEval.notes || existingEval.comments || '',
+            status: isComplete ? 'Completed' : 'Pending',
+            lastEvaluated: existingEval.updatedAt ? new Date(existingEval.updatedAt).toLocaleDateString() : undefined,
+          };
+        }
+
+        return {
+          id,
+          assignmentId: s.assignmentId,
+          studentId,
+          studentName: s.studentName,
+          company: s.companyName || s.company || 'Not Specified',
+          role: s.internshipTitle || s.role || 'Intern',
+          facultyEvaluation,
+        };
+      });
+
+      setStudents(mapped);
+    } catch (err: any) {
+      console.error('Failed to load student evaluation data:', err);
+      setError(err?.message || 'Failed to load student evaluations. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Stats
   const totalCount = students.length;
@@ -28,7 +141,7 @@ export const StudentEvaluations: React.FC = () => {
 
   const averageRating = useMemo(() => {
     const rated = students.filter(s => s.facultyEvaluation?.status === 'Completed');
-    if (rated.length === 0) return 0;
+    if (rated.length === 0) return '0.0';
     const total = rated.reduce((acc, curr) => acc + (curr.facultyEvaluation?.overallRating || 0), 0);
     return (total / rated.length).toFixed(1);
   }, [students]);
@@ -49,20 +162,7 @@ export const StudentEvaluations: React.FC = () => {
     });
   }, [students, searchTerm, statusFilter]);
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<SharedStudentData | null>(null);
-  const [evalForm, setEvalForm] = useState<FacultyEvaluation>({
-    technicalSkills: 0,
-    communication: 0,
-    professionalism: 0,
-    problemSolving: 0,
-    overallRating: 0,
-    writtenFeedback: '',
-    status: 'Pending'
-  });
-
-  const handleEvaluate = (student: SharedStudentData) => {
+  const handleEvaluate = (student: EvaluatedStudentItem) => {
     setSelectedStudent(student);
     if (student.facultyEvaluation) {
       setEvalForm(student.facultyEvaluation);
@@ -80,7 +180,7 @@ export const StudentEvaluations: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleRatingChange = (field: keyof FacultyEvaluation, value: number) => {
+  const handleRatingChange = (field: 'technicalSkills' | 'communication' | 'professionalism' | 'problemSolving', value: number) => {
     setEvalForm(prev => {
       const next = { ...prev, [field]: value };
       const avg = (next.technicalSkills + next.communication + next.professionalism + next.problemSolving) / 4;
@@ -89,27 +189,51 @@ export const StudentEvaluations: React.FC = () => {
     });
   };
 
-  const handleSave = (isSubmit: boolean = false) => {
+  const handleSave = async (isSubmit: boolean = false) => {
     if (!selectedStudent) return;
 
-    const finalEval = {
-      ...evalForm,
-      status: isSubmit ? ('Completed' as const) : evalForm.status,
-      lastEvaluated: new Date().toLocaleDateString()
-    };
+    try {
+      setSaveLoading(true);
 
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id) {
-        return {
-          ...s,
-          facultyEvaluation: finalEval,
-          evaluationStatus: isSubmit ? 'Completed' : 'In Progress'
-        };
+      const targetAssignmentId = selectedStudent.assignmentId;
+      if (targetAssignmentId) {
+        await createEvaluationBackend({
+          assignmentId: targetAssignmentId,
+          evaluationType: 'final',
+          evaluationPeriod: 'Semester Final',
+          technicalSkills: evalForm.technicalSkills || 3,
+          communication: evalForm.communication || 3,
+          professionalism: evalForm.professionalism || 3,
+          problemSolving: evalForm.problemSolving || 3,
+          overallRating: evalForm.overallRating || 3,
+          comments: evalForm.writtenFeedback || 'Evaluation submitted by faculty mentor.',
+          status: isSubmit ? 'submitted' : 'draft',
+        });
       }
-      return s;
-    }));
 
-    setIsModalOpen(false);
+      const finalEval = {
+        ...evalForm,
+        status: isSubmit ? ('Completed' as const) : evalForm.status,
+        lastEvaluated: new Date().toLocaleDateString()
+      };
+
+      setStudents(prev => prev.map(s => {
+        if (s.id === selectedStudent.id) {
+          return {
+            ...s,
+            facultyEvaluation: finalEval,
+          };
+        }
+        return s;
+      }));
+
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Failed to submit evaluation:', err);
+      alert(err?.message || 'Failed to submit evaluation.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const getStatusBadge = (status?: string) => {
@@ -119,7 +243,7 @@ export const StudentEvaluations: React.FC = () => {
     return <Badge variant="amber">Pending</Badge>;
   };
 
-  const columns: Column<SharedStudentData>[] = [
+  const columns: Column<EvaluatedStudentItem>[] = [
     {
       header: 'Student',
       cell: (row) => (
@@ -177,13 +301,14 @@ export const StudentEvaluations: React.FC = () => {
     },
   ];
 
-  const StarRatingInput = ({ label, field, value }: { label: string, field: keyof FacultyEvaluation, value: number }) => (
+  const StarRatingInput = ({ label, field, value }: { label: string, field: 'technicalSkills' | 'communication' | 'professionalism' | 'problemSolving', value: number }) => (
     <div className="flex flex-col gap-1">
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map(star => (
           <button
             key={star}
+            type="button"
             onClick={() => handleRatingChange(field, star)}
             className="p-1 focus:outline-none transition-transform hover:scale-110"
             disabled={evalForm.status === 'Completed'}
@@ -237,7 +362,20 @@ export const StudentEvaluations: React.FC = () => {
         </div>
 
         <div className="p-4">
-          {filteredStudents.length > 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+              <p className="text-sm">Loading students & evaluations...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-rose-600">
+              <AlertCircle className="w-8 h-8 mb-2" />
+              <p className="text-sm font-medium">{error}</p>
+              <Button variant="outline" size="sm" onClick={loadData} className="mt-4">
+                Retry
+              </Button>
+            </div>
+          ) : filteredStudents.length > 0 ? (
             <Table 
               columns={columns} 
               data={filteredStudents} 
@@ -246,7 +384,7 @@ export const StudentEvaluations: React.FC = () => {
           ) : (
             <EmptyState 
               title="No students found" 
-              description="Try adjusting your search or filter criteria."
+              description="No students assigned for evaluation."
             />
           )}
         </div>
@@ -312,11 +450,15 @@ export const StudentEvaluations: React.FC = () => {
 
             {evalForm.status !== 'Completed' && (
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={() => handleSave(false)}>
+                <Button variant="outline" onClick={() => handleSave(false)} disabled={saveLoading}>
                   Save Draft
                 </Button>
-                <Button variant="primary" onClick={() => handleSave(true)} disabled={evalForm.overallRating === 0 || !evalForm.writtenFeedback.trim()}>
-                  Submit Evaluation
+                <Button 
+                  variant="primary" 
+                  onClick={() => handleSave(true)} 
+                  disabled={evalForm.overallRating === 0 || !evalForm.writtenFeedback.trim() || saveLoading}
+                >
+                  {saveLoading ? 'Submitting...' : 'Submit Evaluation'}
                 </Button>
               </div>
             )}

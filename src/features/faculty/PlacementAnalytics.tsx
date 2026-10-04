@@ -1,39 +1,117 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   PageHeader, 
   StatCard, 
   Table, 
   Badge, 
-  Select
+  Select,
+  EmptyState
 } from '@/components';
-import { mockFacultyStudents } from './mockData';
-import type { SharedStudentData } from './mockData';
-import { Users, Briefcase, GraduationCap, Award, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Users, Briefcase, GraduationCap, Award, TrendingUp, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import type { Column } from '@/components/ui/Table';
+import {
+  fetchFacultyAssignedStudentsBackend,
+  fetchPlacementReadinessBackend,
+  type FacultyAssignedStudentItem,
+  type PlacementReadinessRecord,
+} from '@/services/api/backendService';
+
+export interface PlacementStudentItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  department: string;
+  batchYear: string;
+  company: string;
+  role: string;
+  internshipStatus: string;
+  placementStatus: 'Placed' | 'In Progress' | 'Not Placed';
+}
 
 export const PlacementAnalytics: React.FC = () => {
+  const [students, setStudents] = useState<PlacementStudentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [batchFilter, setBatchFilter] = useState('All');
 
-  // Derive unique departments and batches for filters
-  const departments = useMemo(() => {
-    const deps = new Set(mockFacultyStudents.map(s => s.department));
-    return ['All', ...Array.from(deps)];
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [assignedRes, readinessRes] = await Promise.all([
+        fetchFacultyAssignedStudentsBackend(),
+        fetchPlacementReadinessBackend(),
+      ]);
+
+      const readinessList = readinessRes || [];
+
+      const mapped: PlacementStudentItem[] = (assignedRes || []).map(s => {
+        const studentId = s.studentId || s.id || 'ID-STUDENT';
+        const id = s.id || studentId;
+
+        const readiness = readinessList.find(
+          r => r.studentId === studentId || r.studentId === id
+        );
+
+        let placementStatus: 'Placed' | 'In Progress' | 'Not Placed' = 'Not Placed';
+        if (readiness) {
+          if (readiness.readinessStatus === 'placed' || (readiness.readinessScore && readiness.readinessScore >= 80)) {
+            placementStatus = 'Placed';
+          } else if (readiness.readinessStatus === 'ready' || (readiness.readinessScore && readiness.readinessScore >= 50)) {
+            placementStatus = 'In Progress';
+          }
+        } else if (s.internshipStatus === 'Completed' || s.status === 'completed') {
+          placementStatus = 'In Progress';
+        }
+
+        return {
+          id,
+          studentId,
+          studentName: s.studentName,
+          department: s.department || 'CSE',
+          batchYear: s.batchYear || '2025',
+          company: s.companyName || s.company || 'Not Specified',
+          role: s.internshipTitle || s.role || 'Intern',
+          internshipStatus: s.internshipStatus || (s.status === 'completed' ? 'Completed' : 'Active'),
+          placementStatus,
+        };
+      });
+
+      setStudents(mapped);
+    } catch (err: any) {
+      console.error('Failed to load placement analytics data:', err);
+      setError(err?.message || 'Failed to load placement analytics. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Derive unique departments and batches for filters
+  const departments = useMemo(() => {
+    const deps = new Set(students.map(s => s.department));
+    return ['All', ...Array.from(deps)];
+  }, [students]);
+
   const batches = useMemo(() => {
-    const bts = new Set(mockFacultyStudents.map(s => s.batchYear));
+    const bts = new Set(students.map(s => s.batchYear));
     return ['All', ...Array.from(bts)];
-  }, []);
+  }, [students]);
 
   // Filter students based on selection
   const filteredStudents = useMemo(() => {
-    return mockFacultyStudents.filter(student => {
+    return students.filter(student => {
       const matchDept = departmentFilter === 'All' || student.department === departmentFilter;
       const matchBatch = batchFilter === 'All' || student.batchYear === batchFilter;
       return matchDept && matchBatch;
     });
-  }, [departmentFilter, batchFilter]);
+  }, [students, departmentFilter, batchFilter]);
 
   // Calculate statistics dynamically
   const totalStudents = filteredStudents.length;
@@ -49,7 +127,9 @@ export const PlacementAnalytics: React.FC = () => {
   const companyDistribution = useMemo(() => {
     const counts: Record<string, number> = {};
     filteredStudents.forEach(s => {
-      counts[s.company] = (counts[s.company] || 0) + 1;
+      if (s.company && s.company !== 'Not Specified') {
+        counts[s.company] = (counts[s.company] || 0) + 1;
+      }
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [filteredStudents]);
@@ -71,7 +151,7 @@ export const PlacementAnalytics: React.FC = () => {
     }
   };
 
-  const columns: Column<SharedStudentData>[] = [
+  const columns: Column<PlacementStudentItem>[] = [
     {
       header: 'Student',
       cell: (row) => (
@@ -101,9 +181,9 @@ export const PlacementAnalytics: React.FC = () => {
     {
       header: 'Action',
       cell: () => (
-        <button className="text-indigo-600 hover:text-indigo-700 text-sm font-medium transition-colors">
-          View Profile
-        </button>
+        <span className="text-indigo-600 text-sm font-medium">
+          Assigned
+        </span>
       ),
     },
   ];
@@ -262,11 +342,34 @@ export const PlacementAnalytics: React.FC = () => {
           <h3 className="font-semibold text-slate-900">Student Placement Details</h3>
         </div>
         <div className="p-4">
-          <Table 
-            columns={columns} 
-            data={filteredStudents} 
-            keyExtractor={(row) => row.id} 
-          />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+              <p className="text-sm">Loading placement analytics...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-rose-600">
+              <AlertCircle className="w-8 h-8 mb-2" />
+              <p className="text-sm font-medium">{error}</p>
+              <button 
+                onClick={loadData}
+                className="mt-4 px-3 py-1.5 text-xs font-medium border border-rose-200 rounded-lg hover:bg-rose-50"
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredStudents.length > 0 ? (
+            <Table 
+              columns={columns} 
+              data={filteredStudents} 
+              keyExtractor={(row) => row.id} 
+            />
+          ) : (
+            <EmptyState
+              title="No students found"
+              description="No students matching the selected department or batch criteria."
+            />
+          )}
         </div>
       </div>
     </div>

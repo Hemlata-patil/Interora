@@ -1,54 +1,107 @@
-import React, { useState, useMemo } from 'react';
-import { PageHeader, Card, Button, Input, Alert } from '@/components';
-import { FileCheck, Star, X, CheckCircle2 } from 'lucide-react';
-import { 
-  mockCompanyApplications, 
-  mockFacultyStudents, 
-  mockCompanyInternships,
-  mockCompanyEvaluations,
-  setMockCompanyEvaluations,
-  MOCK_CURRENT_MENTOR_ID
-} from '../faculty/mockData';
-import type { SharedStudentData, CompanyEvaluationData } from '../faculty/mockData';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { PageHeader, Card, Button, Alert } from '@/components';
+import { FileCheck, Star, X, CheckCircle2, Loader2 } from 'lucide-react';
+import {
+  fetchCompanyMentorInternsBackend,
+  fetchMentorEvaluationsBackend,
+  createMentorEvaluationBackend,
+  updateMentorEvaluationBackend,
+  type CompanyMentorInternRecord,
+} from '@/services/api/backendService';
+
+export interface MentorEvaluationItem {
+  id: string;
+  assignmentId: string;
+  studentId: string;
+  evaluationType: string;
+  evaluationPeriod: string;
+  technicalSkills: number;
+  qualityOfWork?: number;
+  problemSolving: number;
+  communication: number;
+  teamwork?: number;
+  professionalism: number;
+  timeManagement?: number;
+  overallRating: number;
+  comments: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export const MentorEvaluations: React.FC = () => {
-  const [evaluations, setEvaluations] = useState<CompanyEvaluationData[]>(mockCompanyEvaluations);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<SharedStudentData | null>(null);
-  const [evalType, setEvalType] = useState('Mid-Term Evaluation');
+  const [assignedStudents, setAssignedStudents] = useState<CompanyMentorInternRecord[]>([]);
+  const [evaluations, setEvaluations] = useState<MentorEvaluationItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [selectedStudent, setSelectedStudent] = useState<CompanyMentorInternRecord | null>(null);
+  const [evalType, setEvalType] = useState<'Mid-Term Evaluation' | 'Final Evaluation'>('Mid-Term Evaluation');
   const [ratings, setRatings] = useState({
     technicalSkills: 0,
     communication: 0,
     professionalism: 0,
     problemSolving: 0,
-    overallRating: 0
+    overallRating: 0,
   });
   const [feedback, setFeedback] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [triggerRender, setTriggerRender] = useState(0);
 
-  // Compute assigned students for this mentor
-  const assignedStudents = useMemo(() => {
-    // We add triggerRender to dependencies so that we can force re-evaluation of the mock data if needed
-    void triggerRender;
-    const selectedApps = mockCompanyApplications.filter(a => a.applicationStatus === 'Selected');
-    return selectedApps.map(app => {
-      const student = mockFacultyStudents.find(s => s.id === app.studentId);
-      const internship = mockCompanyInternships.find(i => i.id === app.internshipId);
-      if (student && internship && internship.mentorId === MOCK_CURRENT_MENTOR_ID) {
-        return student;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [interns, evals] = await Promise.all([
+        fetchCompanyMentorInternsBackend(),
+        fetchMentorEvaluationsBackend(),
+      ]);
+
+      setAssignedStudents(interns || []);
+
+      if (evals && evals.length > 0) {
+        const mapped: MentorEvaluationItem[] = evals.map((e: any) => ({
+          id: e.id,
+          assignmentId: e.assignmentId || e.assignment?.id || '',
+          studentId: e.assignment?.studentId || '',
+          evaluationType: e.evaluationType === 'final' ? 'Final Evaluation' : 'Mid-Term Evaluation',
+          evaluationPeriod: e.evaluationPeriod || 'Current',
+          technicalSkills: Number(e.technicalSkills || 0),
+          qualityOfWork: Number(e.qualityOfWork || 0),
+          problemSolving: Number(e.problemSolving || 0),
+          communication: Number(e.communication || 0),
+          teamwork: Number(e.teamwork || 0),
+          professionalism: Number(e.professionalism || 0),
+          timeManagement: Number(e.timeManagement || 0),
+          overallRating: Number(e.overallRating || 0),
+          comments: e.comments || '',
+          status: e.status || 'draft',
+          createdAt: e.createdAt || '',
+          updatedAt: e.updatedAt || '',
+        }));
+        setEvaluations(mapped);
+      } else {
+        setEvaluations([]);
       }
-      return null;
-    }).filter(Boolean) as SharedStudentData[];
-  }, [triggerRender]);
+    } catch (err: any) {
+      console.error('[MentorEvaluations] Failed to load evaluations:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const getStudentEval = (studentId: string) => {
-    return evaluations.find(e => e.internId === studentId && e.industryMentorId === MOCK_CURRENT_MENTOR_ID);
-  };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const handleOpenEval = (student: SharedStudentData) => {
+  const getStudentEval = useCallback((studentId: string, assignmentId: string) => {
+    return evaluations.find(
+      (e) => (assignmentId && e.assignmentId === assignmentId) || (studentId && e.studentId === studentId)
+    );
+  }, [evaluations]);
+
+  const handleOpenEval = (student: CompanyMentorInternRecord) => {
     setSelectedStudent(student);
-    const existingEval = getStudentEval(student.id);
+    const existingEval = getStudentEval(student.studentId, student.assignmentId);
 
     if (existingEval) {
       setRatings({
@@ -56,17 +109,17 @@ export const MentorEvaluations: React.FC = () => {
         communication: existingEval.communication,
         professionalism: existingEval.professionalism,
         problemSolving: existingEval.problemSolving,
-        overallRating: existingEval.overallRating
+        overallRating: existingEval.overallRating,
       });
       setFeedback(existingEval.comments || '');
-      setEvalType(existingEval.evaluationType);
+      setEvalType(existingEval.evaluationType as 'Mid-Term Evaluation' | 'Final Evaluation');
     } else {
       setRatings({
         technicalSkills: 0,
         communication: 0,
         professionalism: 0,
         problemSolving: 0,
-        overallRating: 0
+        overallRating: 0,
       });
       setFeedback('');
       setEvalType('Mid-Term Evaluation');
@@ -80,11 +133,17 @@ export const MentorEvaluations: React.FC = () => {
     setSelectedStudent(null);
   };
 
-  const handleSaveEval = () => {
+  const handleSaveEval = async () => {
     if (!selectedStudent) return;
-    
+
     // Validation
-    const missingRatings = Object.values(ratings).some(val => val === 0);
+    const missingRatings = [
+      ratings.technicalSkills,
+      ratings.communication,
+      ratings.professionalism,
+      ratings.problemSolving,
+    ].some((val) => val === 0);
+
     if (missingRatings) {
       setErrorMsg('Please select a rating (1-5) for all criteria.');
       return;
@@ -94,61 +153,84 @@ export const MentorEvaluations: React.FC = () => {
       return;
     }
 
-    // Identify internship
-    const app = mockCompanyApplications.find(a => a.studentId === selectedStudent.id && a.applicationStatus === 'Selected');
-    const internshipId = app?.internshipId || 'int-1';
-    const internship = mockCompanyInternships.find(i => i.id === internshipId);
+    setSaving(true);
+    setErrorMsg('');
 
-    const existingEval = getStudentEval(selectedStudent.id);
-    const date = new Date().toISOString().split('T')[0];
+    try {
+      const existingEval = getStudentEval(selectedStudent.studentId, selectedStudent.assignmentId);
+      const computedOverall = Math.round(
+        ((ratings.technicalSkills + ratings.communication + ratings.professionalism + ratings.problemSolving) / 4) * 10
+      ) / 10;
 
-    const evalData: CompanyEvaluationData = {
-      id: existingEval?.id || `eval-${Date.now()}`,
-      internId: selectedStudent.id,
-      internshipId: internshipId,
-      companyId: internship?.companyId || 'company-1',
-      industryMentorId: MOCK_CURRENT_MENTOR_ID,
-      facultyMentorId: 'fac-1', // Default mock faculty mentor
-      evaluationType: evalType as 'Mid-Term Evaluation' | 'Final Evaluation',
-      evaluationPeriod: 'Current',
-      status: 'Pending Faculty Verification',
-      technicalSkills: ratings.technicalSkills,
-      qualityOfWork: ratings.technicalSkills, // Simplified for mentor UI
-      problemSolving: ratings.problemSolving,
-      communication: ratings.communication,
-      teamwork: ratings.communication, // Simplified for mentor UI
-      professionalism: ratings.professionalism,
-      timeManagement: ratings.professionalism, // Simplified for mentor UI
-      initiative: ratings.problemSolving, // Simplified for mentor UI
-      overallRating: ratings.overallRating,
-      strengths: '',
-      areasForImprovement: '',
-      comments: feedback,
-      recommendation: 'Recommend',
-      submittedAt: date,
-      updatedAt: date,
-      crossVerified: false
-    };
+      if (existingEval) {
+        // Update existing evaluation
+        const res = await updateMentorEvaluationBackend(existingEval.id, {
+          evaluationPeriod: 'Current',
+          technicalSkills: ratings.technicalSkills,
+          qualityOfWork: ratings.technicalSkills,
+          problemSolving: ratings.problemSolving,
+          communication: ratings.communication,
+          teamwork: ratings.communication,
+          professionalism: ratings.professionalism,
+          timeManagement: ratings.professionalism,
+          initiative: ratings.problemSolving,
+          overallRating: computedOverall,
+          comments: feedback.trim(),
+        });
 
-    let updatedEvals;
-    if (existingEval) {
-      updatedEvals = evaluations.map(e => e.id === evalData.id ? evalData : e);
-    } else {
-      updatedEvals = [...evaluations, evalData];
+        if (!res.success) {
+          throw new Error(res.error || 'Failed to update evaluation.');
+        }
+      } else {
+        // Create new evaluation
+        const res = await createMentorEvaluationBackend({
+          assignmentId: selectedStudent.assignmentId,
+          evaluationType: evalType === 'Final Evaluation' ? 'final' : 'mid_term',
+          evaluationPeriod: 'Current',
+          technicalSkills: ratings.technicalSkills,
+          qualityOfWork: ratings.technicalSkills,
+          problemSolving: ratings.problemSolving,
+          communication: ratings.communication,
+          teamwork: ratings.communication,
+          professionalism: ratings.professionalism,
+          timeManagement: ratings.professionalism,
+          initiative: ratings.problemSolving,
+          overallRating: computedOverall,
+          comments: feedback.trim(),
+          status: 'submitted',
+        });
+
+        if (!res.success) {
+          throw new Error(res.error || 'Failed to submit evaluation.');
+        }
+      }
+
+      await loadData();
+      handleCloseEval();
+    } catch (err: any) {
+      console.error('[MentorEvaluations] Save error:', err);
+      setErrorMsg(err.message || 'Failed to save evaluation.');
+    } finally {
+      setSaving(false);
     }
-
-    setEvaluations(updatedEvals);
-    setMockCompanyEvaluations(updatedEvals);
-
-    // Update student status so the badge changes
-    const target = mockFacultyStudents.find(s => s.id === selectedStudent.id);
-    if (target) {
-      target.evaluationStatus = 'Completed';
-    }
-
-    setTriggerRender(prev => prev + 1);
-    handleCloseEval();
   };
+
+  const pendingCount = useMemo(() => {
+    return assignedStudents.filter((s) => !getStudentEval(s.studentId, s.assignmentId)).length;
+  }, [assignedStudents, getStudentEval]);
+
+  const completedCount = useMemo(() => {
+    return assignedStudents.filter((s) => !!getStudentEval(s.studentId, s.assignmentId)).length;
+  }, [assignedStudents, getStudentEval]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-600 font-medium">Loading intern evaluations...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-8">
@@ -161,80 +243,88 @@ export const MentorEvaluations: React.FC = () => {
         <Card className="flex-1 p-4 flex items-center justify-between bg-indigo-50 border-indigo-100 shadow-sm">
           <div>
             <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-0.5">Pending Evaluations</p>
-            <p className="text-2xl font-bold text-indigo-700">{assignedStudents.filter(s => !getStudentEval(s.id)).length}</p>
+            <p className="text-2xl font-bold text-indigo-700">{pendingCount}</p>
           </div>
           <FileCheck className="w-8 h-8 text-indigo-200" />
         </Card>
         <Card className="flex-1 p-4 flex items-center justify-between bg-emerald-50 border-emerald-100 shadow-sm">
           <div>
             <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-0.5">Completed Evaluations</p>
-            <p className="text-2xl font-bold text-emerald-700">{assignedStudents.filter(s => getStudentEval(s.id)).length}</p>
+            <p className="text-2xl font-bold text-emerald-700">{completedCount}</p>
           </div>
           <CheckCircle2 className="w-8 h-8 text-emerald-200" />
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {assignedStudents.map(student => {
-          const evalData = getStudentEval(student.id);
+        {assignedStudents.map((student) => {
+          const evalData = getStudentEval(student.studentId, student.assignmentId);
           return (
-          <Card key={student.id} className="shadow-sm flex flex-col h-full">
-            <div className="mb-4 pb-4 border-b border-slate-100 flex items-center gap-3">
-               <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
-                {student.studentName.charAt(0)}
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900">{student.studentName}</h3>
-                <p className="text-xs text-slate-500">Status: {student.evaluationStatus}</p>
-              </div>
-            </div>
-
-            <div className="space-y-4 flex-1">
-              {evalData ? (
-                <>
-                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Technical Skills</p>
-                      <div className="flex items-center text-amber-500 text-xs font-bold"><Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.technicalSkills}/5</div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Communication</p>
-                      <div className="flex items-center text-amber-500 text-xs font-bold"><Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.communication}/5</div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Professionalism</p>
-                      <div className="flex items-center text-amber-500 text-xs font-bold"><Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.professionalism}/5</div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Problem Solving</p>
-                      <div className="flex items-center text-amber-500 text-xs font-bold"><Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.problemSolving}/5</div>
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t border-slate-100">
-                    <p className="text-xs text-slate-500 mb-1">Mentor Feedback</p>
-                    <p className="text-sm text-slate-700 italic">"{evalData.comments}"</p>
-                  </div>
-                </>
-              ) : (
-                <div className="py-6 text-center text-slate-500 flex flex-col items-center justify-center h-full">
-                  <FileCheck className="w-8 h-8 text-slate-300 mb-2" />
-                  <p className="text-sm font-medium text-slate-700">No evaluation recorded yet</p>
-                  <p className="text-xs mt-1">Submit a mid-term or final evaluation.</p>
+            <Card key={student.assignmentId || student.studentId} className="shadow-sm flex flex-col h-full">
+              <div className="mb-4 pb-4 border-b border-slate-100 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                  {student.studentName.charAt(0)}
                 </div>
-              )}
-            </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">{student.studentName}</h3>
+                  <p className="text-xs text-slate-500">{student.internshipTitle} • {student.companyName}</p>
+                </div>
+              </div>
 
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <Button className="w-full justify-center" onClick={() => handleOpenEval(student)}>
-                {evalData ? 'Update Evaluation' : 'Evaluate Student'}
-              </Button>
-            </div>
-          </Card>
+              <div className="space-y-4 flex-1">
+                {evalData ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-500 mb-0.5">Technical Skills</p>
+                        <div className="flex items-center text-amber-500 text-xs font-bold">
+                          <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.technicalSkills}/5
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 mb-0.5">Communication</p>
+                        <div className="flex items-center text-amber-500 text-xs font-bold">
+                          <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.communication}/5
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 mb-0.5">Professionalism</p>
+                        <div className="flex items-center text-amber-500 text-xs font-bold">
+                          <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.professionalism}/5
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 mb-0.5">Problem Solving</p>
+                        <div className="flex items-center text-amber-500 text-xs font-bold">
+                          <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {evalData.problemSolving}/5
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-3 border-t border-slate-100">
+                      <p className="text-xs text-slate-500 mb-1">Mentor Feedback</p>
+                      <p className="text-sm text-slate-700 italic">"{evalData.comments}"</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-6 text-center text-slate-500 flex flex-col items-center justify-center h-full">
+                    <FileCheck className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-sm font-medium text-slate-700">No evaluation recorded yet</p>
+                    <p className="text-xs mt-1">Submit a mid-term or final evaluation.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <Button className="w-full justify-center" onClick={() => handleOpenEval(student)}>
+                  {evalData ? 'Update Evaluation' : 'Evaluate Student'}
+                </Button>
+              </div>
+            </Card>
           );
         })}
         {assignedStudents.length === 0 && (
           <div className="col-span-full p-8 text-center bg-white border border-slate-200 rounded-xl shadow-sm text-slate-500">
-            No interns assigned.
+            No interns currently assigned.
           </div>
         )}
       </div>
@@ -245,9 +335,11 @@ export const MentorEvaluations: React.FC = () => {
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  {selectedStudent.companyEvaluation ? 'Update Evaluation' : 'Give Evaluation'}
+                  {getStudentEval(selectedStudent.studentId, selectedStudent.assignmentId)
+                    ? 'Update Evaluation'
+                    : 'Give Evaluation'}
                 </h2>
-                <p className="text-sm text-slate-500">For {selectedStudent.studentName} ({selectedStudent.company})</p>
+                <p className="text-sm text-slate-500">For {selectedStudent.studentName} ({selectedStudent.companyName})</p>
               </div>
               <Button variant="ghost" className="p-2 -mr-2 text-slate-400 hover:text-slate-600" onClick={handleCloseEval}>
                 <X className="w-5 h-5" />
@@ -265,7 +357,7 @@ export const MentorEvaluations: React.FC = () => {
                 <label className="block text-sm font-semibold text-slate-700">Evaluation Type *</label>
                 <select
                   value={evalType}
-                  onChange={e => setEvalType(e.target.value)}
+                  onChange={(e) => setEvalType(e.target.value as any)}
                   className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="Mid-Term Evaluation">Mid-Term Evaluation</option>
@@ -275,16 +367,16 @@ export const MentorEvaluations: React.FC = () => {
 
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900">Performance Ratings (1-5) *</h3>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {Object.keys(ratings).map((key) => {
-                    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                  {(['technicalSkills', 'communication', 'professionalism', 'problemSolving'] as const).map((key) => {
+                    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
                     return (
                       <div key={key} className="space-y-1.5">
                         <label className="block text-xs font-semibold text-slate-700">{label}</label>
                         <select
-                          value={ratings[key as keyof typeof ratings]}
-                          onChange={e => setRatings(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                          value={ratings[key]}
+                          onChange={(e) => setRatings((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value={0}>Select Rating...</option>
@@ -305,16 +397,26 @@ export const MentorEvaluations: React.FC = () => {
                 <textarea
                   rows={4}
                   value={feedback}
-                  onChange={e => setFeedback(e.target.value)}
+                  onChange={(e) => setFeedback(e.target.value)}
                   placeholder="Provide specific feedback on the intern's performance, strengths, and areas for improvement..."
                   className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <Button variant="outline" onClick={handleCloseEval}>Cancel</Button>
-                <Button onClick={handleSaveEval}>
-                  {selectedStudent.companyEvaluation ? 'Update Evaluation' : 'Save Evaluation'}
+                <Button variant="outline" onClick={handleCloseEval} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveEval} disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...
+                    </>
+                  ) : getStudentEval(selectedStudent.studentId, selectedStudent.assignmentId) ? (
+                    'Update Evaluation'
+                  ) : (
+                    'Save Evaluation'
+                  )}
                 </Button>
               </div>
             </div>

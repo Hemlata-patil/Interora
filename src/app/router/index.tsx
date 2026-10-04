@@ -38,6 +38,8 @@ import { CompanyPPO } from '@/features/company/CompanyPPO';
 import { CompanyCertificates } from '@/features/company/CompanyCertificates';
 import { CompanyNotifications } from '@/features/company/CompanyNotifications';
 import { MentorManagement } from '@/features/company/MentorManagement';
+import { CompanyAttendance } from '@/features/company/CompanyAttendance';
+import { CompanyReports } from '@/features/company/CompanyReports';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
 import { AdminUsers } from '@/features/admin/AdminUsers';
 import { AdminInternships } from '@/features/admin/AdminInternships';
@@ -257,6 +259,14 @@ const router = createBrowserRouter([
   {
     path: '/company/mentors',
     element: <CompanyLayout><MentorManagement /></CompanyLayout>,
+  },
+  {
+    path: '/company/attendance',
+    element: <CompanyLayout><CompanyAttendance /></CompanyLayout>,
+  },
+  {
+    path: '/company/reports',
+    element: <CompanyLayout><CompanyReports /></CompanyLayout>,
   },
 
   // Mentor Routes Group

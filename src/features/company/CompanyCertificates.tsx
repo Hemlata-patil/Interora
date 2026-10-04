@@ -1,15 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { PageHeader, Card, Button, Badge, StatCard, Input } from '@/components';
 import { 
-  Award, CheckCircle2, Search, Filter, FileText, Download, X
+  Award, CheckCircle2, Search, Filter, FileText, Download, X, Loader2
 } from 'lucide-react';
+import { 
+  fetchCompanyCertificatesBackend,
+  issueCompanyCertificateBackend,
+  fetchCompanyInternsBackend
+} from '@/services/api/backendService';
 import { 
   mockFacultyStudents,
   mockCompanyApplications,
   mockCompanyEvaluations,
   mockCompanyPPOs,
-  mockCompanyCertificates,
-  setMockCompanyCertificates
+  mockCompanyCertificates
 } from '../faculty/mockData';
 import type { 
   CompanyCertificateData,
@@ -18,7 +22,10 @@ import type {
 import { APP_INFO } from '@/constants';
 
 export const CompanyCertificates: React.FC = () => {
-  const [certificates, setCertificates] = useState<CompanyCertificateData[]>(mockCompanyCertificates);
+  const [certificates, setCertificates] = useState<CompanyCertificateData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
@@ -26,6 +33,43 @@ export const CompanyCertificates: React.FC = () => {
   const [viewState, setViewState] = useState<'LIST' | 'PREVIEW'>('LIST');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isConfirmingIssue, setIsConfirmingIssue] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [backendCerts, interns] = await Promise.all([
+        fetchCompanyCertificatesBackend(),
+        fetchCompanyInternsBackend(),
+      ]);
+
+      if (backendCerts && backendCerts.length > 0) {
+        const mapped: CompanyCertificateData[] = backendCerts.map((c: any) => ({
+          id: c.id,
+          internId: c.assignment?.studentId || c.studentId || '',
+          internshipId: c.assignment?.internshipId || '',
+          companyId: c.assignment?.companyId || '',
+          applicationId: c.assignment?.applicationId,
+          status: c.status === 'active' ? 'Issued' : 'Generated',
+          certificateId: c.certificateNumber,
+          issueDate: c.issuedAt ? new Date(c.issuedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined,
+        }));
+        setCertificates(mapped);
+      } else {
+        setCertificates(mockCompanyCertificates);
+      }
+    } catch (err: any) {
+      console.error('[CompanyCertificates] Error loading certificates:', err);
+      setError('Failed to load certificates from backend.');
+      setCertificates(mockCompanyCertificates);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Compile full certificate eligibility list
   const certList = useMemo(() => {
@@ -55,7 +99,8 @@ export const CompanyCertificates: React.FC = () => {
         finalEval,
         ppo,
         existingCert,
-        derivedStatus
+        derivedStatus,
+        assignmentId: existingCert?.applicationId || 'mock-assign-id'
       };
     }).filter(item => item.derivedStatus !== 'Not Eligible');
   }, [certificates]);
@@ -96,30 +141,35 @@ export const CompanyCertificates: React.FC = () => {
       id: `cert-${Date.now()}`,
       internId: data.student.id,
       internshipId: data.internshipId,
-      companyId: 'company-1', // Mock
+      companyId: 'company-1',
       status: 'Generated',
       certificateId: generateUniqueId()
     };
 
     const updatedCerts = [...certificates, newCert];
     setCertificates(updatedCerts);
-    setMockCompanyCertificates(updatedCerts);
   };
 
-  const handleIssue = () => {
+  const handleIssue = async () => {
     const data = certList.find(i => i.student.id === selectedStudentId);
     if (!data || !data.existingCert) return;
 
-    const updatedCert = { 
-      ...data.existingCert, 
-      status: 'Issued' as const,
-      issueDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    };
+    setActionLoading(true);
+    try {
+      const updatedCert: CompanyCertificateData = { 
+        ...data.existingCert, 
+        status: 'Issued' as const,
+        issueDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
 
-    const updatedCerts = certificates.map(c => c.id === updatedCert.id ? updatedCert : c);
-    setCertificates(updatedCerts);
-    setMockCompanyCertificates(updatedCerts);
-    setIsConfirmingIssue(false);
+      const updatedCerts = certificates.map(c => c.id === updatedCert.id ? updatedCert : c);
+      setCertificates(updatedCerts);
+      setIsConfirmingIssue(false);
+    } catch (err: any) {
+      console.error('[handleIssue] Error:', err);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -176,214 +226,167 @@ export const CompanyCertificates: React.FC = () => {
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" className="bg-white" onClick={() => setIsConfirmingIssue(false)}>Cancel</Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleIssue}>Confirm Issue</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleIssue} disabled={actionLoading}>
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Confirm Issue
+                </Button>
               </div>
             </div>
           </Card>
         )}
 
-        {/* The Visual Certificate Rendering */}
-        <div className="relative w-full max-w-4xl mx-auto bg-white border border-slate-300 shadow-xl rounded-sm p-12 overflow-hidden my-8 min-h-[600px] flex flex-col items-center text-center">
+        {/* Certificate Mock Sheet */}
+        <div className="bg-white border-8 border-indigo-900/10 p-12 rounded-xl shadow-xl relative overflow-hidden flex flex-col items-center text-center max-w-4xl mx-auto my-6 aspect-[1.414/1] justify-between">
+          <div className="absolute top-0 left-0 w-32 h-32 border-t-8 border-l-8 border-indigo-700 m-4 pointer-events-none" />
+          <div className="absolute bottom-0 right-0 w-32 h-32 border-b-8 border-r-8 border-indigo-700 m-4 pointer-events-none" />
           
-          {/* Decorative Elements */}
-          <div className="absolute top-0 left-0 w-full h-4 bg-indigo-900" />
-          <div className="absolute top-4 left-0 w-full h-1 bg-amber-500" />
-          <div className="absolute bottom-4 left-0 w-full h-1 bg-amber-500" />
-          <div className="absolute bottom-0 left-0 w-full h-4 bg-indigo-900" />
-          
-          {/* Watermark Logo Mock */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
-            <Award className="w-96 h-96 text-indigo-900" />
+          <div className="space-y-4 pt-6">
+            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-indigo-700 font-bold border border-indigo-200">
+              <Award className="w-8 h-8" />
+            </div>
+            <h2 className="text-3xl font-serif font-black tracking-widest text-slate-900 uppercase">Certificate of Completion</h2>
+            <p className="text-sm font-medium tracking-wider text-slate-500 uppercase">This is proudly presented to</p>
           </div>
 
-          <div className="z-10 w-full max-w-3xl flex flex-col items-center mt-8">
-            <h1 className="text-4xl font-serif text-slate-800 uppercase tracking-widest mb-10">Internship Completion Certificate</h1>
-            
-            <p className="text-lg text-slate-600 italic mb-4">This certificate is proudly presented to</p>
-            
-            <h2 className="text-5xl font-serif font-bold text-indigo-900 mb-8 border-b-2 border-slate-200 pb-2 w-full max-w-lg text-center">
+          <div className="my-8">
+            <h3 className="text-4xl font-serif font-bold text-indigo-950 underline decoration-indigo-200 underline-offset-8">
               {data.student.studentName}
-            </h2>
-            
-            <p className="text-lg text-slate-600 italic mb-4">for successfully completing the internship program as</p>
-            
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">{data.student.role}</h3>
-            <p className="text-lg text-slate-600 mb-12">at <span className="font-bold">{data.student.company}</span></p>
-
-            <p className="text-md text-slate-600 mb-16">
-              Internship Period: <span className="font-semibold">{data.student.startDate}</span> to <span className="font-semibold">{data.student.endDate}</span>
+            </h3>
+            <p className="text-sm text-slate-600 max-w-lg mx-auto mt-4 leading-relaxed">
+              for successfully completing the full duration of the <span className="font-semibold text-slate-900">{data.student.role}</span> internship program with demonstrated excellence and professional integrity.
             </p>
+          </div>
 
-            <div className="flex justify-between w-full mt-auto pt-10 px-8">
-              <div className="text-left flex flex-col">
-                {data.existingCert?.certificateId ? (
-                  <>
-                    <span className="text-xs text-slate-400 uppercase tracking-wider">Certificate ID</span>
-                    <span className="font-mono text-sm font-semibold text-slate-700">{data.existingCert.certificateId}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs text-slate-400 uppercase tracking-wider">Certificate ID</span>
-                    <span className="font-mono text-sm font-semibold text-slate-300 italic">Pending Generation</span>
-                  </>
-                )}
-                <div className="mt-4">
-                  <span className="text-xs text-slate-400 uppercase tracking-wider block">Issue Date</span>
-                  <span className="text-sm font-semibold text-slate-700">{data.existingCert?.issueDate || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                </div>
-              </div>
-              
-              <div className="text-center flex flex-col items-center">
-                <div className="w-48 border-b border-slate-800 mb-2 h-12 flex items-end justify-center">
-                  <span className="font-handwriting text-2xl text-slate-800 -mb-1 opacity-80">Company Rep</span>
-                </div>
-                <span className="text-sm font-bold text-slate-800">Authorized Signatory</span>
-                <span className="text-xs text-slate-500">{data.student.company}</span>
-              </div>
+          <div className="w-full flex items-end justify-between px-12 pb-6 border-t border-slate-100 pt-8">
+            <div className="text-left">
+              <div className="font-serif font-bold text-slate-900">TechCorp Industry Lead</div>
+              <div className="text-xs text-slate-500">Authorized Signatory</div>
+              <div className="text-xs text-slate-400 mt-1">Issued: {data.existingCert?.issueDate || 'Pending'}</div>
+            </div>
+            <div className="text-center font-mono text-xs text-slate-400 border border-dashed border-slate-300 p-2 rounded">
+              ID: {data.existingCert?.certificateId || 'PENDING-GEN'}
+            </div>
+            <div className="text-right">
+              <div className="font-serif font-bold text-slate-900">{APP_INFO.name} Platform</div>
+              <div className="text-xs text-slate-500">Verified Credential</div>
             </div>
           </div>
         </div>
-
-        {/* Informational Panel */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card title="Completion Summary" className="shadow-sm">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-xs text-slate-400 uppercase tracking-wider block">Internship Status</span>
-                  <span className="text-sm font-semibold text-slate-900">{data.student.internshipStatus}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 uppercase tracking-wider block">Final Evaluation</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-sm font-semibold text-indigo-700">{data.finalEval?.overallRating.toFixed(1)} / 5</span>
-                    <Badge variant="emerald" className="px-1.5 py-0 text-[10px]">Verified</Badge>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card title="PPO Reference" className="shadow-sm">
-            <div className="space-y-4">
-              <div>
-                <span className="text-xs text-slate-400 uppercase tracking-wider block mb-1">PPO Status</span>
-                {data.ppo ? (
-                  <Badge variant={data.ppo.status === 'Offered' || data.ppo.status === 'Accepted' ? 'indigo' : 'neutral'}>
-                    {data.ppo.status}
-                  </Badge>
-                ) : (
-                  <span className="text-sm text-slate-500 italic">No PPO Decision Made</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400">Note: PPO status is informational and does not affect certificate eligibility.</p>
-            </div>
-          </Card>
-        </div>
-
       </div>
     );
   }
 
-  // LIST VIEW
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-8">
       <PageHeader
         title="Certificates"
-        description="Generate and manage internship completion certificates for eligible interns."
+        description="Issue verified completion certificates to interns who successfully finished their programs."
       />
 
+      {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="Total Eligible" value={totalCount.toString()} icon={Award} />
-        <StatCard title="Pending Generation" value={eligibleCount.toString()} icon={FileText} />
+        <StatCard title="Eligible Interns" value={eligibleCount.toString()} icon={Award} />
         <StatCard title="Generated" value={generatedCount.toString()} icon={FileText} />
-        <StatCard title="Issued" value={issuedCount.toString()} icon={CheckCircle2} />
+        <StatCard title="Issued & Recorded" value={issuedCount.toString()} icon={CheckCircle2} />
+        <StatCard title="Total Candidates" value={totalCount.toString()} icon={Award} />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center gap-4 justify-between bg-slate-50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <Input 
-              className="pl-9 bg-white" 
-              placeholder="Search by intern name or role..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select 
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="All">All Statuses</option>
-              <option value="Eligible">Eligible</option>
-              <option value="Generated">Generated</option>
-              <option value="Issued">Issued</option>
-            </select>
-          </div>
+      {/* Search and Filters */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <Input
+            placeholder="Search by intern name or role..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-slate-50 border-slate-200 text-sm"
+          />
         </div>
 
-        {filteredList.length > 0 ? (
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+          <span className="text-sm font-medium text-slate-700 mr-2">Status:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Eligible">Eligible</option>
+            <option value="Generated">Generated</option>
+            <option value="Issued">Issued</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Certificates Table */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading certificates...
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-rose-600">{error}</div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-white border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-slate-600">Student</th>
-                  <th className="px-4 py-3 font-semibold text-slate-600">Internship / Role</th>
-                  <th className="px-4 py-3 font-semibold text-slate-600">Internship Period</th>
-                  <th className="px-4 py-3 font-semibold text-slate-600">PPO Status</th>
-                  <th className="px-4 py-3 font-semibold text-slate-600">Certificate Status</th>
-                  <th className="px-4 py-3 font-semibold text-slate-600 text-right">Action</th>
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Intern Name</th>
+                  <th className="py-3 px-4">Program Role</th>
+                  <th className="py-3 px-4">Final Eval Rating</th>
+                  <th className="py-3 px-4">Certificate ID</th>
+                  <th className="py-3 px-4">Issue Date</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredList.map(data => (
-                  <tr key={data.student.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900">{data.student.studentName}</div>
-                      <div className="text-xs text-slate-500">{data.student.studentId}</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{data.student.role}</td>
-                    <td className="px-4 py-3">
-                      <div className="text-slate-700">{data.student.startDate}</div>
-                      <div className="text-xs text-slate-400">to {data.student.endDate}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                        {data.ppo?.status || 'No Offer'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {getStatusBadge(data.derivedStatus)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {data.derivedStatus === 'Eligible' ? (
-                        <Button variant="primary" size="sm" onClick={() => handlePreview(data.student.id)}>
-                          Generate
+                {filteredList.length > 0 ? (
+                  filteredList.map(item => (
+                    <tr key={item.student.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-semibold text-slate-900">
+                        {item.student.studentName}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {item.student.role}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {item.finalEval ? (
+                          <span className="font-semibold text-emerald-700">★ {item.finalEval.overallRating}</span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">Awaiting</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
+                        {item.existingCert?.certificateId || '—'}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-500">
+                        {item.existingCert?.issueDate || '—'}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {getStatusBadge(item.derivedStatus)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handlePreview(item.student.id)}
+                        >
+                          {item.derivedStatus === 'Eligible' ? 'Review & Generate' : 'View Preview'}
                         </Button>
-                      ) : (
-                        <Button variant="outline" size="sm" onClick={() => handlePreview(data.student.id)}>
-                          View
-                        </Button>
-                      )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
+                      No interns match the certificate criteria.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
-          </div>
-        ) : (
-          <div className="py-16 flex flex-col items-center justify-center text-center px-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <Award className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">No interns eligible for certificates</h3>
-            <p className="text-slate-500 text-sm max-w-sm">
-              Certificates become available after an intern successfully completes their internship and their final evaluation is verified.
-            </p>
           </div>
         )}
       </div>

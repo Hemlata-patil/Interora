@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { APP_INFO } from '@/constants';
 import { Button, Input, Select, Card } from '@/components';
 import { ShieldAlert } from 'lucide-react';
-import { registerStudentBackend } from '@/services/api/backendService';
+import { registerStudentBackend, fetchDepartmentsBackend, type DepartmentRecord } from '@/services/api/backendService';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(true);
 
   // Student Form State
   const [studentForm, setStudentForm] = useState({
@@ -16,12 +18,43 @@ export const RegisterPage: React.FC = () => {
     studentId: 'CS1',
     email: '',
     phone: '',
-    department: 'CSE',
+    department: '',
     course: 'B.Tech Computer Science',
     yearSemester: '3rd Year / 6th Sem',
     password: '',
     confirmPassword: '',
   });
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDepartments = async () => {
+      setLoadingDepartments(true);
+      try {
+        const data = await fetchDepartmentsBackend();
+        if (isMounted) {
+          setDepartments(data);
+          if (data.length > 0) {
+            setStudentForm((prev) => {
+              const currentValid = data.some((d) => d.code === prev.department);
+              return currentValid ? prev : { ...prev, department: data[0].code };
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+      } finally {
+        if (isMounted) {
+          setLoadingDepartments(false);
+        }
+      }
+    };
+
+    loadDepartments();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
 
   const handleStudentRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +65,13 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    if (studentForm.password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
+    if (studentForm.password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!studentForm.department) {
+      setErrorMsg('Please select a department.');
       return;
     }
 
@@ -112,13 +150,18 @@ export const RegisterPage: React.FC = () => {
               <Select
                 label="Department"
                 value={studentForm.department}
+                disabled={loadingDepartments || departments.length === 0}
                 onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
-                options={[
-                  { value: 'CSE', label: 'Computer Science (CSE)' },
-                  { value: 'IT', label: 'Information Tech (IT)' },
-                  { value: 'AIML', label: 'AI & Machine Learning' },
-                  { value: 'ECE', label: 'Electronics (ECE)' },
-                ]}
+                options={
+                  loadingDepartments
+                    ? [{ value: '', label: 'Loading departments...' }]
+                    : departments.length === 0
+                    ? [{ value: '', label: 'No departments available' }]
+                    : departments.map((d) => ({
+                        value: d.code,
+                        label: d.name ? `${d.name} (${d.code})` : d.code,
+                      }))
+                }
               />
               <Input
                 label="Course / Program"

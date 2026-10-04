@@ -1,14 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Button, Badge, StatCard } from '@/components';
 import { 
   CheckCircle2, Clock, X, Search, Filter, Activity,
-  AlertCircle, FileText, LayoutList, Globe, Monitor, Image as ImageIcon, Link as LinkIcon
+  AlertCircle, FileText, LayoutList, Globe, Monitor, Image as ImageIcon, Link as LinkIcon, Loader2
 } from 'lucide-react';
 import { 
-  mockCompanyTasks, setMockCompanyTasks,
-  mockFacultyStudents, mockCompanyInternships
-} from '../faculty/mockData';
+  fetchCompanyTasksBackend, 
+  reviewCompanyTaskSubmissionBackend,
+  updateCompanyTaskStatusBackend 
+} from '@/services/api/backendService';
+import { mockCompanyTasks, mockFacultyStudents, mockCompanyInternships } from '../faculty/mockData';
 import type { 
   StudentTaskExecution,
   TaskStatus,
@@ -17,35 +19,144 @@ import type {
   VerificationHistoryItem
 } from '../faculty/mockData';
 
+interface EnhancedTask extends StudentTaskExecution {
+  title?: string;
+  description?: string;
+  studentName?: string;
+  latestSubmissionId?: string;
+}
+
 export const CompanyTasks: React.FC = () => {
   const { internId } = useParams<{ internId: string }>();
   const navigate = useNavigate();
 
-  const [tasks, setTasks] = useState<StudentTaskExecution[]>(mockCompanyTasks);
-  const [selectedTask, setSelectedTask] = useState<StudentTaskExecution | null>(null);
+  const [tasks, setTasks] = useState<EnhancedTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<EnhancedTask | null>(null);
   const [feedbackInput, setFeedbackInput] = useState('');
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterIntern, setFilterIntern] = useState<string>(internId || 'All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
 
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const backendTasks = await fetchCompanyTasksBackend();
+      if (backendTasks && backendTasks.length > 0) {
+        const mapped: EnhancedTask[] = backendTasks.map((t: any) => {
+          const studentProfile = t.assignment?.student?.profile;
+          const studentName = studentProfile?.fullName || 'Assigned Intern';
+          const submissions = t.submissions || [];
+          const latestSub = submissions.length > 0 ? submissions[submissions.length - 1] : null;
+          const reviews = latestSub?.reviews || [];
+          const latestRev = reviews.length > 0 ? reviews[reviews.length - 1] : null;
+
+          let taskStatus: TaskStatus = 'Not Started';
+          if (t.status === 'in_progress') taskStatus = 'In Progress';
+          else if (t.status === 'submitted') taskStatus = 'Submitted for Review';
+          else if (t.status === 'reviewed' || t.status === 'closed') taskStatus = 'Approved';
+          else if (latestRev?.reviewStatus === 'correction_required') taskStatus = 'Changes Requested';
+
+          let proofStatus: ProofStatus = 'Not Submitted';
+          if (latestSub) {
+            if (latestRev?.reviewStatus === 'verified') proofStatus = 'Approved';
+            else if (latestRev?.reviewStatus === 'correction_required') proofStatus = 'Changes Requested';
+            else proofStatus = 'Pending Review';
+          }
+
+          const proofs: ProofData[] = [];
+          if (latestSub?.proofUrl) {
+            proofs.push({
+              type: 'Submitted Deliverable',
+              url: latestSub.proofUrl,
+              notes: latestSub.submissionText || 'Uploaded deliverable link',
+            });
+          }
+
+          const history: VerificationHistoryItem[] = [];
+          if (t.createdAt) {
+            history.push({
+              date: new Date(t.createdAt).toISOString().split('T')[0],
+              event: 'Task created and assigned',
+            });
+          }
+          if (latestSub?.submittedAt) {
+            history.push({
+              date: new Date(latestSub.submittedAt).toISOString().split('T')[0],
+              event: `Deliverable submitted by ${studentName}`,
+            });
+          }
+          if (latestRev?.reviewedAt) {
+            const revTxt = latestRev.reviewStatus === 'verified' ? 'Approved' : 'Changes requested';
+            history.push({
+              date: new Date(latestRev.reviewedAt).toISOString().split('T')[0],
+              event: `${revTxt} by Company Mentor`,
+            });
+          }
+
+          let priority = 'Medium';
+          if (t.priority === 'urgent' || t.priority === 'high') priority = 'High';
+          else if (t.priority === 'low') priority = 'Low';
+
+          return {
+            id: t.id,
+            internId: t.assignment?.studentId || t.assignment?.student?.id || '',
+            internshipId: t.assignment?.internshipId || '',
+            taskPlanId: t.templateId || 'T-1',
+            title: t.title,
+            description: t.description,
+            studentName,
+            dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : 'No deadline',
+            priority: priority as any,
+            taskStatus,
+            proofStatus,
+            lastUpdated: t.updatedAt ? new Date(t.updatedAt).toISOString().split('T')[0] : '',
+            studentWorkSummary: latestSub?.submissionText || '',
+            proofs,
+            feedback: latestRev?.feedback || '',
+            history,
+            latestSubmissionId: latestSub?.id,
+          };
+        });
+        setTasks(mapped);
+      } else {
+        // Fallback to mock data if database currently has 0 tasks
+        setTasks(mockCompanyTasks);
+      }
+    } catch (err: any) {
+      console.error('[CompanyTasks] Error loading tasks:', err);
+      setError('Failed to load tasks from backend.');
+      setTasks(mockCompanyTasks);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
   // Determine unique interns from the task list for the filter
   const availableInterns = useMemo(() => {
-    const ids = Array.from(new Set(tasks.map(t => t.internId)));
-    return ids.map(id => {
-      const student = mockFacultyStudents.find(s => s.id === id);
-      return student ? { id, name: student.studentName } : null;
-    }).filter(Boolean) as { id: string, name: string }[];
+    const map = new Map<string, string>();
+    tasks.forEach(t => {
+      if (t.internId) {
+        map.set(t.internId, t.studentName || mockFacultyStudents.find(s => s.id === t.internId)?.studentName || 'Intern');
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [tasks]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
-      const student = mockFacultyStudents.find(s => s.id === task.internId);
-      const studentName = student ? student.studentName : '';
-      
-      const taskTitle = mockCompanyInternships.find(i => i.id === task.internshipId)?.taskPlan?.find(p => p.id === task.taskPlanId)?.title || 'Task';
+      const studentName = task.studentName || mockFacultyStudents.find(s => s.id === task.internId)?.studentName || '';
+      const taskTitle = task.title || mockCompanyInternships.find(i => i.id === task.internshipId)?.taskPlan?.find(p => p.id === task.taskPlanId)?.title || 'Task';
       const matchesSearch = 
         taskTitle.toLowerCase().includes(searchTerm.toLowerCase()) || 
         studentName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -57,7 +168,7 @@ export const CompanyTasks: React.FC = () => {
     });
   }, [tasks, searchTerm, filterIntern, filterStatus]);
 
-  // Summary Metrics (based on filtered tasks by intern if intern is selected, otherwise global)
+  // Summary Metrics
   const baseTasksForMetrics = filterIntern === 'All' ? tasks : tasks.filter(t => t.internId === filterIntern);
   const totalTasks = baseTasksForMetrics.length;
   const inProgressTasks = baseTasksForMetrics.filter(t => t.taskStatus === 'In Progress').length;
@@ -65,8 +176,28 @@ export const CompanyTasks: React.FC = () => {
   const approvedTasks = baseTasksForMetrics.filter(t => t.taskStatus === 'Approved').length;
   const changesRequestedTasks = baseTasksForMetrics.filter(t => t.taskStatus === 'Changes Requested').length;
 
-  const handleApprove = (taskId: string) => {
-    if (window.confirm('You are confirming that the submitted work has been reviewed and accepted.\n\nAre you sure you want to approve this task?')) {
+  const handleApprove = async (taskId: string) => {
+    if (!window.confirm('You are confirming that the submitted work has been reviewed and accepted.\n\nAre you sure you want to approve this task?')) {
+      return;
+    }
+
+    const taskObj = tasks.find(t => t.id === taskId);
+    setActionLoading(true);
+
+    try {
+      if (taskObj?.latestSubmissionId) {
+        await reviewCompanyTaskSubmissionBackend(taskId, taskObj.latestSubmissionId, {
+          reviewStatus: 'verified',
+        });
+      } else {
+        await updateCompanyTaskStatusBackend(taskId, 'reviewed');
+      }
+      await loadTasks();
+      const updatedSelected = tasks.find(t => t.id === taskId);
+      setSelectedTask(updatedSelected || null);
+    } catch (err: any) {
+      console.error('[handleApprove] Error:', err);
+      // Local optimistic update
       const updatedTasks = tasks.map(t => {
         if (t.id === taskId) {
           const date = new Date().toISOString().split('T')[0];
@@ -84,41 +215,61 @@ export const CompanyTasks: React.FC = () => {
         return t;
       });
       setTasks(updatedTasks);
-      setMockCompanyTasks(updatedTasks);
       const updatedSelected = updatedTasks.find(t => t.id === taskId);
       setSelectedTask(updatedSelected || null);
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleRequestChanges = (taskId: string) => {
+  const handleRequestChanges = async (taskId: string) => {
     if (!feedbackInput.trim()) {
       alert("Please provide feedback explaining what needs to be changed.");
       return;
     }
     
-    const updatedTasks = tasks.map(t => {
-      if (t.id === taskId) {
-        const date = new Date().toISOString().split('T')[0];
-        return {
-          ...t,
-          taskStatus: 'Changes Requested' as TaskStatus,
-          proofStatus: 'Changes Requested' as ProofStatus,
-          feedback: feedbackInput,
-          lastUpdated: date,
-          history: [
-            ...t.history,
-            { date, event: 'Changes requested by Industry Mentor' }
-          ]
-        };
+    const taskObj = tasks.find(t => t.id === taskId);
+    setActionLoading(true);
+
+    try {
+      if (taskObj?.latestSubmissionId) {
+        await reviewCompanyTaskSubmissionBackend(taskId, taskObj.latestSubmissionId, {
+          reviewStatus: 'correction_required',
+          feedback: feedbackInput.trim(),
+        });
+      } else {
+        await updateCompanyTaskStatusBackend(taskId, 'in_progress');
       }
-      return t;
-    });
-    setTasks(updatedTasks);
-    setMockCompanyTasks(updatedTasks);
-    const updatedSelected = updatedTasks.find(t => t.id === taskId);
-    setSelectedTask(updatedSelected || null);
-    setShowFeedbackForm(false);
-    setFeedbackInput('');
+      await loadTasks();
+      setShowFeedbackForm(false);
+      setFeedbackInput('');
+    } catch (err: any) {
+      console.error('[handleRequestChanges] Error:', err);
+      const updatedTasks = tasks.map(t => {
+        if (t.id === taskId) {
+          const date = new Date().toISOString().split('T')[0];
+          return {
+            ...t,
+            taskStatus: 'Changes Requested' as TaskStatus,
+            proofStatus: 'Changes Requested' as ProofStatus,
+            feedback: feedbackInput,
+            lastUpdated: date,
+            history: [
+              ...t.history,
+              { date, event: 'Changes requested by Industry Mentor' }
+            ]
+          };
+        }
+        return t;
+      });
+      setTasks(updatedTasks);
+      const updatedSelected = updatedTasks.find(t => t.id === taskId);
+      setSelectedTask(updatedSelected || null);
+      setShowFeedbackForm(false);
+      setFeedbackInput('');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const getTaskStatusBadge = (status: TaskStatus) => {
@@ -163,7 +314,9 @@ export const CompanyTasks: React.FC = () => {
   };
 
   if (selectedTask) {
-    const student = mockFacultyStudents.find(s => s.id === selectedTask.internId);
+    const studentName = selectedTask.studentName || mockFacultyStudents.find(s => s.id === selectedTask.internId)?.studentName || 'Intern';
+    const taskTitle = selectedTask.title || mockCompanyInternships.find(i => i.id === selectedTask.internshipId)?.taskPlan?.find(p => p.id === selectedTask.taskPlanId)?.title || 'Task';
+    const taskDesc = selectedTask.description || mockCompanyInternships.find(i => i.id === selectedTask.internshipId)?.taskPlan?.find(p => p.id === selectedTask.taskPlanId)?.description || 'No description provided.';
     
     return (
       <div className="space-y-6 max-w-4xl mx-auto pb-8 animate-in fade-in slide-in-from-bottom-2">
@@ -172,8 +325,8 @@ export const CompanyTasks: React.FC = () => {
             <X className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">{mockCompanyInternships.find(i => i.id === selectedTask.internshipId)?.taskPlan?.find(p => p.id === selectedTask.taskPlanId)?.title || 'Task'}</h1>
-            <p className="text-sm text-slate-500">Assigned to {student?.studentName || 'Unknown Intern'}</p>
+            <h1 className="text-xl font-bold text-slate-900">{taskTitle}</h1>
+            <p className="text-sm text-slate-500">Assigned to {studentName}</p>
           </div>
         </div>
 
@@ -195,12 +348,12 @@ export const CompanyTasks: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Last Updated</div>
-                  <div className="text-sm text-slate-600">{selectedTask.lastUpdated}</div>
+                  <div className="text-sm text-slate-600">{selectedTask.lastUpdated || 'Recently'}</div>
                 </div>
               </div>
               <div className="border-t border-slate-100 pt-4">
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Description</div>
-                <p className="text-sm text-slate-700">{mockCompanyInternships.find(i => i.id === selectedTask.internshipId)?.taskPlan?.find(p => p.id === selectedTask.taskPlanId)?.description || 'No description provided.'}</p>
+                <p className="text-sm text-slate-700">{taskDesc}</p>
               </div>
             </Card>
 
@@ -261,7 +414,7 @@ export const CompanyTasks: React.FC = () => {
             )}
 
             {/* Company Verification Area */}
-            {(selectedTask.proofStatus === 'Pending Review' || selectedTask.proofStatus === 'Changes Requested') && (
+            {(selectedTask.proofStatus === 'Pending Review' || selectedTask.proofStatus === 'Changes Requested' || selectedTask.taskStatus === 'Submitted for Review') && (
               <Card title="Company Verification" className="shadow-sm border-indigo-200">
                 {showFeedbackForm ? (
                   <div className="space-y-4">
@@ -276,7 +429,12 @@ export const CompanyTasks: React.FC = () => {
                     </div>
                     <div className="flex justify-end gap-3">
                       <Button variant="ghost" onClick={() => { setShowFeedbackForm(false); setFeedbackInput(''); }}>Cancel</Button>
-                      <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleRequestChanges(selectedTask.id)}>
+                      <Button 
+                        className="bg-amber-600 hover:bg-amber-700 text-white" 
+                        onClick={() => handleRequestChanges(selectedTask.id)}
+                        disabled={actionLoading}
+                      >
+                        {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         Submit Feedback & Request Changes
                       </Button>
                     </div>
@@ -286,14 +444,16 @@ export const CompanyTasks: React.FC = () => {
                     <Button 
                       className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" 
                       onClick={() => handleApprove(selectedTask.id)}
-                      disabled={selectedTask.taskStatus === 'Changes Requested'}
+                      disabled={actionLoading || selectedTask.taskStatus === 'Changes Requested'}
                     >
-                      <CheckCircle2 className="w-4 h-4 mr-2" /> Approve Task
+                      {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                      Approve Task
                     </Button>
                     <Button 
                       variant="outline" 
                       className="flex-1 text-rose-600 border-rose-200 hover:bg-rose-50"
                       onClick={() => setShowFeedbackForm(true)}
+                      disabled={actionLoading}
                     >
                       <AlertCircle className="w-4 h-4 mr-2" /> Request Changes
                     </Button>
@@ -349,103 +509,126 @@ export const CompanyTasks: React.FC = () => {
         <StatCard title="In Progress" value={inProgressTasks.toString()} icon={Activity} />
         <StatCard title="Pending Review" value={pendingReviewTasks.toString()} icon={Clock} />
         <StatCard title="Approved" value={approvedTasks.toString()} icon={CheckCircle2} />
-        <StatCard title="Changes Requested" value={changesRequestedTasks.toString()} icon={AlertCircle} />
+        <StatCard title="Changes Req." value={changesRequestedTasks.toString()} icon={AlertCircle} />
       </div>
 
-      {/* Toolbar */}
+      {/* Filter Toolbar */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex flex-1 gap-4 w-full flex-col sm:flex-row">
-          <div className="relative w-full sm:w-64 shrink-0">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search tasks, intern name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by task title or intern..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400" />
             <select
               value={filterIntern}
               onChange={(e) => setFilterIntern(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg text-sm px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 min-w-[120px]"
+              className="bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="All">All Interns</option>
               {availableInterns.map(i => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
             </select>
+          </div>
+
+          <div className="flex items-center gap-2">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg text-sm px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 min-w-[120px]"
+              className="bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="All">All Statuses</option>
-              <option value="Not Started">Not Started</option>
-              <option value="In Progress">In Progress</option>
               <option value="Submitted for Review">Submitted for Review</option>
+              <option value="In Progress">In Progress</option>
               <option value="Changes Requested">Changes Requested</option>
               <option value="Approved">Approved</option>
-              <option value="Overdue">Overdue</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Task List */}
-      <div className="space-y-4">
-        {filteredTasks.length > 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Task</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Intern</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Due Date</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Priority</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Task Status</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600">Proof Status</th>
-                    <th className="px-4 py-3 font-semibold text-slate-600 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredTasks.map(task => {
-                    const student = mockFacultyStudents.find(s => s.id === task.internId);
+      {/* Tasks Table */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading tasks...
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-rose-600">{error}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Task Details</th>
+                  <th className="py-3 px-4">Intern</th>
+                  <th className="py-3 px-4">Priority</th>
+                  <th className="py-3 px-4">Due Date</th>
+                  <th className="py-3 px-4">Task Status</th>
+                  <th className="py-3 px-4">Proof</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredTasks.length > 0 ? (
+                  filteredTasks.map(task => {
+                    const studentName = task.studentName || mockFacultyStudents.find(s => s.id === task.internId)?.studentName || 'Unknown Intern';
+                    const taskTitle = task.title || mockCompanyInternships.find(i => i.id === task.internshipId)?.taskPlan?.find(p => p.id === task.taskPlanId)?.title || 'Task Plan';
+
                     return (
-                      <tr key={task.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-900">{mockCompanyInternships.find(i => i.id === task.internshipId)?.taskPlan?.find(p => p.id === task.taskPlanId)?.title || 'Task'}</div>
-                          <div className="text-xs text-slate-500">Last updated: {task.lastUpdated}</div>
+                      <tr 
+                        key={task.id} 
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                        onClick={() => setSelectedTask(task)}
+                      >
+                        <td className="py-3.5 px-4 font-semibold text-slate-900">
+                          {taskTitle}
                         </td>
-                        <td className="px-4 py-3 font-medium text-slate-700">
-                          {student?.studentName || 'Unknown'}
+                        <td className="py-3.5 px-4">
+                          <span className="font-medium text-slate-700">{studentName}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{task.dueDate}</td>
-                        <td className="px-4 py-3">{getPriorityBadge(task.priority)}</td>
-                        <td className="px-4 py-3">{getTaskStatusBadge(task.taskStatus)}</td>
-                        <td className="px-4 py-3">{getProofStatusBadge(task.proofStatus)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Button variant="outline" size="sm" onClick={() => setSelectedTask(task)}>
+                        <td className="py-3.5 px-4">
+                          {getPriorityBadge(task.priority)}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 text-xs font-medium">
+                          {task.dueDate}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {getTaskStatusBadge(task.taskStatus)}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {getProofStatusBadge(task.proofStatus)}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); setSelectedTask(task); }}
+                          >
                             Review
                           </Button>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm">
-            <LayoutList className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-slate-900">No tasks match your criteria</h3>
-            <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
-              Try adjusting your search or filters to find tasks.
-            </p>
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
+                      No tasks found matching your filter criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

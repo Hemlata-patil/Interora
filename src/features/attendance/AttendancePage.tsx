@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { PageHeader, Card, Badge, Button } from '@/components';
+import { PageHeader, Card, Badge, Button, Alert } from '@/components';
 import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
 import {
   mockAttendanceHistory,
@@ -13,11 +13,23 @@ import { AttendanceHistory } from './components/AttendanceHistory';
 import { GeoCameraModal, type GeoLocationCoords } from './components/GeoCameraModal';
 import { CheckSquare, FileText, LogIn, LogOut, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
-import { fetchStudentAttendanceBackend, createAttendanceRecordBackend, checkoutAttendanceRecordBackend } from '@/services/api/backendService';
+import {
+  fetchStudentAttendanceBackend,
+  createAttendanceRecordBackend,
+  checkoutAttendanceRecordBackend,
+  fetchActiveStudentInternshipBackend,
+  fetchStudentTasksBackend,
+  fetchStudentWorkLogsBackend,
+  type ActiveStudentInternshipRecord,
+  type StudentTaskRecord,
+  type StudentWorkLogRecord,
+} from '@/services/api/backendService';
 
 export const AttendancePage: React.FC = () => {
-  const activeInternship = mockActiveInternshipData;
+  const [activeInternship, setActiveInternship] = useState<ActiveStudentInternshipRecord | null>(null);
+  const [tasks, setTasks] = useState<StudentTaskRecord[]>([]);
+  const [workLogs, setWorkLogs] = useState<StudentWorkLogRecord[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [history, setHistory] = useState<AttendanceRecord[]>(mockAttendanceHistory);
   const [todayState, setTodayState] = useState<'not_checked_in' | 'checked_in' | 'completed'>('not_checked_in');
@@ -28,71 +40,103 @@ export const AttendancePage: React.FC = () => {
   const [geoActionType, setGeoActionType] = useState<'check_in' | 'check_out'>('check_in');
 
   const loadAttendance = async () => {
-    const remoteRecords = await fetchStudentAttendanceBackend();
-    if (remoteRecords.length > 0) {
-      const mapped: AttendanceRecord[] = remoteRecords.map((r: any) => {
-        const d = new Date(r.attendanceDate);
-        return {
-          id: r.id,
-          date: r.attendanceDate,
-          day: d.toLocaleDateString('en-US', { weekday: 'short' }),
-          status: r.status as any,
-          checkIn: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
-          checkOut: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '05:00 PM',
-          workingHours: '8.0 hrs',
-          checkInPhotoUrl: r.checkInPhotoUrl,
-          checkInLat: r.checkInLat,
-          checkInLng: r.checkInLng,
-          checkOutPhotoUrl: r.checkOutPhotoUrl,
-          checkOutLat: r.checkOutLat,
-          checkOutLng: r.checkOutLng,
-          locationAddress: r.locationAddress,
-        };
-      });
-      setHistory(mapped);
+    try {
+      const remoteRecords = await fetchStudentAttendanceBackend();
+      if (remoteRecords.length > 0) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayRec = remoteRecords.find((r: any) => r.attendanceDate === todayStr);
+        if (todayRec) {
+          if (todayRec.checkOutTime) {
+            setTodayState('completed');
+            if (todayRec.checkInTime) {
+              setCheckInTime(new Date(todayRec.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            }
+            setCheckOutTime(new Date(todayRec.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          } else if (todayRec.checkInTime) {
+            setTodayState('checked_in');
+            setCheckInTime(new Date(todayRec.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          }
+        }
+
+        const mapped: AttendanceRecord[] = remoteRecords.map((r: any) => {
+          const d = new Date(r.attendanceDate);
+          return {
+            id: r.id,
+            date: r.attendanceDate,
+            day: isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+            status: r.status as any,
+            checkIn: r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
+            checkOut: r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '05:00 PM',
+            workingHours: r.workingHours || '8.0 hrs',
+            checkInPhotoUrl: r.checkInPhotoUrl,
+            checkInLat: r.checkInLat,
+            checkInLng: r.checkInLng,
+            checkOutPhotoUrl: r.checkOutPhotoUrl,
+            checkOutLat: r.checkOutLat,
+            checkOutLng: r.checkOutLng,
+            locationAddress: r.locationAddress,
+          };
+        });
+        setHistory(mapped);
+      }
+    } catch (err) {
+      console.warn('[AttendancePage] Failed to load attendance:', err);
     }
   };
 
   useEffect(() => {
     loadAttendance();
+    fetchActiveStudentInternshipBackend().then((active) => {
+      if (active) setActiveInternship(active);
+    }).catch(() => null);
+    fetchStudentTasksBackend().then((t) => {
+      if (t?.length) setTasks(t);
+    }).catch(() => null);
+    fetchStudentWorkLogsBackend().then((w) => {
+      if (w?.length) setWorkLogs(w);
+    }).catch(() => null);
 
-    const channel = supabase
-      .channel('attendance_records_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records' },
-        () => {
-          loadAttendance();
-        }
-      )
-      .subscribe();
-
+    const handleFocus = () => {
+      loadAttendance();
+    };
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
   const handleOpenCheckInModal = () => {
+    setActionError(null);
     setGeoActionType('check_in');
     setIsGeoModalOpen(true);
   };
 
   const handleOpenCheckOutModal = () => {
+    setActionError(null);
     setGeoActionType('check_out');
     setIsGeoModalOpen(true);
   };
 
   const handleConfirmGeoAttendance = async (photoBlob: Blob, coords: GeoLocationCoords) => {
+    setActionError(null);
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     if (geoActionType === 'check_in') {
-      setCheckInTime(timeNow);
-      setTodayState('checked_in');
-      await createAttendanceRecordBackend('present', photoBlob, coords);
+      const res = await createAttendanceRecordBackend('present', photoBlob, coords, activeInternship?.assignmentId);
+      if (res.success) {
+        setCheckInTime(timeNow);
+        setTodayState('checked_in');
+      } else {
+        setActionError(res.error || 'Check-in failed.');
+      }
     } else {
-      setCheckOutTime(timeNow);
-      setTodayState('completed');
-      await checkoutAttendanceRecordBackend(photoBlob, coords);
+      const res = await checkoutAttendanceRecordBackend(photoBlob, coords, activeInternship?.assignmentId);
+      if (res.success) {
+        setCheckOutTime(timeNow);
+        setTodayState('completed');
+      } else {
+        setActionError(res.error || 'Check-out failed.');
+      }
     }
 
     await loadAttendance();
@@ -101,21 +145,41 @@ export const AttendancePage: React.FC = () => {
   const attendanceMetrics = useMemo(() => calculateAttendanceMetrics(history), [history]);
 
   const taskMetrics = useMemo(() => {
+    if (tasks.length > 0) {
+      const total = tasks.length;
+      const inProgress = tasks.filter((t) => t.status === 'in_progress' || t.status === 'In Progress').length;
+      const completed = tasks.filter((t) => t.status === 'completed' || t.status === 'Completed' || t.completed).length;
+      const pendingBlocked = tasks.filter((t) => t.status === 'assigned' || t.status === 'To Do' || t.status === 'Blocked').length;
+      return { total, inProgress, completed, pendingBlocked };
+    }
     const total = initialMockTasks.length;
     const inProgress = initialMockTasks.filter((t) => t.status === 'In Progress').length;
     const completed = initialMockTasks.filter((t) => t.status === 'Completed').length;
     const pendingBlocked = initialMockTasks.filter((t) => t.status === 'To Do' || t.status === 'Blocked').length;
     return { total, inProgress, completed, pendingBlocked };
-  }, []);
+  }, [tasks]);
 
   const workLogMetrics = useMemo(() => {
+    if (workLogs.length > 0) {
+      const totalHours = workLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
+      const loggedDays = workLogs.length;
+      const currentWeekHours = workLogs.slice(0, 5).reduce((acc, curr) => acc + curr.hoursWorked, 0);
+      const avgHoursPerDay = loggedDays > 0 ? (totalHours / loggedDays).toFixed(1) : '0';
+      return { totalHours, currentWeekHours, avgHoursPerDay, loggedDays };
+    }
     const totalHours = initialMockWorkLogs.reduce((acc, curr) => acc + curr.hoursWorked, 0);
     const loggedDays = initialMockWorkLogs.length;
     const currentWeekHours = initialMockWorkLogs.slice(0, 5).reduce((acc, curr) => acc + curr.hoursWorked, 0);
     const avgHoursPerDay = loggedDays > 0 ? (totalHours / loggedDays).toFixed(1) : '0';
-
     return { totalHours, currentWeekHours, avgHoursPerDay, loggedDays };
-  }, []);
+  }, [workLogs]);
+
+  const displayInternship = {
+    internshipId: activeInternship?.assignmentId || mockActiveInternshipData.internshipId,
+    internshipTitle: activeInternship?.title || mockActiveInternshipData.internshipTitle,
+    companyName: activeInternship?.companyName || mockActiveInternshipData.companyName,
+    mentorName: activeInternship?.mentorName || mockActiveInternshipData.mentorName,
+  };
 
   return (
     <div className="space-y-6">
@@ -129,10 +193,10 @@ export const AttendancePage: React.FC = () => {
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <Badge variant="emerald">ACTIVE ENROLLMENT</Badge>
-              <span className="text-xs text-indigo-200">ID: {activeInternship.internshipId}</span>
+              <span className="text-xs text-indigo-200">ID: {displayInternship.internshipId}</span>
             </div>
-            <h2 className="text-xl font-bold text-white">{activeInternship.internshipTitle}</h2>
-            <p className="text-xs text-indigo-200">{activeInternship.companyName} • Mentor: {activeInternship.mentorName}</p>
+            <h2 className="text-xl font-bold text-white">{displayInternship.internshipTitle}</h2>
+            <p className="text-xs text-indigo-200">{displayInternship.companyName} • Mentor: {displayInternship.mentorName}</p>
           </div>
 
           <div className="flex items-center space-x-4 bg-white/10 p-3 rounded-xl backdrop-blur-xs border border-white/10 shrink-0">
@@ -148,6 +212,12 @@ export const AttendancePage: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      {actionError && (
+        <Alert type="error" title="Attendance Logging Notice">
+          {actionError}
+        </Alert>
+      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader, StatCard, Card, Badge, Button, ProgressBar } from '@/components';
 import { Users, Building2, UserCheck, CheckSquare, Award, ArrowRight, TrendingUp, Activity, CheckCircle2, GraduationCap } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
 import { fetchAdminDashboardMetricsBackend, type AdminDashboardMetrics } from '@/services/api/backendService';
 
 export const AdminDashboard: React.FC = () => {
@@ -31,23 +30,14 @@ export const AdminDashboard: React.FC = () => {
 
     init();
 
-    // Subscribe to Realtime postgres_changes
-    const channel = supabase
-      .channel('admin_dashboard_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_applications' },
-        () => loadMetrics()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'company_profiles' },
-        () => loadMetrics()
-      )
-      .subscribe();
+    // Re-fetch metrics on window focus (PostgreSQL Focus Sync without Realtime streaming)
+    const handleFocus = () => {
+      loadMetrics();
+    };
+    window.addEventListener('focus', handleFocus);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -171,7 +161,7 @@ export const AdminDashboard: React.FC = () => {
               <Activity className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold text-slate-800 block">System Synced</span>
-                <span className="text-slate-500 text-[11px]">Realtime Supabase synchronization operational</span>
+                <span className="text-slate-500 text-[11px]">Realtime system synchronization operational</span>
               </div>
             </div>
 

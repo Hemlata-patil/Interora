@@ -4,56 +4,84 @@ import { initialMockTasks, type TaskRecord, type TaskStatus, type TaskPriority }
 import { mockActiveInternshipData } from '@/features/internships/data/mockActiveInternship';
 import { Search, CheckSquare, Clock, AlertCircle, PlayCircle, CheckCircle2, ArrowRight, Eye, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/services/supabase/supabaseClient';
-import { fetchStudentTasksBackend, updateStudentTaskBackend } from '@/services/api/backendService';
+import {
+  fetchStudentTasksBackend,
+  updateStudentTaskBackend,
+  updateStudentTaskStatusBackend,
+  fetchActiveStudentInternshipBackend,
+  type ActiveStudentInternshipRecord,
+} from '@/services/api/backendService';
 
 export const TasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<TaskRecord[]>(initialMockTasks);
+  const [activeInternship, setActiveInternship] = useState<ActiveStudentInternshipRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
 
-  const activeInternship = mockActiveInternshipData;
-
   const loadTasks = async () => {
-    const remoteTasks = await fetchStudentTasksBackend();
-    if (remoteTasks.length > 0) {
-      const mapped: TaskRecord[] = remoteTasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        description: t.description || 'Sprint task item',
-        status: t.completed ? 'Completed' : 'In Progress',
-        priority: 'Medium',
-        category: 'Development',
-        assignedDate: t.createdAt ? t.createdAt.slice(0, 10) : '2026-08-01',
-        dueDate: t.dueDate || '2026-08-31',
-        estimatedHours: 4,
-        actualHours: t.completed ? 4 : 0,
-        internshipId: 'int_2026_01',
-        assignedBy: 'Mentor',
-        completedAt: t.completed ? 'Recently' : undefined,
-      }));
-      setTasks(mapped);
+    try {
+      const [act, remoteTasks] = await Promise.all([
+        fetchActiveStudentInternshipBackend(),
+        fetchStudentTasksBackend(),
+      ]);
+
+      if (act) {
+        setActiveInternship(act);
+      }
+
+      if (remoteTasks && remoteTasks.length > 0) {
+        const mapped: TaskRecord[] = remoteTasks.map((t) => {
+          const rawStatus = (t.status || '').toLowerCase();
+          let status: TaskStatus = 'To Do';
+          if (rawStatus === 'completed' || rawStatus === 'submitted' || rawStatus === 'closed') {
+            status = 'Completed';
+          } else if (rawStatus === 'in_progress') {
+            status = 'In Progress';
+          } else if (rawStatus === 'blocked') {
+            status = 'Blocked';
+          }
+
+          const rawPriority = ((t as any).priority || '').toLowerCase();
+          let priority: TaskPriority = 'Medium';
+          if (rawPriority === 'high') priority = 'High';
+          else if (rawPriority === 'low') priority = 'Low';
+
+          return {
+            id: t.id,
+            title: t.title,
+            description: t.description || 'Sprint task item',
+            status,
+            priority,
+            category: 'Development',
+            assignedDate: t.createdAt ? t.createdAt.slice(0, 10) : '2026-08-01',
+            dueDate: t.dueDate || '2026-08-31',
+            estimatedHours: 4,
+            actualHours: t.completed ? 4 : 0,
+            internshipId: act?.internshipId || 'int_2026_01',
+            assignedBy: act?.mentorName || 'Mentor',
+            completedAt: t.completed ? (t.createdAt?.slice(0, 10) || 'Recently') : undefined,
+          };
+        });
+        setTasks(mapped);
+      } else if (!act) {
+        setTasks([]);
+      }
+    } catch (err) {
+      console.error('[TasksPage] Error loading tasks:', err);
     }
   };
 
   useEffect(() => {
     loadTasks();
 
-    // Subscribe to Realtime postgres changes on student_tasks table
-    const channel = supabase
-      .channel('student_tasks_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_tasks' },
-        () => {
-          loadTasks();
-        }
-      )
-      .subscribe();
+    const handleFocus = () => {
+      loadTasks();
+    };
 
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -73,10 +101,12 @@ export const TasksPage: React.FC = () => {
     setPriorityFilter('all');
   };
 
-  const handleStartTask = (taskId: string) => {
+  const handleStartTask = async (taskId: string) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: 'In Progress' as TaskStatus } : t))
     );
+    await updateStudentTaskStatusBackend(taskId, 'in_progress');
+    await loadTasks();
   };
 
   const handleCompleteTask = async (taskId: string) => {
@@ -92,6 +122,7 @@ export const TasksPage: React.FC = () => {
       )
     );
     await updateStudentTaskBackend(taskId, true);
+    await loadTasks();
   };
 
   const filteredTasks = useMemo(() => {

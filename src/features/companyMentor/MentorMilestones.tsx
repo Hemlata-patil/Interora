@@ -1,53 +1,125 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Button, Badge, StatCard } from '@/components';
 import { 
   CheckCircle2, Clock, X, Filter, Activity, Map, ArrowRight,
-  AlertCircle, LayoutList, Calendar, Flag
+  AlertCircle, LayoutList, Calendar, Flag, Loader2
 } from 'lucide-react';
-import { 
-  mockCompanyMilestones,
-  mockFacultyStudents, 
-  mockCompanyInternships,
-  mockCompanyTasks,
-  mockCompanyApplications,
-  MOCK_CURRENT_MENTOR_ID
-} from '../faculty/mockData';
-import type { 
-  CompanyMilestoneData,
-  MilestoneStatus,
-  SharedStudentData
-} from '../faculty/mockData';
+import {
+  fetchCompanyMentorInternsBackend,
+  fetchCompanyMentorTasksBackend,
+  fetchMentorMilestonesBackend,
+  type CompanyMentorInternRecord,
+  type CompanyMentorTaskRecord,
+} from '@/services/api/backendService';
+
+export type MilestoneDisplayStatus = 'Completed' | 'In Progress' | 'At Risk' | 'Overdue' | 'Not Started';
+
+export interface MentorMilestoneItem {
+  id: string;
+  assignmentId: string;
+  internId: string;
+  studentName: string;
+  internshipTitle: string;
+  companyName: string;
+  title: string;
+  description: string;
+  startDate: string;
+  dueDate: string;
+  completedDate?: string;
+  status: MilestoneDisplayStatus;
+  progressPercentage: number;
+}
 
 export const MentorMilestones: React.FC = () => {
   const navigate = useNavigate();
 
-  const [selectedMilestone, setSelectedMilestone] = useState<CompanyMilestoneData | null>(null);
+  const [milestones, setMilestones] = useState<MentorMilestoneItem[]>([]);
+  const [assignedStudents, setAssignedStudents] = useState<CompanyMentorInternRecord[]>([]);
+  const [tasks, setTasks] = useState<CompanyMentorTaskRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedMilestone, setSelectedMilestone] = useState<MentorMilestoneItem | null>(null);
   const [filterIntern, setFilterIntern] = useState<string>('All');
 
-  // Compute assigned students for this mentor
-  const assignedStudents = useMemo(() => {
-    const selectedApps = mockCompanyApplications.filter(a => a.applicationStatus === 'Selected');
-    return selectedApps.map(app => {
-      const student = mockFacultyStudents.find(s => s.id === app.studentId);
-      const internship = mockCompanyInternships.find(i => i.id === app.internshipId);
-      if (student && internship && internship.mentorId === MOCK_CURRENT_MENTOR_ID) {
-        return student;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [internsData, tasksData, rawMilestones] = await Promise.all([
+        fetchCompanyMentorInternsBackend(),
+        fetchCompanyMentorTasksBackend(),
+        fetchMentorMilestonesBackend(),
+      ]);
+
+      setAssignedStudents(internsData || []);
+      setTasks(tasksData || []);
+
+      if (rawMilestones && rawMilestones.length > 0) {
+        const mapped: MentorMilestoneItem[] = rawMilestones.map((m: any) => {
+          let status: MilestoneDisplayStatus = 'Not Started';
+          const rawStatus = (m.status || '').toLowerCase();
+          if (rawStatus === 'completed') status = 'Completed';
+          else if (rawStatus === 'in_progress') status = 'In Progress';
+          else if (rawStatus === 'at_risk') status = 'At Risk';
+          else if (rawStatus === 'overdue') status = 'Overdue';
+          else if (rawStatus === 'pending') status = 'Not Started';
+
+          // Relate tasks for this milestone's student/assignment
+          const studentId = m.assignment?.studentId || m.internId || '';
+          const internTasks = (tasksData || []).filter((t: CompanyMentorTaskRecord) => t.studentId === studentId);
+          const approvedTasks = internTasks.filter((t: CompanyMentorTaskRecord) => t.reviewStatus === 'Verified' || t.completed).length;
+
+          let progress = 0;
+          if (status === 'Completed') {
+            progress = 100;
+          } else if (internTasks.length > 0) {
+            progress = Math.round((approvedTasks / internTasks.length) * 100);
+          } else if (status === 'In Progress') {
+            progress = 50;
+          }
+
+          return {
+            id: m.id,
+            assignmentId: m.assignmentId || m.assignment?.id || '',
+            internId: studentId,
+            studentName: m.assignment?.student?.profile?.fullName || 'Assigned Intern',
+            internshipTitle: m.assignment?.internship?.title || 'Internship Program',
+            companyName: m.assignment?.company?.companyName || 'Host Company',
+            title: m.title || m.template?.title || 'Operational Milestone',
+            description: m.description || m.template?.description || 'Milestone deliverables and progress tracking.',
+            startDate: m.createdAt ? new Date(m.createdAt).toISOString().split('T')[0] : '',
+            dueDate: m.targetDate ? new Date(m.targetDate).toISOString().split('T')[0] : 'TBD',
+            completedDate: m.completedAt ? new Date(m.completedAt).toISOString().split('T')[0] : undefined,
+            status,
+            progressPercentage: progress,
+          };
+        });
+        setMilestones(mapped);
+      } else {
+        setMilestones([]);
       }
-      return null;
-    }).filter(Boolean) as SharedStudentData[];
+    } catch (err: any) {
+      console.error('[MentorMilestones] Failed to load milestone data:', err);
+      setError('Unable to load milestones from the server.');
+      setMilestones([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Filter milestones based on mentor's assigned students and the intern filter
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Filter milestones based on intern filter
   const filteredMilestones = useMemo(() => {
-    const assignedStudentIds = assignedStudents.map(s => s.id);
-    let milestones = mockCompanyMilestones.filter(m => assignedStudentIds.includes(m.internId));
-    
-    if (filterIntern !== 'All') {
-      milestones = milestones.filter(m => m.internId === filterIntern);
+    if (filterIntern === 'All') {
+      return milestones;
     }
-    return milestones;
-  }, [assignedStudents, filterIntern]);
+    return milestones.filter(m => m.internId === filterIntern);
+  }, [milestones, filterIntern]);
 
   // Overall metrics
   const totalMilestones = filteredMilestones.length;
@@ -58,20 +130,24 @@ export const MentorMilestones: React.FC = () => {
   // Derived Internship Progress (if specific intern selected)
   const internshipProgress = useMemo(() => {
     if (filterIntern === 'All') return null;
-    const student = mockFacultyStudents.find(s => s.id === filterIntern);
-    if (!student) return null;
-    
-    const tasks = mockCompanyTasks.filter(t => t.internId === filterIntern);
-    const approvedTasks = tasks.filter(t => t.taskStatus === 'Approved').length;
+    const internTasks = tasks.filter(t => t.studentId === filterIntern);
+    const approvedTasks = internTasks.filter(t => t.reviewStatus === 'Verified' || t.completed).length;
+    const internMilestones = milestones.filter(m => m.internId === filterIntern);
+    const completedM = internMilestones.filter(m => m.status === 'Completed').length;
+
+    let progressPercentage = 0;
+    if (internMilestones.length > 0) {
+      progressPercentage = Math.round((completedM / internMilestones.length) * 100);
+    }
 
     return {
-      progressPercentage: student.progressPercentage,
+      progressPercentage,
       tasksApproved: approvedTasks,
-      totalTasks: tasks.length
+      totalTasks: internTasks.length,
     };
-  }, [filterIntern]);
+  }, [filterIntern, tasks, milestones]);
 
-  const getMilestoneStatusBadge = (status: MilestoneStatus) => {
+  const getMilestoneStatusBadge = (status: MilestoneDisplayStatus) => {
     switch(status) {
       case 'Completed': return <Badge variant="emerald" className="py-0.5"><CheckCircle2 className="w-3 h-3 mr-1" /> Completed</Badge>;
       case 'In Progress': return <Badge variant="indigo" className="py-0.5"><Activity className="w-3 h-3 mr-1" /> In Progress</Badge>;
@@ -84,22 +160,30 @@ export const MentorMilestones: React.FC = () => {
 
   const getTaskStatusColor = (status: string) => {
     switch(status) {
+      case 'Verified':
       case 'Approved': return 'text-emerald-700 bg-emerald-50 border-emerald-200';
+      case 'Pending Review':
       case 'Submitted for Review': return 'text-indigo-700 bg-indigo-50 border-indigo-200';
       case 'In Progress': return 'text-amber-700 bg-amber-50 border-amber-200';
+      case 'Correction Required':
       case 'Changes Requested': return 'text-rose-700 bg-rose-50 border-rose-200';
       case 'Overdue': return 'text-rose-700 bg-rose-50 border-rose-200';
       default: return 'text-slate-600 bg-slate-50 border-slate-200';
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-600 font-medium">Loading milestone progress...</p>
+      </div>
+    );
+  }
+
   if (selectedMilestone) {
-    const student = mockFacultyStudents.find(s => s.id === selectedMilestone.internId);
-    const internship = mockCompanyInternships.find(i => i.id === selectedMilestone.internshipId);
-    
-    // Find related tasks
-    const relatedTasks = mockCompanyTasks.filter(t => t.milestoneId === selectedMilestone.id);
-    const completedRelatedTasks = relatedTasks.filter(t => t.taskStatus === 'Approved').length;
+    const relatedTasks = tasks.filter(t => t.studentId === selectedMilestone.internId);
+    const completedRelatedTasks = relatedTasks.filter(t => t.reviewStatus === 'Verified' || t.completed).length;
 
     return (
       <div className="space-y-6 max-w-4xl mx-auto pb-8 animate-in fade-in slide-in-from-bottom-2">
@@ -109,10 +193,10 @@ export const MentorMilestones: React.FC = () => {
           </Button>
           <div>
             <h1 className="text-xl font-bold text-slate-900">
-              {internship?.milestones?.find(m => m.id === selectedMilestone.id)?.title || selectedMilestone.title}
+              {selectedMilestone.title}
             </h1>
             <p className="text-sm text-slate-500">
-              {internship?.title} • {student?.studentName}
+              {selectedMilestone.internshipTitle} • {selectedMilestone.studentName}
             </p>
           </div>
           <div className="ml-auto">
@@ -126,7 +210,7 @@ export const MentorMilestones: React.FC = () => {
               <div className="mb-6">
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Description</div>
                 <p className="text-sm text-slate-700">
-                  {internship?.milestones?.find(m => m.id === selectedMilestone.id)?.description || selectedMilestone.description}
+                  {selectedMilestone.description}
                 </p>
               </div>
 
@@ -134,7 +218,7 @@ export const MentorMilestones: React.FC = () => {
                 <div>
                   <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Timeline</div>
                   <div className="text-sm font-medium text-slate-900">
-                    {selectedMilestone.startDate} — {selectedMilestone.dueDate}
+                    {selectedMilestone.startDate || 'Started'} — {selectedMilestone.dueDate}
                   </div>
                 </div>
                 {selectedMilestone.completedDate && (
@@ -157,7 +241,7 @@ export const MentorMilestones: React.FC = () => {
                   ></div>
                 </div>
                 <div className="text-xs text-slate-500 text-right">
-                  Based on related task completions
+                  Based on milestone completions and task reviews
                 </div>
               </div>
             </Card>
@@ -171,12 +255,12 @@ export const MentorMilestones: React.FC = () => {
                   {relatedTasks.map(task => (
                     <div key={task.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm gap-3">
                       <div>
-                        <div className="font-semibold text-slate-900 text-sm">{internship?.taskPlan?.find(p => p.id === task.taskPlanId)?.title || 'Task'}</div>
+                        <div className="font-semibold text-slate-900 text-sm">{task.title}</div>
                         <div className="text-xs text-slate-500 mt-0.5">Due: {task.dueDate}</div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-md border uppercase tracking-wider ${getTaskStatusColor(task.taskStatus)}`}>
-                          {task.taskStatus}
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-md border uppercase tracking-wider ${getTaskStatusColor(task.reviewStatus)}`}>
+                          {task.reviewStatus}
                         </span>
                         <Button 
                           variant="ghost" 
@@ -193,7 +277,7 @@ export const MentorMilestones: React.FC = () => {
               ) : (
                 <div className="text-center py-8">
                   <LayoutList className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No tasks are linked to this milestone yet.</p>
+                  <p className="text-sm text-slate-500">No tasks are linked to this intern yet.</p>
                 </div>
               )}
             </Card>
@@ -240,6 +324,12 @@ export const MentorMilestones: React.FC = () => {
         description="Monitor detailed milestone execution and task completion for your assigned students."
       />
 
+      {error && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2 w-full md:w-auto">
@@ -252,7 +342,7 @@ export const MentorMilestones: React.FC = () => {
           >
             <option value="All">All Assigned Interns</option>
             {assignedStudents.map(i => (
-              <option key={i.id} value={i.id}>{i.studentName}</option>
+              <option key={i.studentId} value={i.studentId}>{i.studentName}</option>
             ))}
           </select>
         </div>
@@ -271,11 +361,8 @@ export const MentorMilestones: React.FC = () => {
           <div className="space-y-4">
             {filteredMilestones.length > 0 ? (
               filteredMilestones.map(milestone => {
-                const student = assignedStudents.find(s => s.id === milestone.internId);
-                const internship = mockCompanyInternships.find(i => i.id === milestone.internshipId);
-                const definition = internship?.milestones?.find(m => m.id === milestone.id);
-                const relatedTasks = mockCompanyTasks.filter(t => t.milestoneId === milestone.id);
-                const approvedTasks = relatedTasks.filter(t => t.taskStatus === 'Approved').length;
+                const internTasks = tasks.filter(t => t.studentId === milestone.internId);
+                const approvedTasks = internTasks.filter(t => t.reviewStatus === 'Verified' || t.completed).length;
 
                 return (
                   <Card key={milestone.id} className="shadow-sm hover:shadow-md transition-shadow">
@@ -283,13 +370,13 @@ export const MentorMilestones: React.FC = () => {
                       <div className="flex-1 space-y-4">
                         <div>
                           <div className="flex items-start justify-between mb-1">
-                            <h3 className="text-lg font-bold text-slate-900">{definition?.title || milestone.title}</h3>
+                            <h3 className="text-lg font-bold text-slate-900">{milestone.title}</h3>
                             {getMilestoneStatusBadge(milestone.status)}
                           </div>
-                          <p className="text-sm text-slate-500">Intern: <span className="font-semibold text-slate-700">{student?.studentName || 'Unknown'}</span></p>
+                          <p className="text-sm text-slate-500">Intern: <span className="font-semibold text-slate-700">{milestone.studentName}</span></p>
                         </div>
                         
-                        <p className="text-sm text-slate-700 line-clamp-2">{definition?.description || milestone.description}</p>
+                        <p className="text-sm text-slate-700 line-clamp-2">{milestone.description}</p>
                         
                         <div className="flex items-center gap-6 text-xs text-slate-500">
                           <div className="flex items-center gap-1.5">
@@ -298,7 +385,7 @@ export const MentorMilestones: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-1.5">
                             <LayoutList className="w-3.5 h-3.5" />
-                            {approvedTasks} / {relatedTasks.length} tasks approved
+                            {approvedTasks} / {internTasks.length} tasks approved
                           </div>
                         </div>
                       </div>
@@ -369,6 +456,9 @@ export const MentorMilestones: React.FC = () => {
                     </div>
                   </div>
                 ))}
+                {filteredMilestones.length === 0 && (
+                  <p className="text-xs text-slate-400 py-2">No milestone timeline available.</p>
+                )}
               </div>
             </Card>
           )}

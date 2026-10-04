@@ -1,15 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Button, Badge, Input } from '@/components';
 import { 
   Bell, Check, Search, Filter, 
   FileText, CheckSquare, Award, Users, 
-  Briefcase, AlertCircle, Clock
+  Briefcase, AlertCircle, Clock, Loader2
 } from 'lucide-react';
 import { 
-  mockCompanyNotifications, 
-  setMockCompanyNotifications 
-} from '../faculty/mockData';
+  fetchCompanyNotificationsBackend,
+  markCompanyNotificationReadBackend,
+  markCompanyNotificationUnreadBackend,
+  markAllCompanyNotificationsReadBackend
+} from '@/services/api/backendService';
+import { mockCompanyNotifications } from '../faculty/mockData';
 import type { 
   CompanyNotificationData,
   NotificationCategory
@@ -28,7 +31,8 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
-const getCategoryRoute = (category: string, relatedId?: string) => {
+const getCategoryRoute = (category: string, actionUrl?: string) => {
+  if (actionUrl) return actionUrl;
   switch (category) {
     case 'applications': return '/company/applicants';
     case 'interns': return '/company/interns';
@@ -47,6 +51,7 @@ const formatTimeAgo = (dateString: string) => {
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   
+  if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins} minutes ago`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours} hours ago`;
@@ -57,10 +62,46 @@ const formatTimeAgo = (dateString: string) => {
 
 export const CompanyNotifications: React.FC = () => {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<CompanyNotificationData[]>(mockCompanyNotifications);
+  const [notifications, setNotifications] = useState<CompanyNotificationData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const backendNotifs = await fetchCompanyNotificationsBackend();
+      if (backendNotifs && backendNotifs.length > 0) {
+        const mapped: CompanyNotificationData[] = backendNotifs.map((n: any) => ({
+          id: n.id,
+          type: n.category,
+          category: n.category as NotificationCategory,
+          title: n.title,
+          message: n.message,
+          priority: n.priority === 'urgent' ? 'urgent' : n.priority === 'high' ? 'important' : 'normal',
+          read: n.read,
+          createdAt: n.createdAt,
+          relatedId: n.actionUrl,
+        }));
+        setNotifications(mapped);
+      } else {
+        setNotifications(mockCompanyNotifications);
+      }
+    } catch (err: any) {
+      console.error('[CompanyNotifications] Error loading notifications:', err);
+      setError('Failed to load notifications.');
+      setNotifications(mockCompanyNotifications);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Apply filters and search
   const filteredNotifications = useMemo(() => {
@@ -79,31 +120,47 @@ export const CompanyNotifications: React.FC = () => {
   const unreadCount = notifications.filter(n => !n.read).length;
   const urgentCount = notifications.filter(n => n.priority === 'urgent' && !n.read).length;
 
-  const handleMarkAsRead = (e: React.MouseEvent, id: string) => {
+  const handleMarkAsRead = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    try {
+      await markCompanyNotificationReadBackend(id);
+    } catch (err: any) {
+      console.warn('[handleMarkAsRead] Backend notice:', err);
+    }
     const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
     setNotifications(updated);
-    setMockCompanyNotifications(updated);
   };
 
-  const handleMarkAsUnread = (e: React.MouseEvent, id: string) => {
+  const handleMarkAsUnread = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    try {
+      await markCompanyNotificationUnreadBackend(id);
+    } catch (err: any) {
+      console.warn('[handleMarkAsUnread] Backend notice:', err);
+    }
     const updated = notifications.map(n => n.id === id ? { ...n, read: false } : n);
     setNotifications(updated);
-    setMockCompanyNotifications(updated);
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllCompanyNotificationsReadBackend();
+    } catch (err: any) {
+      console.warn('[handleMarkAllAsRead] Backend notice:', err);
+    }
     const updated = notifications.map(n => ({ ...n, read: true }));
     setNotifications(updated);
-    setMockCompanyNotifications(updated);
   };
 
-  const handleNotificationClick = (notification: CompanyNotificationData) => {
+  const handleNotificationClick = async (notification: CompanyNotificationData) => {
     if (!notification.read) {
+      try {
+        await markCompanyNotificationReadBackend(notification.id);
+      } catch (err: any) {
+        console.warn('[handleNotificationClick] Backend notice:', err);
+      }
       const updated = notifications.map(n => n.id === notification.id ? { ...n, read: true } : n);
       setNotifications(updated);
-      setMockCompanyNotifications(updated);
     }
     const route = getCategoryRoute(notification.category, notification.relatedId);
     navigate(route);
@@ -178,90 +235,114 @@ export const CompanyNotifications: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-          <select 
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 min-w-[140px]"
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            {categories.map(c => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-          
-          <button 
-            onClick={() => setFilterUnreadOnly(!filterUnreadOnly)}
-            className={`px-4 py-2 text-sm rounded-lg border whitespace-nowrap transition-colors ${filterUnreadOnly ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-medium' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-          >
-            Unread Only
-          </button>
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              {categories.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap cursor-pointer select-none border border-slate-200 px-3 py-2 rounded-lg bg-slate-50">
+            <input 
+              type="checkbox"
+              checked={filterUnreadOnly}
+              onChange={(e) => setFilterUnreadOnly(e.target.checked)}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            Unread only
+          </label>
         </div>
       </div>
 
       {/* Notifications List */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        {filteredNotifications.length > 0 ? (
-          <div className="divide-y divide-slate-100">
-            {filteredNotifications.map((notif) => {
-              const Icon = getCategoryIcon(notif.category);
-              const isUnread = !notif.read;
-              
-              return (
-                <div 
-                  key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
-                  className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer flex gap-4 ${isUnread ? 'bg-indigo-50/30' : ''}`}
-                >
-                  <div className={`mt-1 flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                    isUnread ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className={`text-sm ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'}`}>
-                          {notif.title}
-                        </h4>
-                        {notif.priority === 'urgent' && <Badge variant="rose" className="px-1.5 py-0 text-[10px]">Urgent</Badge>}
-                        {notif.priority === 'important' && <Badge variant="amber" className="px-1.5 py-0 text-[10px]">Important</Badge>}
-                        {isUnread && <span className="w-2 h-2 rounded-full bg-indigo-600 flex-shrink-0" />}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-slate-400 whitespace-nowrap shrink-0">
-                        <Clock className="w-3 h-3" />
-                        {formatTimeAgo(notif.createdAt)}
-                      </div>
+      <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading notifications...
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-rose-600 bg-white rounded-xl border border-slate-200">{error}</div>
+        ) : filteredNotifications.length > 0 ? (
+          filteredNotifications.map(notification => {
+            const IconComponent = getCategoryIcon(notification.category);
+            
+            return (
+              <div 
+                key={notification.id}
+                onClick={() => handleNotificationClick(notification)}
+                className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-4 ${
+                  notification.read 
+                    ? 'bg-white border-slate-200 hover:border-slate-300' 
+                    : 'bg-indigo-50/20 border-indigo-100 hover:border-indigo-200 shadow-sm'
+                }`}
+              >
+                <div className={`p-2.5 rounded-lg shrink-0 ${
+                  notification.read ? 'bg-slate-100 text-slate-500' : 'bg-indigo-100 text-indigo-700'
+                }`}>
+                  <IconComponent className="w-5 h-5" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className={`text-sm tracking-tight ${notification.read ? 'font-medium text-slate-800' : 'font-bold text-slate-900'}`}>
+                        {notification.title}
+                      </h4>
+                      {notification.priority === 'urgent' && (
+                        <Badge variant="rose" className="text-[10px] py-0 px-1.5 uppercase font-bold tracking-wider">Urgent</Badge>
+                      )}
+                      {notification.priority === 'important' && (
+                        <Badge variant="amber" className="text-[10px] py-0 px-1.5 uppercase font-bold tracking-wider">Important</Badge>
+                      )}
                     </div>
-                    
-                    <p className={`text-sm mt-1 ${isUnread ? 'text-slate-700' : 'text-slate-500'}`}>
-                      {notif.message}
-                    </p>
-                    
-                    <div className="mt-3 flex items-center gap-4">
-                      <span className="text-xs text-indigo-600 font-medium capitalize flex items-center hover:underline">
-                        View Details
-                      </span>
-                      
-                      <button 
-                        onClick={(e) => isUnread ? handleMarkAsRead(e, notif.id) : handleMarkAsUnread(e, notif.id)}
-                        className="text-xs text-slate-400 hover:text-slate-600 z-10"
-                      >
-                        {isUnread ? 'Mark as read' : 'Mark as unread'}
-                      </button>
+                    <span className="text-xs text-slate-400 whitespace-nowrap flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {formatTimeAgo(notification.createdAt)}
+                    </span>
+                  </div>
+
+                  <p className="text-sm text-slate-600 leading-relaxed mb-3">
+                    {notification.message}
+                  </p>
+
+                  <div className="flex items-center justify-between border-t border-slate-100/80 pt-2 mt-2">
+                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      {notification.category}
+                    </span>
+
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {notification.read ? (
+                        <button 
+                          onClick={(e) => handleMarkAsUnread(e, notification.id)}
+                          className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          Mark as unread
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => handleMarkAsRead(e, notification.id)}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                        >
+                          Mark as read
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })
         ) : (
-          <div className="py-16 flex flex-col items-center justify-center text-center px-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <Bell className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">No notifications found</h3>
-            <p className="text-slate-500 text-sm max-w-sm">
-              {notifications.length === 0 ? "You're all caught up. New internship activity will appear here." : "No notifications match your current filters. You're all caught up."}
+          <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm">
+            <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-slate-900">No notifications found</h3>
+            <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+              You're all caught up! No notifications matching your current search or filters.
             </p>
           </div>
         )}

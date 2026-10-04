@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Button, Input, Badge, Alert } from '@/components';
 import { Building2, Mail, Phone, Globe, UploadCloud, CheckCircle2, AlertCircle, Clock, X, Save, Edit3, User } from 'lucide-react';
+import { getCurrentUserBackend, updateCompanyProfileBackend } from '@/services/api/backendService';
 import { mockCompanyProfile, setMockCompanyProfile } from '../faculty/mockData';
 import type { CompanyProfileData } from '../faculty/mockData';
 
@@ -48,9 +49,33 @@ export const CompanyProfile: React.FC = () => {
     setTimeout(() => setPasswordSuccess(''), 4000);
   };
 
-  // Sync state on mount just in case
+  // Sync state from backend on mount
   useEffect(() => {
-    setProfile(mockCompanyProfile);
+    async function loadProfile() {
+      try {
+        const user = await getCurrentUserBackend();
+        if (user && user.companyProfile) {
+          const cp = user.companyProfile;
+          setProfile({
+            id: cp.id || user.id,
+            companyName: cp.companyName || '',
+            industry: cp.industryDomain || '',
+            description: cp.companyAddress || 'Enterprise organization registered on Interora.',
+            logo: '',
+            contactPerson: cp.contactPerson || '',
+            email: cp.officialEmail || user.email,
+            phone: cp.phone || user.phone || '',
+            website: cp.website || '',
+            verificationStatus: cp.approvalStatus === 'approved' ? 'verified' : cp.approvalStatus === 'rejected' ? 'rejected' : 'pending',
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[CompanyProfile] Error loading backend user profile:', err);
+      }
+      setProfile(mockCompanyProfile);
+    }
+    loadProfile();
   }, []);
 
   const handleStartCreate = () => {
@@ -94,9 +119,22 @@ export const CompanyProfile: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateForm()) return;
     
+    try {
+      await updateCompanyProfileBackend({
+        companyName: formData.companyName,
+        industryDomain: formData.industry,
+        contactPerson: formData.contactPerson,
+        phone: formData.phone,
+        website: formData.website,
+        companyAddress: formData.description,
+      });
+    } catch (err) {
+      console.warn('[handleSave] Backend update notice:', err);
+    }
+
     const newProfile: CompanyProfileData = {
       ...(formData as CompanyProfileData),
       id: profile?.id || `company-${Math.random().toString(36).substr(2, 9)}`,

@@ -1,90 +1,85 @@
-import React, { useState, useEffect } from 'react';
-import { PageHeader, StatCard, Card, Badge, Button } from '@/components';
+import React, { useState, useEffect, useCallback } from 'react';
+import { PageHeader, StatCard, Card, Badge, Button, Alert } from '@/components';
 import { Briefcase, Users, Award, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
+  getCurrentUserBackend,
   fetchInternshipPostingsBackend,
   fetchCompanyApplicantsBackend,
   type InternshipPostingRecord,
   type StudentApplicationRecord,
 } from '@/services/api/backendService';
-import { supabase } from '@/services/supabase/supabaseClient';
 
 export const CompanyDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string>('Company');
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [internships, setInternships] = useState<InternshipPostingRecord[]>([]);
   const [applicants, setApplicants] = useState<StudentApplicationRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadDashboardData = async (currentUserId: string) => {
-    // Fetch Company Profile
-    const { data: compProfile } = await supabase
-      .from('company_profiles')
-      .select('company_name')
-      .eq('id', currentUserId)
-      .maybeSingle();
+  const loadDashboardData = useCallback(async (currentUserId?: string) => {
+    try {
+      setError(null);
+      // Fetch user profile and company info
+      const user = await getCurrentUserBackend();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-    if (compProfile?.company_name) {
-      setCompanyName(compProfile.company_name);
+      if (user.companyProfile?.companyName) {
+        setCompanyName(user.companyProfile.companyName);
+      } else if (user.fullName) {
+        setCompanyName(user.fullName);
+      }
+
+      if (user.companyProfile?.approvalStatus) {
+        setApprovalStatus(user.companyProfile.approvalStatus);
+      }
+
+      const uid = currentUserId || user.id;
+
+      // Fetch Internships & Applicants via Express API
+      const [fetchedInternships, fetchedApplicants] = await Promise.all([
+        fetchInternshipPostingsBackend(uid),
+        fetchCompanyApplicantsBackend(uid),
+      ]);
+
+      setInternships(fetchedInternships);
+      setApplicants(fetchedApplicants);
+    } catch (err: any) {
+      console.error('[CompanyDashboard] Error loading dashboard data:', err);
+      setError(err?.message || 'Failed to load dashboard data.');
+    } finally {
+      setLoading(false);
     }
-
-    // Fetch Internships & Applicants
-    const fetchedInternships = await fetchInternshipPostingsBackend(currentUserId);
-    setInternships(fetchedInternships);
-
-    const fetchedApplicants = await fetchCompanyApplicantsBackend(currentUserId);
-    setApplicants(fetchedApplicants);
-  };
+  }, []);
 
   useEffect(() => {
-    const initDashboard = async () => {
-      setLoading(true);
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        const uid = userData.user.id;
-        setUserId(uid);
-        await loadDashboardData(uid);
-      }
-      setLoading(false);
+    loadDashboardData();
+
+    // Targeted refresh on window focus (e.g. returning from another tab or management page)
+    const handleFocus = () => {
+      loadDashboardData();
     };
 
-    initDashboard();
-
-    // Subscribe to Realtime postgres changes on student_applications & internship_postings
-    const channel = supabase
-      .channel('company_dashboard_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_applications' },
-        () => {
-          supabase.auth.getUser().then(({ data }) => {
-            if (data?.user) loadDashboardData(data.user.id);
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'internship_postings' },
-        () => {
-          supabase.auth.getUser().then(({ data }) => {
-            if (data?.user) loadDashboardData(data.user.id);
-          });
-        }
-      )
-      .subscribe();
-
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [loadDashboardData]);
 
   // Compute Live Metrics
   const activePostingsCount = internships.length;
   const totalApplicantsCount = applicants.length;
-  const shortlistedCount = applicants.filter((a) => a.status === 'Shortlisted').length;
-  const selectedCount = applicants.filter((a) => a.status === 'Selected').length;
+  const shortlistedCount = applicants.filter(
+    (a) => (a.status || '').toLowerCase() === 'shortlisted'
+  ).length;
+  const selectedCount = applicants.filter(
+    (a) => (a.status || '').toLowerCase() === 'selected'
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -92,6 +87,24 @@ export const CompanyDashboard: React.FC = () => {
         title={`${companyName} Employer Portal`}
         description="Manage active internship postings, review candidate applications, and track selected interns."
       />
+
+      {approvalStatus === 'pending' && (
+        <Alert type="warning" title="Registration Under Review">
+          Your company registration is currently pending administrative verification. You can explore the portal, but posting new internships requires account approval.
+        </Alert>
+      )}
+
+      {approvalStatus === 'rejected' && (
+        <Alert type="error" title="Registration Rejected">
+          Your company registration was not approved. Please contact platform administrators for assistance.
+        </Alert>
+      )}
+
+      {error && (
+        <Alert type="error" title="Dashboard Error">
+          {error}
+        </Alert>
+      )}
 
       {/* Metrics Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -109,7 +122,7 @@ export const CompanyDashboard: React.FC = () => {
             title="Active Internship Postings"
             subtitle="Current open positions receiving candidate applications"
             action={
-              <Button variant="outline" size="sm" onClick={() => navigate('/company/internships')}>
+              <Button variant="outline" size="sm" onClick={() => navigate('/company/listings')}>
                 Manage Listings <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             }
@@ -135,7 +148,9 @@ export const CompanyDashboard: React.FC = () => {
               </div>
             ) : (
               <p className="text-xs text-slate-500 italic py-4 text-center">
-                {loading ? 'Loading internship postings...' : 'No active postings found. Create your first internship listing to start receiving applications.'}
+                {loading
+                  ? 'Loading internship postings...'
+                  : 'No active postings found. Create your first internship listing to start receiving applications.'}
               </p>
             )}
           </Card>
@@ -154,17 +169,29 @@ export const CompanyDashboard: React.FC = () => {
           >
             {applicants.length > 0 ? (
               <div className="space-y-3">
-                {applicants.slice(0, 5).map((app) => (
-                  <div key={app.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs space-y-1">
-                    <div className="flex justify-between items-center font-bold text-slate-900">
-                      <span>{app.studentName}</span>
-                      <Badge variant={app.status === 'Selected' ? 'emerald' : app.status === 'Shortlisted' ? 'indigo' : app.status === 'Rejected' ? 'rose' : 'amber'}>
-                        {app.status}
-                      </Badge>
+                {applicants.slice(0, 5).map((app) => {
+                  const statusKey = (app.status || '').toLowerCase();
+                  const badgeVariant =
+                    statusKey === 'selected'
+                      ? 'emerald'
+                      : statusKey === 'shortlisted'
+                      ? 'indigo'
+                      : statusKey === 'rejected'
+                      ? 'rose'
+                      : 'amber';
+
+                  return (
+                    <div key={app.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs space-y-1">
+                      <div className="flex justify-between items-center font-bold text-slate-900">
+                        <span>{app.studentName}</span>
+                        <Badge variant={badgeVariant}>
+                          {app.status}
+                        </Badge>
+                      </div>
+                      <p className="text-slate-500 truncate">{app.internshipTitle}</p>
                     </div>
-                    <p className="text-slate-500 truncate">{app.internshipTitle}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-xs text-slate-500 italic py-4 text-center">

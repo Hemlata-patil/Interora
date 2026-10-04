@@ -5,16 +5,14 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Building2, Laptop, Briefcase, CheckCircle2, XCircle, Users, Camera, MapPin, ShieldCheck, RefreshCw } from 'lucide-react';
-import { mockFacultyStudents } from './mockData';
 import type { SharedStudentData, WorkMode } from './mockData';
 import {
   fetchFacultyAttendanceMonitoringBackend,
   type FacultyStudentAttendanceRecord,
 } from '@/services/api/backendService';
-import { supabase } from '@/services/supabase/supabaseClient';
 
 export const AttendanceMonitoring: React.FC = () => {
-  const [students, setStudents] = useState<SharedStudentData[]>(mockFacultyStudents as any);
+  const [students, setStudents] = useState<SharedStudentData[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<SharedStudentData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,7 +20,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const loadFacultyAttendance = async () => {
     setLoading(true);
     const remote = await fetchFacultyAttendanceMonitoringBackend();
-    if (remote && remote.length > 0) {
+    if (remote) {
       setStudents(remote as any);
     }
     setLoading(false);
@@ -31,20 +29,13 @@ export const AttendanceMonitoring: React.FC = () => {
   useEffect(() => {
     loadFacultyAttendance();
 
-    // Subscribe to Realtime postgres changes on attendance_records table
-    const channel = supabase
-      .channel('faculty_attendance_realtime_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records' },
-        () => {
-          loadFacultyAttendance();
-        }
-      )
-      .subscribe();
+    const handleFocus = () => {
+      loadFacultyAttendance();
+    };
 
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -58,27 +49,27 @@ export const AttendanceMonitoring: React.FC = () => {
   let criticalCount = 0;
 
   const getAttendancePercentage = (student: SharedStudentData) => {
-    if (!student.attendance || student.attendance.workingDays === 0) return 90;
+    if (!student.attendance || student.attendance.workingDays === 0) return 0;
     return Math.round((student.attendance.present / student.attendance.workingDays) * 100);
   };
 
   students.forEach(student => {
-    const p = student.attendance?.present || 10;
-    const w = student.attendance?.workingDays || 12;
+    const p = student.attendance?.present || 0;
+    const w = student.attendance?.workingDays || 0;
     totalPresent += p;
     totalWorkingDays += w;
-    const pct = Math.round((p / w) * 100);
+    const pct = w > 0 ? Math.round((p / w) * 100) : 0;
     
     if (pct >= 85) {
       goodCount++;
     } else if (pct >= 70) {
       needsReviewCount++;
-    } else {
+    } else if (pct > 0) {
       criticalCount++;
     }
   });
 
-  const overallAttendance = totalWorkingDays > 0 ? Math.round((totalPresent / totalWorkingDays) * 100) : 88;
+  const overallAttendance = totalWorkingDays > 0 ? Math.round((totalPresent / totalWorkingDays) * 100) : 0;
 
   const getAttendanceStrokeClass = (pct: number) => {
     if (pct >= 85) return 'stroke-emerald-500';
@@ -202,7 +193,7 @@ export const AttendanceMonitoring: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="font-semibold text-slate-800">Student Geo-Tagged Attendance Directory</h3>
-          <Badge variant="indigo">Live Supabase Sync</Badge>
+          <Badge variant="indigo">Live System Sync</Badge>
         </div>
         
         <Table 

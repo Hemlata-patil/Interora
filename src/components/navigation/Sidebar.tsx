@@ -1,5 +1,6 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { logoutUserBackend } from '@/services/api/backendService';
 import {
   Compass,
   Briefcase,
@@ -51,6 +52,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await logoutUserBackend();
+    navigate('/login');
+  };
 
   const getRoleNavItems = (): NavItem[] => {
     switch (role) {
@@ -227,6 +235,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: 'Milestone Tracking',
             path: '/company/milestones',
             icon: FileCheck,
+            group: 'Management',
+          },
+          {
+            label: 'Attendance',
+            path: '/company/attendance',
+            icon: Clock,
+            group: 'Management',
+          },
+          {
+            label: 'Weekly Reports',
+            path: '/company/reports',
+            icon: FileText,
             group: 'Management',
           },
           {
@@ -491,13 +511,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <NavLink
-            to="/login"
+          <button type="button"
+            onClick={handleLogout}
             className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />
-          </NavLink>
+          </button>
         </div>
       </div>
     </aside>

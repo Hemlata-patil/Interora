@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -27,7 +28,7 @@ export function createApp(): Application {
   const app = express();
 
   // ── 1. Security headers ────────────────────────────────────────────────────
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
   // ── 2. CORS ────────────────────────────────────────────────────────────────
   // Allow the Vite frontend to send cookies (credentials: true).
@@ -53,7 +54,8 @@ export function createApp(): Application {
   // ── 5. Request logger ─────────────────────────────────────────────────────
   app.use(requestLogger);
 
-  // ── 6. Routes ─────────────────────────────────────────────────────────────
+  // ── 6. Routes & Static Files ──────────────────────────────────────────────
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
   app.use('/', rootRouter);       // GET /
   app.use('/api', apiRouter);     // GET /api/health, future /api/* routes
 

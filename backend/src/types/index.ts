@@ -8,11 +8,11 @@
 
 // ── User / Auth ───────────────────────────────────────────────────────────────
 
-export type UserRole = 'student' | 'faculty' | 'company' | 'industry_mentor' | 'admin';
+export type UserRole = 'student' | 'faculty' | 'company' | 'mentor' | 'admin';
 
-export type AccountStatus = 'pending' | 'active' | 'inactive';
+export type AccountStatus = 'pending' | 'active' | 'inactive' | 'suspended';
 
-export type CompanyApprovalStatus = 'pending' | 'approved' | 'rejected' | 'inactive';
+export type CompanyApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 /**
  * The payload embedded inside the JWT and attached to req.user after

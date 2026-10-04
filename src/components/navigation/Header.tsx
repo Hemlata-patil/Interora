@@ -5,6 +5,7 @@ import type { UserRole } from '@/types';
 import { useNavigate } from 'react-router-dom';
 
 import { mockCompanyNotifications } from '@/features/faculty/mockData';
+import { logoutUserBackend } from '@/services/api/backendService';
 
 export interface HeaderProps {
   role: UserRole;
@@ -13,6 +14,11 @@ export interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logoutUserBackend();
+    navigate('/login');
+  };
   
   const unreadCount = role === 'company' 
     ? mockCompanyNotifications.filter(n => !n.read).length
@@ -60,8 +66,8 @@ export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/login')}
-            className="text-slate-500 hover:text-slate-700"
+            onClick={handleLogout}
+            className="text-slate-500 hover:text-slate-700 cursor-pointer"
           >
             <LogOut className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Logout</span>

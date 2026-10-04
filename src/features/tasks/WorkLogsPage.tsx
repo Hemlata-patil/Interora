@@ -2,16 +2,20 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { PageHeader, StatCard, Card, Badge, Button, Input, Select, Modal, Alert } from '@/components';
 import { initialMockWorkLogs, initialMockTasks, type WorkLogRecord } from './data/mockTasks';
 import { Plus, Clock, Calendar, CheckSquare, FileText, AlertCircle } from 'lucide-react';
-import { supabase } from '@/services/supabase/supabaseClient';
 import {
   createStudentWorkLogBackend,
+  fetchStudentWorkLogsBackend,
   fetchStudentTasksBackend,
   fetchActiveStudentInternshipBackend,
   type ActiveStudentInternshipRecord,
+  type StudentTaskRecord,
 } from '@/services/api/backendService';
 
 export const WorkLogsPage: React.FC = () => {
   const [workLogs, setWorkLogs] = useState<WorkLogRecord[]>(initialMockWorkLogs);
+  const [availableTasks, setAvailableTasks] = useState<{ id: string; title: string }[]>(
+    initialMockTasks.map((t) => ({ id: t.id, title: t.title }))
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeInternship, setActiveInternship] = useState<ActiveStudentInternshipRecord | null>(null);
@@ -19,7 +23,7 @@ export const WorkLogsPage: React.FC = () => {
   // Form State
   const [formData, setFormData] = useState({
     date: new Date().toISOString().slice(0, 10),
-    taskId: initialMockTasks[0].id,
+    taskId: initialMockTasks[0]?.id || '',
     hoursWorked: '8.0',
     summary: '',
     completedWork: '',
@@ -31,39 +35,55 @@ export const WorkLogsPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = async () => {
-    const act = await fetchActiveStudentInternshipBackend();
-    setActiveInternship(act);
+    try {
+      const [act, logs, tasks] = await Promise.all([
+        fetchActiveStudentInternshipBackend(),
+        fetchStudentWorkLogsBackend(),
+        fetchStudentTasksBackend(),
+      ]);
 
-    const tasks = await fetchStudentTasksBackend();
-    const workLogTasks = tasks.filter((t) => t.title.startsWith('[WorkLog]'));
-    if (workLogTasks.length > 0) {
-      const mapped: WorkLogRecord[] = workLogTasks.map((t) => ({
-        id: t.id,
-        date: t.dueDate || t.createdAt.slice(0, 10),
-        taskId: t.id,
-        taskTitle: t.title.replace('[WorkLog] ', ''),
-        hoursWorked: 8.0,
-        summary: t.description || 'Sprint task logged',
-        completedWork: t.description || 'Daily deliverables completed',
-        blockers: 'None',
-        nextPlan: 'Continue tasks',
-      }));
-      setWorkLogs(mapped);
+      if (act) {
+        setActiveInternship(act);
+      }
+
+      if (tasks && tasks.length > 0) {
+        setAvailableTasks(tasks.map((t) => ({ id: t.id, title: t.title })));
+        if (!formData.taskId || !tasks.some((t) => t.id === formData.taskId)) {
+          setFormData((prev) => ({ ...prev, taskId: tasks[0].id }));
+        }
+      }
+
+      if (logs && logs.length > 0) {
+        const mapped: WorkLogRecord[] = logs.map((l) => ({
+          id: l.id,
+          date: l.date,
+          taskId: l.taskId || '',
+          taskTitle: l.taskTitle || 'Daily Work',
+          hoursWorked: Number(l.hoursWorked ?? 0),
+          summary: l.summary || l.completedWork || '',
+          completedWork: l.completedWork || '',
+          blockers: l.blockers || 'None',
+          nextPlan: l.nextPlan || 'Continue sprint tasks',
+        }));
+        setWorkLogs(mapped);
+      } else if (!act) {
+        setWorkLogs([]);
+      }
+    } catch (err) {
+      console.error('[WorkLogsPage] Error loading logs:', err);
     }
   };
 
   useEffect(() => {
     loadData();
 
-    const channel = supabase
-      .channel('work_logs_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'student_tasks' }, () => {
-        loadData();
-      })
-      .subscribe();
+    const handleFocus = () => {
+      loadData();
+    };
 
+    window.addEventListener('focus', handleFocus);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -108,40 +128,31 @@ export const WorkLogsPage: React.FC = () => {
     setIsSubmitting(true);
     setFormError(null);
 
-    const targetTask = initialMockTasks.find((t) => t.id === formData.taskId);
+    const targetTask = availableTasks.find((t) => t.id === formData.taskId);
     const taskTitle = targetTask ? targetTask.title : 'General Development Sprint';
 
-    const res = await createStudentWorkLogBackend({
-      date: formData.date,
-      taskId: formData.taskId,
-      taskTitle,
-      hoursWorked: hours,
-      summary: formData.summary.trim() || formData.completedWork.trim(),
-      completedWork: formData.completedWork.trim(),
-      blockers: formData.blockers.trim() || 'None',
-      nextPlan: formData.nextPlan.trim() || 'Continue sprint tasks',
-    });
+    const res = await createStudentWorkLogBackend(
+      {
+        date: formData.date,
+        taskId: formData.taskId,
+        taskTitle,
+        hoursWorked: hours,
+        summary: formData.summary.trim() || formData.completedWork.trim(),
+        completedWork: formData.completedWork.trim(),
+        blockers: formData.blockers.trim() || 'None',
+        nextPlan: formData.nextPlan.trim() || 'Continue sprint tasks',
+      },
+      activeInternship?.assignmentId
+    );
 
     setIsSubmitting(false);
 
     if (!res.success) {
-      setFormError(res.error || 'Failed to persist work log to Supabase.');
+      setFormError(res.error || 'Failed to persist work log to PostgreSQL backend.');
       return;
     }
 
-    const newLog: WorkLogRecord = {
-      id: 'log_' + Date.now(),
-      date: formData.date,
-      taskId: formData.taskId,
-      taskTitle,
-      hoursWorked: hours,
-      summary: formData.summary.trim() || formData.completedWork.trim(),
-      completedWork: formData.completedWork.trim(),
-      blockers: formData.blockers.trim() || 'None',
-      nextPlan: formData.nextPlan.trim() || 'Continue sprint tasks',
-    };
-
-    setWorkLogs((prev) => [newLog, ...prev]);
+    await loadData();
     setIsModalOpen(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
@@ -162,7 +173,7 @@ export const WorkLogsPage: React.FC = () => {
 
       {saveSuccess && (
         <Alert type="success" title="Work Log Persisted">
-          Your work log entry has been stored in Supabase and synchronized with your mentor's dashboard.
+          Your work log entry has been stored in PostgreSQL and synchronized with your mentor's dashboard.
         </Alert>
       )}
 
@@ -262,7 +273,7 @@ export const WorkLogsPage: React.FC = () => {
               <Select
                 value={formData.taskId}
                 onChange={(e) => setFormData({ ...formData, taskId: e.target.value })}
-                options={initialMockTasks.map((t) => ({ value: t.id, label: t.title }))}
+                options={availableTasks.map((t) => ({ value: t.id, label: t.title }))}
               />
             </div>
 

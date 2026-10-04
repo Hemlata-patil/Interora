@@ -1,42 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Select, Button, Modal } from '@/components';
-import { FileText, Search, Eye, ShieldCheck } from 'lucide-react';
+import { FileText, Search, Eye, ShieldCheck, Loader2 } from 'lucide-react';
 import {
-  mockCompanyApplications,
-  mockFacultyStudents,
-  mockCompanyInternships,
-  type CompanyApplicationData,
-} from '@/features/faculty/mockData';
+  fetchAdminApplicationsBackend,
+  type AdminApplicationRecord,
+} from '@/services/api/backendService';
 
 export const AdminApplications: React.FC = () => {
-  const [applications] = useState<CompanyApplicationData[]>(mockCompanyApplications);
+  const [applications, setApplications] = useState<AdminApplicationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [deptFilter, setDeptFilter] = useState('ALL');
-  const [selectedApp, setSelectedApp] = useState<any | null>(null);
+  const [selectedApp, setSelectedApp] = useState<AdminApplicationRecord | null>(null);
 
-  const fullAppList = applications.map((app) => {
-    const student = mockFacultyStudents.find((s) => s.id === app.studentId);
-    const internship = mockCompanyInternships.find((i) => i.id === app.internshipId);
-    return {
-      ...app,
-      studentName: student?.studentName || 'Student Recipient',
-      studentEmail: student?.email || 'student@university.edu',
-      department: student?.department || 'CSE',
-      internshipTitle: internship?.title || 'Software Engineer Intern',
-      companyName: internship?.domain || 'TechCorp Solutions',
-      duration: internship?.duration || '12 Weeks',
-      stipend: internship?.stipend || '₹15,000 / mo',
+  useEffect(() => {
+    let isMounted = true;
+    const loadApps = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchAdminApplicationsBackend();
+        if (isMounted) {
+          setApplications(data);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err?.message || 'Failed to fetch student applications');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     };
-  });
 
-  const filteredApps = fullAppList.filter((a) => {
+    loadApps();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredApps = applications.filter((a) => {
     const matchesSearch =
-      a.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.internshipTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.companyName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || a.applicationStatus === statusFilter;
-    const matchesDept = deptFilter === 'ALL' || a.department === deptFilter;
+      (a.studentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.internshipTitle || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.companyName || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      a.applicationStatus.toLowerCase() === statusFilter.toLowerCase();
+    const matchesDept =
+      deptFilter === 'ALL' ||
+      (a.department || '').toLowerCase() === deptFilter.toLowerCase();
     return matchesSearch && matchesStatus && matchesDept;
   });
 
@@ -88,81 +105,96 @@ export const AdminApplications: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3 font-semibold">Student Name</th>
-                <th className="p-3 font-semibold">Dept</th>
-                <th className="p-3 font-semibold">Applied Internship</th>
-                <th className="p-3 font-semibold">Faculty Stage</th>
-                <th className="p-3 font-semibold">Company Status</th>
-                <th className="p-3 font-semibold text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredApps.map((app) => (
-                <tr key={app.id} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <div>
-                      <span>{app.studentName}</span>
-                      <span className="block text-[10px] text-slate-400 font-normal">{app.studentEmail}</span>
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <Badge variant="sky">{app.department}</Badge>
-                  </td>
-                  <td className="p-3 text-slate-700">
-                    <span className="font-semibold block">{app.internshipTitle}</span>
-                    <span className="text-[10px] text-slate-500">{app.companyName}</span>
-                  </td>
-                  <td className="p-3">
-                    <Badge
-                      variant={
-                        app.facultyApprovalStatus === 'approved'
-                          ? 'emerald'
-                          : app.facultyApprovalStatus === 'rejected'
-                          ? 'rose'
-                          : 'amber'
-                      }
-                    >
-                      <ShieldCheck className="w-3 h-3 mr-1 inline" />
-                      {app.facultyApprovalStatus === 'approved'
-                        ? 'Faculty Approved'
-                        : app.facultyApprovalStatus === 'rejected'
-                        ? 'Faculty Rejected'
-                        : 'Pending Faculty'}
-                    </Badge>
-                  </td>
-                  <td className="p-3">
-                    <Badge
-                      variant={
-                        app.applicationStatus === 'Selected'
-                          ? 'emerald'
-                          : app.applicationStatus === 'Rejected'
-                          ? 'rose'
-                          : 'sky'
-                      }
-                    >
-                      {app.applicationStatus}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-slate-600 hover:bg-slate-100 text-[11px] p-1.5"
-                      onClick={() => setSelectedApp(app)}
-                    >
-                      <Eye className="w-3.5 h-3.5 mr-1" /> View
-                    </Button>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-slate-400 text-sm">
+            <Loader2 className="w-5 h-5 mr-2 animate-spin text-indigo-600" />
+            Loading system applications...
+          </div>
+        ) : error ? (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+            {error}
+          </div>
+        ) : filteredApps.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">
+            No applications found matching your criteria.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                  <th className="p-3 font-semibold">Student Name</th>
+                  <th className="p-3 font-semibold">Dept</th>
+                  <th className="p-3 font-semibold">Applied Internship</th>
+                  <th className="p-3 font-semibold">Faculty Stage</th>
+                  <th className="p-3 font-semibold">Company Status</th>
+                  <th className="p-3 font-semibold text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredApps.map((app) => (
+                  <tr key={app.id} className="hover:bg-slate-50/50">
+                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <div>
+                        <span>{app.studentName}</span>
+                        <span className="block text-[10px] text-slate-400 font-normal">{app.studentEmail}</span>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="sky">{app.department}</Badge>
+                    </td>
+                    <td className="p-3 text-slate-700">
+                      <span className="font-semibold block">{app.internshipTitle}</span>
+                      <span className="text-[10px] text-slate-500">{app.companyName}</span>
+                    </td>
+                    <td className="p-3">
+                      <Badge
+                        variant={
+                          app.facultyApprovalStatus === 'approved'
+                            ? 'emerald'
+                            : app.facultyApprovalStatus === 'rejected'
+                            ? 'rose'
+                            : 'amber'
+                        }
+                      >
+                        <ShieldCheck className="w-3 h-3 mr-1 inline" />
+                        {app.facultyApprovalStatus === 'approved'
+                          ? 'Faculty Approved'
+                          : app.facultyApprovalStatus === 'rejected'
+                          ? 'Faculty Rejected'
+                          : 'Pending Faculty'}
+                      </Badge>
+                    </td>
+                    <td className="p-3">
+                      <Badge
+                        variant={
+                          app.applicationStatus === 'Selected'
+                            ? 'emerald'
+                            : app.applicationStatus === 'Rejected'
+                            ? 'rose'
+                            : 'sky'
+                        }
+                      >
+                        {app.applicationStatus}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-600 hover:bg-slate-100 text-[11px] p-1.5"
+                        onClick={() => setSelectedApp(app)}
+                      >
+                        <Eye className="w-3.5 h-3.5 mr-1" /> View
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {selectedApp && (

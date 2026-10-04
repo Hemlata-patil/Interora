@@ -1,40 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Button } from '@/components';
-import { Award, Search, ExternalLink, ShieldCheck, Download } from 'lucide-react';
-import { mockCompanyCertificates, mockFacultyStudents } from '@/features/faculty/mockData';
+import { Award, Search, ExternalLink, ShieldCheck, Download, AlertCircle } from 'lucide-react';
+import { fetchCertificatesBackend, type AdminCertificateRecord } from '@/services/api/backendService';
 import { Link } from 'react-router-dom';
 
 export const AdminCertificates: React.FC = () => {
+  const [certs, setCerts] = useState<AdminCertificateRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const certRows = mockCompanyCertificates.map((c) => {
-    const student = mockFacultyStudents.find((s) => s.id === c.internId);
-    return {
-      id: c.id,
-      certificateId: c.certificateId || `CERT-${c.id}`,
-      studentName: student?.studentName || 'Sarah Jenkins',
-      department: student?.department || 'CSE',
-      companyName: 'TechCorp Solutions',
-      issueDate: c.issueDate || '2026-08-01',
-      status: c.status,
-    };
-  });
+  const loadCertificates = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchCertificatesBackend();
+      setCerts(data);
+    } catch (err: any) {
+      console.error('[AdminCertificates] Error loading certificates:', err);
+      setError('Failed to load certificates from server.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredCerts = certRows.filter(
+  useEffect(() => {
+    loadCertificates();
+  }, []);
+
+  const filteredCerts = certs.filter(
     (c) =>
-      c.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.certificateId.toLowerCase().includes(searchTerm.toLowerCase())
+      c.recipientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.internshipTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.certificateNumber.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleExportCSV = () => {
-    const headers = ['Verification ID', 'Student Name', 'Department', 'Issuing Company', 'Issue Date', 'Status'];
+    const headers = ['Verification ID', 'Student Name', 'Internship Role', 'Issue Date', 'Status'];
     const rows = filteredCerts.map((c) => [
-      c.certificateId,
-      `"${c.studentName}"`,
-      c.department,
-      `"${c.companyName}"`,
-      c.issueDate,
+      c.certificateNumber || c.id,
+      `"${c.recipientName}"`,
+      `"${c.internshipTitle}"`,
+      c.issuedDate,
       c.status,
     ]);
 
@@ -62,7 +69,7 @@ export const AdminCertificates: React.FC = () => {
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <Input
-              placeholder="Search by student name, certificate ID, or company..."
+              placeholder="Search by student name, certificate ID, or role..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
@@ -74,47 +81,68 @@ export const AdminCertificates: React.FC = () => {
           </Button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3 font-semibold">Verification ID</th>
-                <th className="p-3 font-semibold">Student Recipient</th>
-                <th className="p-3 font-semibold">Issuing Company</th>
-                <th className="p-3 font-semibold">Issue Date</th>
-                <th className="p-3 font-semibold">Status</th>
-                <th className="p-3 font-semibold text-right">Verification Link</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredCerts.map((cert) => (
-                <tr key={cert.id} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-mono font-bold text-slate-800 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>{cert.certificateId}</span>
-                  </td>
-                  <td className="p-3 text-slate-700 font-semibold">{cert.studentName}</td>
-                  <td className="p-3 text-slate-600">{cert.companyName}</td>
-                  <td className="p-3 text-slate-500">{cert.issueDate}</td>
-                  <td className="p-3">
-                    <Badge variant={cert.status === 'Issued' ? 'emerald' : 'amber'}>
-                      <ShieldCheck className="w-3 h-3 mr-1 inline" /> {cert.status}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-right">
-                    <Link to={`/verify/${cert.certificateId}`} target="_blank">
-                      <Button variant="ghost" size="sm" className="text-xs">
-                        <span>Verify Public URL</span>
-                        <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                      </Button>
-                    </Link>
-                  </td>
+        {error ? (
+          <div className="py-12 text-center text-rose-500">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <p className="font-semibold">{error}</p>
+          </div>
+        ) : loading ? (
+          <div className="py-12 text-center text-slate-400">
+            <Award className="w-8 h-8 mx-auto mb-2 animate-pulse text-indigo-400" />
+            <p>Loading credentials directory...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                  <th className="p-3 font-semibold">Verification ID</th>
+                  <th className="p-3 font-semibold">Student Recipient</th>
+                  <th className="p-3 font-semibold">Internship Role</th>
+                  <th className="p-3 font-semibold">Issue Date</th>
+                  <th className="p-3 font-semibold">Status</th>
+                  <th className="p-3 font-semibold text-right">Verification Link</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredCerts.length > 0 ? (
+                  filteredCerts.map((cert) => (
+                    <tr key={cert.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 font-mono font-bold text-slate-800 flex items-center gap-2">
+                        <Award className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span>{cert.certificateNumber || cert.id.slice(0, 8)}</span>
+                      </td>
+                      <td className="p-3 text-slate-700 font-semibold">{cert.recipientName}</td>
+                      <td className="p-3 text-slate-600">{cert.internshipTitle}</td>
+                      <td className="p-3 text-slate-500">{cert.issuedDate}</td>
+                      <td className="p-3">
+                        <Badge variant={cert.status.toLowerCase() === 'active' || cert.status.toLowerCase() === 'issued' ? 'emerald' : 'amber'}>
+                          <ShieldCheck className="w-3 h-3 mr-1 inline" /> {cert.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-right">
+                        <Link to={`/verify/${cert.qrToken || cert.certificateNumber || cert.id}`} target="_blank">
+                          <Button variant="ghost" size="sm" className="text-xs">
+                            <span>Verify Public URL</span>
+                            <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                      No certificates or completion credentials found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
 };
+

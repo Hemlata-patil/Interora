@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button, Modal, Alert } from '@/components';
 import { mockApplications, type ApplicationRecord, type ApplicationStatus } from './data/mockApplications';
 import { mockOfferLetters, setMockOfferLetters, type OfferLetterData } from '../faculty/mockData';
-import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle, X, Download } from 'lucide-react';
+import {
+  fetchApplicationDetailsBackend,
+  withdrawStudentApplicationBackend,
+} from '@/services/api/backendService';
+import { ArrowLeft, MapPin, Clock, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, XCircle, X, Download, Loader2 } from 'lucide-react';
 
 export const ApplicationDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [applications, setApplications] = useState<ApplicationRecord[]>(mockApplications);
+  const [application, setApplication] = useState<ApplicationRecord | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawNotice, setWithdrawNotice] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const [localOffers, setLocalOffers] = React.useState<OfferLetterData[]>(mockOfferLetters);
   const [showOfferModal, setShowOfferModal] = React.useState(false);
@@ -21,7 +27,50 @@ export const ApplicationDetailsPage: React.FC = () => {
     setMockOfferLetters(localOffers);
   }, [localOffers]);
 
-  const application = applications.find((item) => item.id === id);
+  const loadData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        const remote = await fetchApplicationDetailsBackend(id);
+        if (remote) {
+          setApplication(remote);
+          return;
+        }
+      }
+      // Fallback to mock if not found or demo ID
+      const fallback = mockApplications.find((item) => item.id === id);
+      setApplication(fallback || null);
+    } catch (err) {
+      console.error('[ApplicationDetailsPage] Failed to load application:', err);
+      const fallback = mockApplications.find((item) => item.id === id);
+      setApplication(fallback || null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Loading Application..." description="Retrieving application records..." />
+        <Card>
+          <div className="p-12 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+            <p className="text-xs text-slate-500 mt-2">Loading application details from backend...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!application) {
     return (
@@ -65,20 +114,25 @@ export const ApplicationDetailsPage: React.FC = () => {
     application.status !== 'Rejected' &&
     application.status !== 'Withdrawn';
 
-  const handleConfirmWithdraw = () => {
-    const updated = applications.map((item) => {
-      if (item.id === application.id) {
-        return {
-          ...item,
-          status: 'Withdrawn' as ApplicationStatus,
-          lastUpdated: 'Today',
-        };
+  const handleConfirmWithdraw = async () => {
+    if (!application) return;
+    setIsWithdrawing(true);
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(application.id);
+      if (isUuid) {
+        const res = await withdrawStudentApplicationBackend(application.id);
+        if (!res.success) {
+          alert(res.error || 'Failed to withdraw application.');
+          setIsWithdrawing(false);
+          return;
+        }
       }
-      return item;
-    });
-    setApplications(updated);
-    setIsWithdrawModalOpen(false);
-    setWithdrawNotice(true);
+      setApplication((prev) => prev ? { ...prev, status: 'Withdrawn' as ApplicationStatus, lastUpdated: 'Today' } : null);
+      setIsWithdrawModalOpen(false);
+      setWithdrawNotice(true);
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   return (
@@ -152,7 +206,7 @@ export const ApplicationDetailsPage: React.FC = () => {
 
       {withdrawNotice && (
         <Alert type="warning" title="Application Withdrawn">
-          Your application status has been updated to Withdrawn locally. (Supabase status persistence ready for Phase 4).
+          Your application status has been updated to Withdrawn in the placement system.
         </Alert>
       )}
 

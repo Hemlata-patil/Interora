@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PageHeader, StatCard, Card, Badge, ProgressBar, Button } from '@/components';
 import { Sparkles, Compass, CheckSquare, Award, Clock, ArrowRight, UserCheck, CheckCircle2, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -8,10 +8,141 @@ import {
   type ActiveInternshipData,
   type ApplicationSummaryData,
 } from './data/mockStudentData';
+import {
+  fetchActiveStudentInternshipBackend,
+  fetchStudentActiveInternshipMetricsBackend,
+  fetchStudentApplicationsBackend,
+  fetchStudentPlacementReadinessBackend,
+  getCurrentUserBackend,
+} from '@/services/api/backendService';
 
 export const StudentDashboard: React.FC = () => {
-  const [activeInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
-  const [appSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
+  const [activeInternship, setActiveInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
+  const [appSummary, setAppSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
+  const [readinessScore, setReadinessScore] = useState<number>(78);
+  const [studentName, setStudentName] = useState<string>('Student');
+
+  const loadData = useCallback(async () => {
+    try {
+      const [user, active, apps, readiness] = await Promise.all([
+        getCurrentUserBackend().catch(() => null),
+        fetchActiveStudentInternshipBackend().catch(() => null),
+        fetchStudentApplicationsBackend().catch(() => []),
+        fetchStudentPlacementReadinessBackend().catch(() => null),
+      ]);
+
+      if (user?.fullName) {
+        setStudentName(user.fullName.split(' ')[0] || user.fullName);
+      }
+
+      if (active) {
+        let metrics = {
+          attendancePercentage: 92,
+          totalTasks: 12,
+          completedTasks: 8,
+          healthScore: 88,
+        };
+        if (active.assignmentId) {
+          try {
+            const m = await fetchStudentActiveInternshipMetricsBackend(active.assignmentId);
+            metrics = {
+              attendancePercentage: m.attendancePercentage ?? 92,
+              totalTasks: m.totalTasks ?? 12,
+              completedTasks: m.completedTasks ?? 8,
+              healthScore: (m as any).healthScore ?? 88,
+            };
+          } catch {
+            // Retain metrics
+          }
+        }
+
+        const progress = metrics.totalTasks > 0 ? Math.round((metrics.completedTasks / metrics.totalTasks) * 100) : 60;
+
+        setActiveInternship({
+          id: active.assignmentId || 'assigned_active',
+          title: active.title || 'Software Engineering Intern',
+          companyName: active.companyName || 'Host Company',
+          mentorName: active.mentorName || 'Assigned Mentor',
+          mentorEmail: active.mentorEmail || 'mentor@interora.app',
+          startDate: active.startDate || '2026-06-01',
+          endDate: active.endDate || '2026-08-31',
+          status: 'active',
+          progressPercentage: progress,
+          attendancePercentage: metrics.attendancePercentage,
+          completedTasks: metrics.completedTasks,
+          totalTasks: metrics.totalTasks,
+          healthScore: metrics.healthScore,
+          currentMilestone: 'Sprint Execution & Task Delivery',
+        });
+      }
+
+      if (Array.isArray(apps)) {
+        const total = apps.length;
+        let underReview = 0;
+        let facultyApproved = 0;
+        let selected = 0;
+        let rejected = 0;
+
+        const recent = apps.slice(0, 3).map((a) => {
+          const s = (a.status || '').toLowerCase();
+          let mappedStatus: ApplicationSummaryData['recentApplications'][0]['status'] = 'under_review';
+          if (s.includes('select')) {
+            selected++;
+            mappedStatus = 'selected';
+          } else if (s.includes('approved')) {
+            facultyApproved++;
+            mappedStatus = 'faculty_approved';
+          } else if (s.includes('reject')) {
+            rejected++;
+            mappedStatus = 'rejected';
+          } else {
+            underReview++;
+            mappedStatus = 'under_review';
+          }
+
+          return {
+            id: a.id,
+            title: a.internshipTitle || 'Internship Opportunity',
+            company: a.companyName || 'Host Company',
+            appliedDate: a.appliedAt ? new Date(a.appliedAt).toISOString().slice(0, 10) : 'Recent',
+            status: mappedStatus,
+          };
+        });
+
+        apps.slice(3).forEach((a) => {
+          const s = (a.status || '').toLowerCase();
+          if (s.includes('select')) selected++;
+          else if (s.includes('approved')) facultyApproved++;
+          else if (s.includes('reject')) rejected++;
+          else underReview++;
+        });
+
+        if (total > 0) {
+          setAppSummary({
+            total,
+            underReview,
+            facultyApproved,
+            selected,
+            rejected,
+            recentApplications: recent,
+          });
+        }
+      }
+
+      if (readiness?.readinessScore || readiness?.overallScore) {
+        setReadinessScore(readiness.readinessScore || readiness.overallScore);
+      }
+    } catch (err) {
+      console.error('[StudentDashboard] Error loading dashboard data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
 
   const getStatusBadge = (status: ApplicationSummaryData['recentApplications'][0]['status']) => {
     switch (status) {
@@ -59,7 +190,7 @@ export const StudentDashboard: React.FC = () => {
     <div className="space-y-6">
       {/* 1. Context Header */}
       <PageHeader
-        title="Welcome back, Alex!"
+        title={`Welcome back, ${studentName}!`}
         description="Track your active internship journey, application pipeline, and upcoming tasks."
         action={
           <Link to="/student/profile">
@@ -78,9 +209,9 @@ export const StudentDashboard: React.FC = () => {
         <Link to="/student/attendance" className="block transition-transform hover:-translate-y-0.5">
           <StatCard title="Attendance Rate" value={`${activeInternship.attendancePercentage}%`} icon={CheckSquare} trend={{ value: 'Optimal (Above 90%)', isPositive: true }} />
         </Link>
-        <StatCard title="Placement Readiness" value="78 / 100" icon={Sparkles} description="Good alignment" />
+        <StatCard title="Placement Readiness" value={`${readinessScore} / 100`} icon={Sparkles} description="Good alignment" />
         <Link to="/student/applications" className="block transition-transform hover:-translate-y-0.5">
-          <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected â€¢ ${appSummary.underReview + appSummary.facultyApproved} Active`} />
+          <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected • ${appSummary.underReview + appSummary.facultyApproved} Active`} />
         </Link>
       </div>
 

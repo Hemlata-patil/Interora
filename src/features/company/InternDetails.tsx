@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { PageHeader, Card, Button, Badge } from '@/components';
+import { PageHeader, Card, Button, Badge, Alert } from '@/components';
 import { CheckCircle2, Clock, ArrowLeft } from 'lucide-react';
-import { supabase } from '@/services/supabase/supabaseClient';
 import {
+  getCurrentUserBackend,
+  fetchCompanyInternDetailBackend,
   fetchCompanyInternAttendanceBackend,
   fetchCompanyInternMilestonesBackend,
   fetchCompanyInternEvaluationsBackend,
@@ -21,91 +22,93 @@ export const InternDetails: React.FC = () => {
   const [studentEmail, setStudentEmail] = useState<string>('');
   const [internshipTitle, setInternshipTitle] = useState<string>('Internship Role');
   const [internshipId, setInternshipId] = useState<string>('');
+  const [assignmentId, setAssignmentId] = useState<string | undefined>(undefined);
   const [attendance, setAttendance] = useState<CompanyInternAttendanceSummary | null>(null);
   const [milestones, setMilestones] = useState<CompanyInternMilestoneRecord[]>([]);
   const [evaluations, setEvaluations] = useState<CompanyInternEvaluationRecord[]>([]);
   const [evalScore, setEvalScore] = useState<number>(85);
   const [evalRemarks, setEvalRemarks] = useState<string>('Excellent performance, strong technical skills and attendance.');
   const [submittingEval, setSubmittingEval] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
-  const loadDetails = async () => {
+  const loadDetails = useCallback(async () => {
     if (!internId) return;
 
-    const targetId = internId;
+    try {
+      setError(null);
+      const user = await getCurrentUserBackend();
+      if (!user) {
+        setError('Authentication required to view intern details.');
+        setLoading(false);
+        return;
+      }
 
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .eq('id', targetId)
-      .maybeSingle();
+      const detail = await fetchCompanyInternDetailBackend(internId);
+      setStudentName(detail.studentName);
+      setStudentEmail(detail.studentEmail);
+      setInternshipTitle(detail.internshipTitle);
+      setInternshipId(detail.internshipId);
+      setAssignmentId(detail.assignmentId);
 
-    if (prof) {
-      setStudentName(prof.full_name || 'Student Candidate');
-      setStudentEmail(prof.email || '');
+      const [att, ms, evs] = await Promise.all([
+        fetchCompanyInternAttendanceBackend(internId, detail.assignmentId),
+        fetchCompanyInternMilestonesBackend(internId, detail.assignmentId),
+        fetchCompanyInternEvaluationsBackend(internId, detail.assignmentId),
+      ]);
+
+      setAttendance(att);
+      setMilestones(ms);
+      setEvaluations(evs);
+    } catch (err: any) {
+      console.error('[InternDetails] Failed to load intern details:', err);
+      setError(err?.message || 'Failed to load intern details.');
+    } finally {
+      setLoading(false);
     }
-
-    const { data: apps } = await supabase
-      .from('student_applications')
-      .select('*, internship_postings(id, title)')
-      .eq('student_id', targetId)
-      .eq('status', 'Selected')
-      .maybeSingle();
-
-    if (apps) {
-      setInternshipTitle(apps.internship_postings?.title || 'Active Internship Role');
-      setInternshipId(apps.internship_id);
-    }
-
-    const att = await fetchCompanyInternAttendanceBackend(targetId);
-    setAttendance(att);
-
-    const ms = await fetchCompanyInternMilestonesBackend(targetId);
-    setMilestones(ms);
-
-    const evs = await fetchCompanyInternEvaluationsBackend(targetId);
-    setEvaluations(evs);
-  };
+  }, [internId]);
 
   useEffect(() => {
     loadDetails();
 
-    if (!internId) return;
-
-    // Subscribe to Realtime postgres changes on attendance, milestones, evaluations for this intern
-    const channel = supabase
-      .channel(`intern_details_realtime_${internId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records', filter: `student_id=eq.${internId}` },
-        () => loadDetails()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_milestones', filter: `student_id=eq.${internId}` },
-        () => loadDetails()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_evaluations', filter: `student_id=eq.${internId}` },
-        () => loadDetails()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+    // Targeted refresh on window focus
+    const handleFocus = () => {
+      loadDetails();
     };
-  }, [internId]);
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadDetails]);
 
   const handleAddEvaluation = async () => {
     if (!internId || !internshipId) return;
     setSubmittingEval(true);
-    await createCompanyInternEvaluationBackend(internId, internshipId, evalScore, evalRemarks);
-    await loadDetails();
+    setEvalError(null);
+    const res = await createCompanyInternEvaluationBackend(
+      internId,
+      internshipId,
+      evalScore,
+      evalRemarks,
+      assignmentId
+    );
+    if (!res.success) {
+      setEvalError(res.error || 'Failed to submit evaluation.');
+    } else {
+      await loadDetails();
+    }
     setSubmittingEval(false);
   };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-8">
+      {error && (
+        <Alert type="error" title="Error Loading Intern Details">
+          {error}
+        </Alert>
+      )}
       <div>
         <Button variant="ghost" size="sm" onClick={() => navigate('/company/my-interns')} className="mb-2 text-slate-500">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to My Interns
@@ -173,6 +176,11 @@ export const InternDetails: React.FC = () => {
             )}
 
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 pt-3">
+              {evalError && (
+                <Alert type="error" title="Evaluation Error">
+                  {evalError}
+                </Alert>
+              )}
               <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Log New Internship Evaluation</h4>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
