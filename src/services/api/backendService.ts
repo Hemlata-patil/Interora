@@ -206,6 +206,7 @@ export interface AuthUser {
       code: string;
     } | null;
   } | null;
+  departmentName?: string | null;
 }
 
 export const getCurrentUserBackend = async (): Promise<AuthUser | null> => {
@@ -2142,9 +2143,19 @@ export interface AdminDashboardMetrics {
   }>;
 }
 
-export const fetchAdminDashboardMetricsBackend = async (): Promise<AdminDashboardMetrics> => {
+export const fetchAdminDashboardMetricsBackend = async (
+  domain?: string,
+  dataYear?: string,
+  academicYear?: string
+): Promise<AdminDashboardMetrics> => {
   try {
-    const res = await apiClient.get<any>('/admin/metrics');
+    const params = new URLSearchParams();
+    if (domain && domain !== 'All') params.append('domain', domain);
+    if (dataYear && dataYear !== 'All') params.append('dataYear', dataYear);
+    if (academicYear && academicYear !== 'All') params.append('academicYear', academicYear);
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiClient.get<any>(`/admin/metrics${queryString}`);
     const data = res.data?.data || res.data;
     return {
       totalStudents: data?.totalStudents ?? 0,
@@ -2182,6 +2193,47 @@ export const fetchAdminDashboardMetricsBackend = async (): Promise<AdminDashboar
       totalCertificatesCount: 0,
       departmentDistribution: [],
     };
+  }
+};
+
+export const fetchAdminFilterOptionsBackend = async () => {
+  try {
+    const res = await apiClient.get<any>('/admin/metrics/filters');
+    return res.data?.data || res.data;
+  } catch (err: any) {
+    console.error('[fetchAdminFilterOptionsBackend] Error:', err);
+    throw new Error(err?.response?.data?.message || 'Failed to fetch filter options');
+  }
+};
+
+export const downloadAdminMetricsExcelBackend = async (
+  domain?: string,
+  dataYear?: string,
+  academicYear?: string
+) => {
+  try {
+    const params = new URLSearchParams();
+    if (domain && domain !== 'All') params.append('domain', domain);
+    if (dataYear && dataYear !== 'All') params.append('dataYear', dataYear);
+    if (academicYear && academicYear !== 'All') params.append('academicYear', academicYear);
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    
+    const response = await apiClient.get(`/admin/metrics/export${queryString}`, {
+      responseType: 'blob'
+    });
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'system_analytics.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    console.error('[downloadAdminMetricsExcelBackend] Error:', err);
+    throw new Error('Failed to download Excel file');
   }
 };
 
@@ -2308,6 +2360,7 @@ export interface AdminUserRecord {
   role: string;
   rawRole: string;
   organization: string;
+  departmentId?: string;
   status: string;
   createdAt: string;
 }

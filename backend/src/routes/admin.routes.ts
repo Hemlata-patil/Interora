@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  getAdminMetricsController,
+  getAdminMetricsController, getAdminFilterOptionsController, exportAdminMetricsExcelController,
   listCompaniesController,
   createCompanyController,
   approveCompanyController,
@@ -12,6 +12,8 @@ import {
   deleteFacultyController,
   listAdminApplicationsController,
   listAdminUsersController,
+  createHODController,
+  updateHODController,
 } from '../controllers/admin.controller';
 import { authenticate, requireRole } from '../middleware/auth.middleware';
 
@@ -27,12 +29,16 @@ adminRouter.use(authenticate, requireRole('admin'));
 
 // ── Metrics ──────────────────────────────────────────────────────────────────
 adminRouter.get('/metrics', getAdminMetricsController);
+adminRouter.get('/metrics/filters', getAdminFilterOptionsController);
+adminRouter.get('/metrics/export', exportAdminMetricsExcelController);
 
 // ── Applications Oversight ───────────────────────────────────────────────────
 adminRouter.get('/applications', listAdminApplicationsController);
 
 // ── Users Directory ──────────────────────────────────────────────────────────
 adminRouter.get('/users', listAdminUsersController);
+adminRouter.post('/hod', createHODController);
+adminRouter.patch('/hod/:id', updateHODController);
 
 // ── Companies Oversight & Approvals ──────────────────────────────────────────
 adminRouter.get('/companies', listCompaniesController);

@@ -24,6 +24,7 @@ import adminRouter from './admin.routes';
 import facultyRouter from './faculty.routes';
 import mentorRouter from './mentor.routes';
 import companyRouter from './company.routes';
+import hodRouter from './hod.routes';
 import { getPostingApplicationsController } from '../controllers/application.controller';
 import { getAssignmentAttendanceController } from '../controllers/attendance.controller';
 import { authenticate, requireRole } from '../middleware/auth.middleware';
@@ -134,6 +135,9 @@ router.use('/mentor', mentorRouter);
 
 // ── Company Operations & Mentor Management ─────────────────────────────────
 router.use('/company', companyRouter);
+
+// ── HOD Operations ────────────────────────────────────────────────────────
+router.use('/hod', hodRouter);
 
 // ── Binary File Uploads (Resumes & Attendance Photos) ───────────────────────
 import uploadRouter from './upload.routes';

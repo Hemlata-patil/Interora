@@ -8,7 +8,41 @@ const BCRYPT_ROUNDS = 12;
 // 1. Admin Dashboard Metrics: GET /api/admin/metrics
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getAdminMetrics() {
+export async function getAdminMetrics(domain?: string, dataYear?: string, academicYear?: string) {
+  const studentFilter: any = {};
+  
+  if (domain && domain !== 'All') {
+    studentFilter.department = { name: domain };
+  }
+  
+  if (dataYear && dataYear !== 'All') {
+    studentFilter.batchYear = dataYear;
+  }
+  
+  if (academicYear && academicYear !== 'All') {
+    if (academicYear === '1st Year') studentFilter.currentSemester = { in: ['1st Semester', '2nd Semester'] };
+    else if (academicYear === '2nd Year') studentFilter.currentSemester = { in: ['3rd Semester', '4th Semester'] };
+    else if (academicYear === '3rd Year') studentFilter.currentSemester = { in: ['5th Semester', '6th Semester'] };
+    else if (academicYear === '4th Year') studentFilter.currentSemester = { in: ['7th Semester', '8th Semester'] };
+  }
+
+  const hasStudentFilter = Object.keys(studentFilter).length > 0;
+
+  const profileWhere: any = { role: 'student' };
+  if (hasStudentFilter) profileWhere.studentProfile = { ...studentFilter };
+
+  const appWhere: any = {};
+  if (hasStudentFilter) appWhere.student = { ...studentFilter };
+  
+  const ppoWhere: any = {};
+  if (hasStudentFilter) ppoWhere.student = { ...studentFilter };
+
+  const certWhere: any = {};
+  if (hasStudentFilter) certWhere.assignment = { student: { ...studentFilter } };
+
+  const assignWhere: any = {};
+  if (hasStudentFilter) assignWhere.student = { ...studentFilter };
+
   const [
     totalStudents,
     totalCompanies,
@@ -24,19 +58,19 @@ export async function getAdminMetrics() {
     totalPposCount,
     totalCertificatesCount,
   ] = await Promise.all([
-    prisma.profile.count({ where: { role: 'student' } }),
+    prisma.profile.count({ where: profileWhere }),
     prisma.companyProfile.count(),
-    prisma.studentApplication.count({ where: { status: 'selected' } }),
-    prisma.pPOOffer.count({ where: { status: 'offered' } }),
-    prisma.certificate.count(),
-    prisma.studentApplication.count({ where: { status: 'submitted' } }),
+    prisma.studentApplication.count({ where: { ...appWhere, status: 'selected' } }),
+    prisma.pPOOffer.count({ where: { ...ppoWhere, status: 'offered' } }),
+    prisma.certificate.count({ where: certWhere }),
+    prisma.studentApplication.count({ where: { ...appWhere, status: 'submitted' } }),
     prisma.companyProfile.count({ where: { approvalStatus: 'pending' } }),
-    prisma.internshipAssignment.count({ where: { status: 'completed' } }),
-    prisma.studentApplication.count(),
-    prisma.studentApplication.count({ where: { status: 'selected' } }),
-    prisma.studentApplication.count({ where: { status: 'rejected' } }),
-    prisma.pPOOffer.count(),
-    prisma.certificate.count({ where: { status: 'active' } }),
+    prisma.internshipAssignment.count({ where: { ...assignWhere, status: 'completed' } }),
+    prisma.studentApplication.count({ where: appWhere }),
+    prisma.studentApplication.count({ where: { ...appWhere, status: 'selected' } }),
+    prisma.studentApplication.count({ where: { ...appWhere, status: 'rejected' } }),
+    prisma.pPOOffer.count({ where: ppoWhere }),
+    prisma.certificate.count({ where: { ...certWhere, status: 'active' } }),
   ]);
 
   return {
@@ -55,6 +89,64 @@ export async function getAdminMetrics() {
     totalPposCount,
     totalCertificatesCount,
   };
+}
+
+export async function getAdminFilterOptions() {
+  const departments = await prisma.department.findMany({
+    select: { name: true },
+    distinct: ['name'],
+    where: { name: { not: '' } }
+  });
+
+  const batches = await prisma.studentProfile.findMany({
+    select: { batchYear: true },
+    distinct: ['batchYear'],
+    where: { batchYear: { not: '' } }
+  });
+
+  return {
+    domains: departments.map(d => d.name).sort(),
+    dataYears: batches.map(b => b.batchYear).sort(),
+  };
+}
+
+export async function generateAdminMetricsExcel(domain?: string, dataYear?: string, academicYear?: string) {
+  const metrics = await getAdminMetrics(domain, dataYear, academicYear);
+  const ExcelJS = require('exceljs');
+  
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Interora Admin';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('System Analytics');
+
+  worksheet.columns = [
+    { header: 'Metric', key: 'metric', width: 35 },
+    { header: 'Value', key: 'value', width: 15 }
+  ];
+
+  worksheet.getRow(1).font = { bold: true };
+
+  const rows = [
+    { metric: 'Total Students', value: metrics.totalStudents },
+    { metric: 'Total Companies (Unfiltered)', value: metrics.totalCompanies },
+    { metric: 'Active Internships', value: metrics.activeInternships },
+    { metric: 'Pending PPO Offers', value: metrics.pposPendingCount },
+    { metric: 'Total PPO Offers', value: metrics.totalPposCount },
+    { metric: 'Pending Certificates', value: metrics.certsPendingCount },
+    { metric: 'Total Certificates', value: metrics.totalCertificatesCount },
+    { metric: 'Pending Applications', value: metrics.pendingApplications },
+    { metric: 'Selected Applications', value: metrics.selectedApplicationsCount },
+    { metric: 'Rejected Applications', value: metrics.rejectedApplicationsCount },
+    { metric: 'Total Applications', value: metrics.totalApplicationsCount },
+    { metric: 'Completed Internships', value: metrics.completedInternsCount },
+    { metric: 'Pending Companies (Unfiltered)', value: metrics.pendingCompanies },
+  ];
+
+  worksheet.addRows(rows);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -520,6 +612,128 @@ export async function deleteFacultyMentor(id: string) {
   return { success: true };
 }
 
+export interface CreateHODInput {
+  name: string;
+  email: string;
+  departmentId: string;
+  password?: string;
+}
+
+export async function createHODAccount(input: CreateHODInput) {
+  const cleanEmail = input.email.trim().toLowerCase();
+
+  const existingProfile = await prisma.profile.findUnique({
+    where: { email: cleanEmail },
+  });
+  if (existingProfile) {
+    throw new AppError(409, 'An account with this email already exists.');
+  }
+
+  const dept = await prisma.department.findUnique({
+    where: { id: input.departmentId },
+  });
+  if (!dept) {
+    throw new AppError(404, 'Department not found.');
+  }
+
+  const passwordHash = await bcrypt.hash(input.password || 'hod@123', BCRYPT_ROUNDS);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const profile = await tx.profile.create({
+      data: {
+        email: cleanEmail,
+        fullName: input.name.trim(),
+        role: 'hod',
+        accountStatus: 'active',
+        passwordHash,
+      },
+    });
+
+    await tx.department.update({
+      where: { id: input.departmentId },
+      data: { headOfDepartmentId: profile.id },
+    });
+
+    return profile;
+  });
+
+  return {
+    id: result.id,
+    name: result.fullName,
+    email: result.email,
+    role: result.role,
+    status: result.accountStatus,
+    department: dept.code
+  };
+}
+
+export interface UpdateHODInput {
+  name?: string;
+  email?: string;
+  departmentId?: string;
+  status?: 'active' | 'inactive';
+}
+
+export async function updateHODAccount(id: string, input: UpdateHODInput) {
+  const profile = await prisma.profile.findUnique({
+    where: { id },
+    include: { headOfDepartments: true }
+  });
+
+  if (!profile || profile.role !== 'hod') {
+    throw new AppError(404, 'HOD not found.');
+  }
+
+  if (input.email && input.email.trim().toLowerCase() !== profile.email) {
+    const existing = await prisma.profile.findUnique({
+      where: { email: input.email.trim().toLowerCase() }
+    });
+    if (existing) {
+      throw new AppError(409, 'An account with this email already exists.');
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (input.departmentId !== undefined) {
+      if (input.departmentId) {
+        const dept = await tx.department.findUnique({ where: { id: input.departmentId } });
+        if (!dept) throw new AppError(404, 'Department not found.');
+      }
+      
+      await tx.department.updateMany({
+        where: { headOfDepartmentId: id },
+        data: { headOfDepartmentId: null }
+      });
+
+      if (input.departmentId) {
+        await tx.department.update({
+          where: { id: input.departmentId },
+          data: { headOfDepartmentId: id }
+        });
+      }
+    }
+
+    const updateData: any = {};
+    if (input.name) updateData.fullName = input.name.trim();
+    if (input.email) updateData.email = input.email.trim().toLowerCase();
+    if (input.status) updateData.accountStatus = input.status;
+
+    if (Object.keys(updateData).length > 0) {
+      await tx.profile.update({
+        where: { id },
+        data: updateData
+      });
+    }
+  });
+
+  const refreshed = await prisma.profile.findUnique({
+    where: { id },
+    include: { headOfDepartments: true }
+  });
+
+  return { success: true, profile: refreshed };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Admin Applications Control: GET /api/admin/applications
 // ─────────────────────────────────────────────────────────────────────────────
@@ -648,6 +862,13 @@ export async function listAdminUsers() {
           industryDomain: true,
         },
       },
+      headOfDepartments: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -676,6 +897,10 @@ export async function listAdminUsers() {
     } else if (p.role === 'admin') {
       roleFormatted = 'ADMIN';
       organization = 'System Administration';
+    } else if (p.role === 'hod') {
+      roleFormatted = 'HOD';
+      const dept = p.headOfDepartments?.[0];
+      organization = dept ? `Dept: ${dept.code || dept.name}` : 'Not Assigned';
     }
 
     return {
@@ -685,6 +910,7 @@ export async function listAdminUsers() {
       role: roleFormatted,
       rawRole: p.role,
       organization,
+      departmentId: p.role === 'hod' ? p.headOfDepartments?.[0]?.id : undefined,
       status:
         p.accountStatus === 'active'
           ? 'Active'

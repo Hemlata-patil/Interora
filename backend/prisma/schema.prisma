@@ -16,6 +16,7 @@ enum AppRole {
   company
   mentor
   admin
+  hod
 }
 
 enum AccountStatus {

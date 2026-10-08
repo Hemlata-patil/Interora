@@ -20,3 +20,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 export const MentorLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <AppLayout role="mentor">{children}</AppLayout>
 );
+
+export const HodLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <AppLayout role="hod">{children}</AppLayout>
+);

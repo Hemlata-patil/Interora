@@ -74,6 +74,7 @@ export interface SafeUser {
       code: string;
     } | null;
   } | null;
+  departmentName?: string | null;
 }
 
 export interface RegisterPayload {
@@ -366,6 +367,13 @@ export async function getCurrentUser(userId: string): Promise<SafeUser> {
           },
         },
       },
+      headOfDepartments: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
       // passwordHash intentionally NOT selected
     },
   });
@@ -407,6 +415,7 @@ export async function getCurrentUser(userId: string): Promise<SafeUser> {
           department: profile.facultyProfile.department,
         }
       : null,
+    departmentName: profile.headOfDepartments?.[0]?.name ?? null,
   };
 }
 

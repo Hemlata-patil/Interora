@@ -4,7 +4,7 @@ import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { VerifyCertificatePage } from '@/pages/VerifyCertificatePage';
-import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout } from '@/app/layouts/RoleLayouts';
+import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout, HodLayout } from '@/app/layouts/RoleLayouts';
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
@@ -49,7 +49,7 @@ import { AdminApplications } from '@/features/admin/AdminApplications';
 import { AdminProfile } from '@/features/admin/AdminProfile';
 import { AdminPPOs } from '@/features/admin/AdminPPOs';
 import { AdminCompanies } from '@/features/admin/AdminCompanies';
-import { AdminFacultyMentors } from '@/features/admin/AdminFacultyMentors';
+import { AdminHODs } from '@/features/admin/AdminHODs';
 import { MentorDashboard } from '@/features/companyMentor/MentorDashboard';
 import { MentorMyInterns } from '@/features/companyMentor/MentorMyInterns';
 import { MentorTasks } from '@/features/companyMentor/MentorTasks';
@@ -66,6 +66,13 @@ import { PlacementAnalytics } from '@/features/faculty/PlacementAnalytics';
 import { FacultyProfile } from '@/features/faculty/FacultyProfile';
 import { StudentGuidance } from '@/features/faculty/StudentGuidance';
 import { FeaturePlaceholder } from '@/components/common/FeaturePlaceholder';
+import { HodDashboard } from '@/features/hod/HodDashboard';
+import { HodFaculty } from '@/features/hod/HodFaculty';
+import { HodStudents } from '@/features/hod/HodStudents';
+import { HodAssignments } from '@/features/hod/HodAssignments';
+import { HodProgress } from '@/features/hod/HodProgress';
+import { HodInternships } from '@/features/hod/HodInternships';
+import { HodProfile } from '@/features/hod/HodProfile';
 
 const router = createBrowserRouter([
   // Public Routes
@@ -321,8 +328,8 @@ const router = createBrowserRouter([
     element: <AdminLayout><AdminCompanies /></AdminLayout>,
   },
   {
-    path: '/admin/faculty-mentors',
-    element: <AdminLayout><AdminFacultyMentors /></AdminLayout>,
+    path: '/admin/hods',
+    element: <AdminLayout><AdminHODs /></AdminLayout>,
   },
   {
     path: '/admin/certificates',
@@ -335,6 +342,36 @@ const router = createBrowserRouter([
   {
     path: '/admin/profile',
     element: <AdminLayout><AdminProfile /></AdminLayout>,
+  },
+
+  // HOD Routes Group
+  {
+    path: '/hod',
+    element: <HodLayout><HodDashboard /></HodLayout>,
+  },
+  {
+    path: '/hod/faculty',
+    element: <HodLayout><HodFaculty /></HodLayout>,
+  },
+  {
+    path: '/hod/students',
+    element: <HodLayout><HodStudents /></HodLayout>,
+  },
+  {
+    path: '/hod/assignments',
+    element: <HodLayout><HodAssignments /></HodLayout>,
+  },
+  {
+    path: '/hod/progress',
+    element: <HodLayout><HodProgress /></HodLayout>,
+  },
+  {
+    path: '/hod/internships',
+    element: <HodLayout><HodInternships /></HodLayout>,
+  },
+  {
+    path: '/hod/profile',
+    element: <HodLayout><HodProfile /></HodLayout>,
   },
 
   // Fallback Route

@@ -37,7 +37,7 @@ export interface NavItem {
 }
 
 export interface SidebarProps {
-  role?: 'student' | 'faculty' | 'company' | 'mentor' | 'admin';
+  role?: 'student' | 'faculty' | 'company' | 'mentor' | 'admin' | 'hod';
   userEmail?: string;
   userName?: string;
   isOpen?: boolean;
@@ -354,8 +354,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             group: 'Administration',
           },
           {
-            label: 'Faculty Mentor Management',
-            path: '/admin/faculty-mentors',
+            label: 'HOD Management',
+            path: '/admin/hods',
             icon: GraduationCap,
             group: 'Administration',
           },
@@ -384,6 +384,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
             group: 'Account',
           },
         ];
+
+      case 'hod':
+        return [
+          {
+            label: 'Dashboard',
+            path: '/hod',
+            icon: LayoutDashboard,
+            group: 'Overview',
+          },
+          {
+            label: 'Faculty Management',
+            path: '/hod/faculty',
+            icon: Users,
+            group: 'Department',
+          },
+          {
+            label: 'Students / Interns',
+            path: '/hod/students',
+            icon: Users,
+            group: 'Department',
+          },
+          {
+            label: 'Assignments',
+            path: '/hod/assignments',
+            icon: CheckSquare,
+            group: 'Department',
+          },
+          {
+            label: 'Student Progress',
+            path: '/hod/progress',
+            icon: TrendingUp,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Internships',
+            path: '/hod/internships',
+            icon: FileText,
+            group: 'Monitoring',
+          },
+          {
+            label: 'Profile',
+            path: '/hod/profile',
+            icon: User,
+            group: 'Account',
+          },
+        ];
+
       default:
         return [];
     }
@@ -456,6 +503,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 item.path !== '/company' &&
                 item.path !== '/mentor' &&
                 item.path !== '/admin' &&
+                item.path !== '/hod' &&
                 location.pathname.startsWith(`${item.path}/`));
 
             return (

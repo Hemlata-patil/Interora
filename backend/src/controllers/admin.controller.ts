@@ -82,13 +82,52 @@ const updateFacultySchema = z.object({
 
 /** GET /api/admin/metrics */
 export async function getAdminMetricsController(
+  req: Request,
+  res: Response<ApiSuccess>,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const domain = req.query.domain as string | undefined;
+    const dataYear = req.query.dataYear as string | undefined;
+    const academicYear = req.query.academicYear as string | undefined;
+
+    const data = await adminService.getAdminMetrics(domain, dataYear, academicYear);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/admin/metrics/filters */
+export async function getAdminFilterOptionsController(
   _req: Request,
   res: Response<ApiSuccess>,
   next: NextFunction
 ): Promise<void> {
   try {
-    const data = await adminService.getAdminMetrics();
+    const data = await adminService.getAdminFilterOptions();
     res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/admin/metrics/export */
+export async function exportAdminMetricsExcelController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const domain = req.query.domain as string | undefined;
+    const dataYear = req.query.dataYear as string | undefined;
+    const academicYear = req.query.academicYear as string | undefined;
+
+    const buffer = await adminService.generateAdminMetricsExcel(domain, dataYear, academicYear);
+
+    res.setHeader('Content-Disposition', 'attachment; filename="system_analytics.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
   } catch (err) {
     next(err);
   }
@@ -284,6 +323,51 @@ export async function listAdminUsersController(
     const data = await adminService.listAdminUsers();
     res.status(200).json({
       success: true,
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/admin/hod */
+export async function createHODController(
+  req: Request,
+  res: Response<ApiSuccess>,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const data = await adminService.createHODAccount(req.body);
+    res.status(201).json({ 
+      success: true, 
+      message: 'HOD account created successfully',
+      data 
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const updateHODSchema = z.object({
+  name: z.string().trim().min(1).max(150).optional(),
+  email: z.string().email().trim().toLowerCase().optional(),
+  departmentId: z.string().optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+});
+
+/** PATCH /api/admin/hod/:id */
+export async function updateHODController(
+  req: Request,
+  res: Response<ApiSuccess>,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = extractIdParam(req);
+    const input = updateHODSchema.parse(req.body);
+    const data = await adminService.updateHODAccount(id, input);
+    res.status(200).json({
+      success: true,
+      message: 'HOD updated successfully.',
       data,
     });
   } catch (err) {

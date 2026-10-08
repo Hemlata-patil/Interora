@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Badge, Input, Select } from '@/components';
 import { Search, ShieldCheck, Loader2 } from 'lucide-react';
-import { fetchAdminUsersBackend, type AdminUserRecord } from '@/services/api/backendService';
+import { fetchAdminUsersBackend, fetchDepartmentsBackend, type AdminUserRecord, type DepartmentRecord } from '@/services/api/backendService';
+import { apiClient } from '@/services/api/apiClient';
 
 export const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
@@ -11,15 +12,20 @@ export const AdminUsers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
 
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   useEffect(() => {
     let isMounted = true;
     const loadUsers = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchAdminUsersBackend();
+        const [data, depts] = await Promise.all([
+          fetchAdminUsersBackend(),
+          fetchDepartmentsBackend()
+        ]);
         if (isMounted) {
           setUsers(data);
+          setDepartments(depts);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -79,6 +85,7 @@ export const AdminUsers: React.FC = () => {
                 { value: 'FACULTY_MENTOR', label: 'Faculty Advisors' },
                 { value: 'INDUSTRY_MENTOR', label: 'Industry Mentors' },
                 { value: 'COMPANY', label: 'Company Users' },
+                { value: 'HOD', label: 'Head of Department' },
                 { value: 'ADMIN', label: 'Administrators' },
               ]}
             />

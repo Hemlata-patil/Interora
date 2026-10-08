@@ -3,6 +3,8 @@ import { PageHeader, Card, StatCard, Badge, ProgressBar, Button } from '@/compon
 import { BarChart3, TrendingUp, Users, Award, Download, PieChart, Loader2 } from 'lucide-react';
 import {
   fetchAdminDashboardMetricsBackend,
+  fetchAdminFilterOptionsBackend,
+  downloadAdminMetricsExcelBackend,
   type AdminDashboardMetrics,
 } from '@/services/api/backendService';
 
@@ -11,15 +13,24 @@ export const AdminAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [filterOptions, setFilterOptions] = useState<{ domains: string[], dataYears: string[] }>({ domains: [], dataYears: [] });
+  const [domain, setDomain] = useState<string>('All');
+  const [dataYear, setDataYear] = useState<string>('All');
+  const [academicYear, setAcademicYear] = useState<string>('All');
+
   useEffect(() => {
     let isMounted = true;
     const loadMetrics = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchAdminDashboardMetricsBackend();
+        const [data, options] = await Promise.all([
+          fetchAdminDashboardMetricsBackend(domain, dataYear, academicYear),
+          fetchAdminFilterOptionsBackend()
+        ]);
         if (isMounted) {
           setMetrics(data);
+          setFilterOptions(options);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -36,7 +47,7 @@ export const AdminAnalytics: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [domain, dataYear, academicYear]);
 
   const totalStudents = metrics?.totalStudents ?? 0;
   const activeInterns = metrics?.activeInternships ?? 0;
@@ -56,34 +67,12 @@ export const AdminAnalytics: React.FC = () => {
       : 0;
   const conversionRate = totalApps > 0 ? Math.round((selectedApps / totalApps) * 100) : 0;
 
-  const handleExportAnalyticsCSV = () => {
-    const data = [
-      ['Metric Category', 'Metric Name', 'Calculated Value'],
-      ['Student Statistics', 'Total Enrolled Students', totalStudents],
-      ['Student Statistics', 'Active Interns', activeInterns],
-      ['Student Statistics', 'Completed Internships', completedInterns],
-      ['Student Statistics', 'Overall Placement Rate', `${placementRate}%`],
-      ['Recruitment Applications', 'Total Applications Submitted', totalApps],
-      ['Recruitment Applications', 'Applications Selected', selectedApps],
-      ['Recruitment Applications', 'Applications Rejected', rejectedApps],
-      ['Recruitment Applications', 'Applications Pending', pendingApps],
-      ['PPO & Credentials', 'Pre-Placement Offers Issued', totalPpos],
-      ['PPO & Credentials', 'Verified Certificates', totalCertificates],
-    ];
-
-    const csvContent = data.map((e) => e.map((val) => `"${val}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `Interora_Analytics_Report_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleExportAnalyticsExcel = async () => {
+    try {
+      await downloadAdminMetricsExcelBackend(domain, dataYear, academicYear);
+    } catch (err: any) {
+      alert(err.message || 'Export failed');
+    }
   };
 
   if (loading) {
@@ -123,12 +112,39 @@ export const AdminAnalytics: React.FC = () => {
         <Button
           variant="outline"
           size="sm"
-          onClick={handleExportAnalyticsCSV}
+          onClick={handleExportAnalyticsExcel}
           className="flex items-center gap-1.5 text-xs shrink-0 self-start sm:self-auto"
         >
           <Download className="w-4 h-4 text-indigo-600" />
-          Export Analytics CSV
+          Download Excel
         </Button>
+      </div>
+      
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Domain</label>
+          <select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-full text-sm border-slate-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <option value="All">All Domains</option>
+            {filterOptions.domains.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Data Year</label>
+          <select value={dataYear} onChange={(e) => setDataYear(e.target.value)} className="w-full text-sm border-slate-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <option value="All">All Years</option>
+            {filterOptions.dataYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Academic Year</label>
+          <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} className="w-full text-sm border-slate-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+            <option value="All">All</option>
+            <option value="1st Year">1st Year</option>
+            <option value="2nd Year">2nd Year</option>
+            <option value="3rd Year">3rd Year</option>
+            <option value="4th Year">4th Year</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
