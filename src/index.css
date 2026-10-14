@@ -5,3 +5,43 @@
     @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-700;
   }
 }
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.4), 0 0 30px rgba(139, 92, 246, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.75), 0 0 45px rgba(139, 92, 246, 0.45);
+  }
+}
+
+@keyframes gentleBounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.02);
+  }
+}
+
+.animate-floating {
+  animation: float 3.2s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: pulseGlow 2.4s ease-in-out infinite;
+}
+
+.animate-gentle-bounce {
+  animation: gentleBounce 2.5s ease-in-out infinite;
+}
+

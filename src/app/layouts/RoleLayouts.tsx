@@ -1,8 +1,12 @@
 import React from 'react';
 import { AppLayout } from './AppLayout';
+import { AICareerAssistant } from '@/features/ai/components/AICareerAssistant';
 
 export const StudentLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <AppLayout role="student">{children}</AppLayout>
+  <AppLayout role="student">
+    {children}
+    <AICareerAssistant />
+  </AppLayout>
 );
 
 export const FacultyLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (

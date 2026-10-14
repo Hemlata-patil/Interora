@@ -20,7 +20,7 @@ export const HodDashboard: React.FC = () => {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const response = await apiClient.get('/hod/dashboard');
+        const response = await apiClient.get<HodDashboardMetrics>('/hod/dashboard');
         setMetrics(response.data || null);
       } catch (err: any) {
         setError(err.message || 'Failed to fetch dashboard metrics.');

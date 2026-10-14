@@ -19,7 +19,6 @@ import {
 import { requestAICareerAnalysis } from './services/aiCareerService';
 import type { AICareerAnalysisResult, CareerAnalysisInput } from './types/aiCareer';
 import { CareerReadinessCard } from './components/CareerReadinessCard';
-import { AICareerAssistant } from './components/AICareerAssistant';
 import {
   Sparkles,
   RefreshCw,
@@ -33,6 +32,7 @@ import {
   GraduationCap,
   Target,
   Edit3,
+  Bot,
 } from 'lucide-react';
 
 /**
@@ -161,13 +161,14 @@ export const AICareerPage: React.FC = () => {
           duration: active.duration,
         },
         metrics,
-        evaluations,
+        evaluations: evaluations as any,
         milestones,
         targetCareer,
       });
 
       setStudentInput(input);
       setReadiness(calculateCareerReadiness(input));
+      window.dispatchEvent(new CustomEvent('interora-set-career-input', { detail: input }));
     } catch (err: any) {
       setValidationMessage(err?.message || 'Failed to load verified student profile data.');
       setStudentInput(null);
@@ -540,8 +541,37 @@ export const AICareerPage: React.FC = () => {
         </div>
       )}
 
-      {/* 4. Interactive AI Career Assistant Component */}
-      {studentInput && <AICareerAssistant input={studentInput} />}
+      {/* 4. Interactive AI Career Assistant Callout */}
+      {studentInput && (
+        <Card title="Interactive AI Career Advisor" subtitle="Chat live with your Groq-powered advisor about this report and career roadmap">
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-gradient-to-r from-indigo-50/90 via-indigo-50/50 to-violet-50/80 border border-indigo-100 rounded-xl gap-4">
+            <div className="flex items-center space-x-3.5">
+              <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <Bot className="w-5 h-5 text-indigo-100" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">Have questions about your report or career goals?</h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Your AI Career Assistant is available anytime via the floating widget at the bottom right. Ask for project roadmaps, skill tips, or interview preparation.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                if (studentInput) {
+                  window.dispatchEvent(new CustomEvent('interora-set-career-input', { detail: studentInput }));
+                }
+                window.dispatchEvent(new CustomEvent('open-interora-ai-chat'));
+              }}
+              className="shrink-0 shadow-xs"
+            >
+              <Bot className="w-4 h-4 mr-1.5" /> Open AI Assistant
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

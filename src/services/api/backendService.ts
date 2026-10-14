@@ -2216,14 +2216,15 @@ export const downloadAdminMetricsExcelBackend = async (
     if (domain && domain !== 'All') params.append('domain', domain);
     if (dataYear && dataYear !== 'All') params.append('dataYear', dataYear);
     if (academicYear && academicYear !== 'All') params.append('academicYear', academicYear);
-    
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    
-    const response = await apiClient.get(`/admin/metrics/export${queryString}`, {
-      responseType: 'blob'
+    const res = await fetch(`/api/admin/metrics/export${queryString}`, {
+      credentials: 'include',
     });
-    
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+    if (!res.ok) {
+      throw new Error(`Failed to download report: ${res.statusText}`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', 'system_analytics.xlsx');
