@@ -10,7 +10,24 @@
 import path from 'path';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, AppRole, AccountStatus, CompanyStatus, Prisma } from '@prisma/client';
+import {
+  PrismaClient,
+  AppRole,
+  AccountStatus,
+  CompanyStatus,
+  Prisma,
+  WorkMode,
+  InternshipType,
+  PostingStatus,
+  ApplicationStatus,
+  AssignmentStatus,
+  TaskStatus,
+  PriorityLevel,
+  EvaluationStatus,
+  EvaluationType,
+  MilestoneStatus,
+  AttendanceStatus,
+} from '@prisma/client';
 
 // Ensure environment variables are loaded from backend/.env
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -319,7 +336,181 @@ export async function main(): Promise<SeedSummary> {
       expertiseAreas: ['Software Architecture', 'Cloud Services', 'TypeScript'],
     },
   });
-  console.log('[Seed] Industry mentor sub-profile linked to Interora Technologies Demo Ltd.');
+  // 8. Demo Internship Posting, Application, and Active Assignment for Student
+  let demoPosting = await prisma.internshipPosting.findFirst({
+    where: { companyId: companyProfileRecord.id, title: 'Full Stack Software Engineering Intern' },
+  });
+  if (!demoPosting) {
+    demoPosting = await prisma.internshipPosting.create({
+      data: {
+        companyId: companyProfileRecord.id,
+        title: 'Full Stack Software Engineering Intern',
+        description: 'Design and develop full-stack cloud applications using TypeScript, React, Node.js, and PostgreSQL.',
+        industryDomain: 'Software Development',
+        location: 'Bengaluru, India (Hybrid)',
+        workMode: WorkMode.hybrid,
+        internshipType: InternshipType.full_time,
+        duration: '6 Months',
+        stipend: 'INR 25,000 / Month',
+        eligibility: 'B.Tech CSE / IT 6th Semester',
+        vacancies: 2,
+        skills: ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'REST APIs'],
+        status: PostingStatus.open,
+      },
+    });
+    console.log('[Seed] Demo internship posting created.');
+  }
+
+  let demoApplication = await prisma.studentApplication.findUnique({
+    where: {
+      internshipId_studentId: {
+        internshipId: demoPosting.id,
+        studentId: studentProfile.id,
+      },
+    },
+  });
+  if (!demoApplication) {
+    demoApplication = await prisma.studentApplication.create({
+      data: {
+        internshipId: demoPosting.id,
+        studentId: studentProfile.id,
+        status: ApplicationStatus.selected,
+        coverLetter: 'Passionate full-stack developer eager to contribute to cloud and enterprise solutions.',
+        facultyRating: new Prisma.Decimal('4.8'),
+        facultyFeedback: 'Strong academic record and solid project experience in modern web stacks.',
+        companyRemarks: 'Exceptional performance in technical screening.',
+      },
+    });
+    console.log('[Seed] Demo student application created.');
+  }
+
+  let demoAssignment = await prisma.internshipAssignment.findFirst({
+    where: { studentId: studentProfile.id, companyId: companyProfileRecord.id },
+  });
+  const now = new Date();
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const oneTwentyDaysLater = new Date(now.getTime() + 120 * 24 * 60 * 60 * 1000);
+
+  if (!demoAssignment) {
+    demoAssignment = await prisma.internshipAssignment.create({
+      data: {
+        applicationId: demoApplication.id,
+        studentId: studentProfile.id,
+        companyId: companyProfileRecord.id,
+        internshipId: demoPosting.id,
+        facultyMentorId: facultyProfile.id,
+        industryMentorId: mentorUser.id,
+        startDate: sixtyDaysAgo,
+        endDate: oneTwentyDaysLater,
+        status: AssignmentStatus.active,
+      },
+    });
+    console.log('[Seed] Demo active internship assignment created.');
+
+    await prisma.task.createMany({
+      data: [
+        {
+          assignmentId: demoAssignment.id,
+          assignedById: mentorUser.id,
+          title: 'Implement AI Career Analysis Integration',
+          description: 'Integrate Groq AI SDK with backend services and connect frontend career guidance dashboard.',
+          requiredSkills: ['TypeScript', 'React', 'Node.js'],
+          priority: PriorityLevel.high,
+          status: TaskStatus.reviewed,
+        },
+        {
+          assignmentId: demoAssignment.id,
+          assignedById: mentorUser.id,
+          title: 'PostgreSQL Database Schema & Prisma Optimization',
+          description: 'Design and verify relational constraints, foreign keys, and indexes.',
+          requiredSkills: ['PostgreSQL', 'Prisma'],
+          priority: PriorityLevel.medium,
+          status: TaskStatus.reviewed,
+        },
+        {
+          assignmentId: demoAssignment.id,
+          assignedById: mentorUser.id,
+          title: 'Build Notification System & WebSockets',
+          description: 'Implement real-time notification alerts for assignment milestones and task reviews.',
+          requiredSkills: ['Node.js', 'WebSocket'],
+          priority: PriorityLevel.high,
+          status: TaskStatus.in_progress,
+        },
+      ],
+    });
+
+    await prisma.milestone.createMany({
+      data: [
+        {
+          assignmentId: demoAssignment.id,
+          title: 'Onboarding & Architecture Walkthrough',
+          description: 'Complete codebase review and local environment configuration.',
+          targetDate: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000),
+          completedAt: new Date(now.getTime() - 44 * 24 * 60 * 60 * 1000),
+          status: MilestoneStatus.completed,
+        },
+        {
+          assignmentId: demoAssignment.id,
+          title: 'Core Backend API Development',
+          description: 'Deliver core CRUD endpoints, role guards, and data validation.',
+          targetDate: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000),
+          completedAt: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+          status: MilestoneStatus.completed,
+        },
+        {
+          assignmentId: demoAssignment.id,
+          title: 'Final Project Deployment & Review',
+          description: 'Deploy production release and conduct capstone demo.',
+          targetDate: oneTwentyDaysLater,
+          status: MilestoneStatus.in_progress,
+        },
+      ],
+    });
+
+    await prisma.evaluation.create({
+      data: {
+        assignmentId: demoAssignment.id,
+        evaluatorId: mentorUser.id,
+        evaluatorRole: AppRole.mentor,
+        evaluationType: EvaluationType.mid_term,
+        evaluationPeriod: 'Mid-Term Review (Month 2)',
+        technicalSkills: 9,
+        qualityOfWork: 9,
+        problemSolving: 9,
+        communication: 8,
+        teamwork: 9,
+        professionalism: 9,
+        timeManagement: 8,
+        initiative: 9,
+        overallRating: new Prisma.Decimal('8.8'),
+        strengths: 'Outstanding problem solving, clean TypeScript architecture, proactive team communication.',
+        improvementAreas: 'Deepen knowledge of distributed caching and microservice patterns.',
+        comments: 'Consistently delivers high quality features ahead of deadlines.',
+        status: EvaluationStatus.verified,
+      },
+    });
+
+    const attendanceDates: Date[] = [];
+    for (let i = 1; i <= 10; i++) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      if (d.getDay() !== 0 && d.getDay() !== 6) {
+        attendanceDates.push(d);
+      }
+    }
+    for (const d of attendanceDates) {
+      await prisma.attendanceRecord.create({
+        data: {
+          assignmentId: demoAssignment.id,
+          attendanceDate: d,
+          status: AttendanceStatus.present,
+          workingHours: new Prisma.Decimal('8.00'),
+          geoVerified: true,
+        },
+      });
+    }
+
+    console.log('[Seed] Demo assignment tasks, milestones, evaluation, and attendance seeded.');
+  }
 
   console.log('[Seed] Database seed completed successfully.');
   console.log(

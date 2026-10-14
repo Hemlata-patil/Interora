@@ -28,6 +28,10 @@ export const env = {
 
   /** Express server port */
   PORT: parseInt(optionalEnv('PORT', '3001'), 10),
+  /** Groq API key for AI services */
+  GROQ_API_KEY: requireEnv('GROQ_API_KEY'),
+  /** Groq model name */
+  GROQ_MODEL: optionalEnv('GROQ_MODEL', 'openai/gpt-oss-120b'),
 
   /** Runtime environment */
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),

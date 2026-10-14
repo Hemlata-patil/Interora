@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import healthRouter from './health.routes';
+import aiCareerRouter from './aiCareer.routes';
 import authRouter from './auth.routes';
 import departmentRouter from './department.routes';
 import postingRouter from './posting.routes';
@@ -138,6 +139,9 @@ router.use('/company', companyRouter);
 
 // ── HOD Operations ────────────────────────────────────────────────────────
 router.use('/hod', hodRouter);
+
+// AI Career analysis and chat routes
+router.use('/ai', aiCareerRouter);
 
 // ── Binary File Uploads (Resumes & Attendance Photos) ───────────────────────
 import uploadRouter from './upload.routes';
