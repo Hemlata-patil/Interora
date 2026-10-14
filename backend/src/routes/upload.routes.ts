@@ -5,6 +5,7 @@ import fs from 'fs';
 import { authenticate } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/errorHandler';
 import { prisma } from '../services/prisma.service';
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 
@@ -62,7 +63,10 @@ router.post(
         await prisma.studentProfile
           .update({
             where: { id: user.id },
-            data: { resumeUrl: relativeUrl },
+            data: {
+              resumeUrl: relativeUrl,
+              resumeAnalysis: Prisma.DbNull,
+            },
           })
           .catch(() => {
             // Ignore if profile doesn't exist yet
@@ -71,6 +75,10 @@ router.post(
 
       res.status(200).json({
         success: true,
+        data: {
+          resumeUrl: relativeUrl,
+          fileName: req.file.originalname,
+        },
         resumeUrl: relativeUrl,
         fileName: req.file.originalname,
       });

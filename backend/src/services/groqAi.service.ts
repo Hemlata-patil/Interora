@@ -36,6 +36,37 @@ export interface AICareerAnalysisResult {
   isDemo?: boolean;
 }
 
+export interface ResumeSkillItem {
+  skill: string;
+  category: 'technical' | 'soft' | 'tool' | 'domain';
+  context?: string;
+}
+
+export interface MissingSkillItem {
+  skill: string;
+  importance: 'High' | 'Medium' | 'Low';
+  reason: string;
+}
+
+export interface SectionAnalysisItem {
+  sectionName: string;
+  status: 'Good' | 'Needs Improvement' | 'Missing';
+  feedback: string;
+}
+
+export interface ResumeAnalysisResult {
+  atsScore: number;
+  atsScoreDisclaimer: string;
+  summary: string;
+  detectedSkills: ResumeSkillItem[];
+  strengths: string[];
+  missingSkills: MissingSkillItem[];
+  sectionFeedback: SectionAnalysisItem[];
+  formattingIssues: string[];
+  actionableImprovements: string[];
+  analyzedAt: string;
+}
+
 export interface CareerAnalysisInput {
   student: {
     name: string;
@@ -539,3 +570,316 @@ export async function chatCareer(
     throw new AppError(502, `AI chat service error: ${message}`);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resume Analysis Prompts & Validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildResumeAnalysisPrompt(
+  resumeText: string,
+  context?: { studentName?: string; enrolledCourse?: string; targetRole?: string }
+): string {
+  return `You are an expert ATS (Applicant Tracking System) auditor and technical resume evaluator.
+Analyze the following extracted student resume text and evaluate its quality, technical depth, section structure, ATS readability, and relevance.
+
+STUDENT PROFILE CONTEXT:
+- Student Name: ${context?.studentName || 'Student'}
+- Enrolled Academic Program: ${context?.enrolledCourse || 'Engineering / Technology'}
+- Target Internship/Career Role: ${context?.targetRole || 'Software Development & Technology Roles'}
+
+RESUME TEXT CONTENT:
+"""
+${resumeText}
+"""
+
+OUTPUT REQUIREMENTS:
+Respond with a SINGLE strictly valid JSON object matching this structure:
+{
+  "atsScore": 82,
+  "atsScoreDisclaimer": "Estimated heuristic score based on standard ATS screening criteria. This is an advisory estimate and not a guarantee of employer ATS outcomes.",
+  "summary": "2-3 sentence executive assessment of the resume's clarity, impact, technical depth, and overall ATS readability.",
+  "detectedSkills": [
+    {
+      "skill": "React.js",
+      "category": "technical",
+      "context": "Demonstrated in frontend project deliverables"
+    }
+  ],
+  "strengths": [
+    "Specific strong point 1 (e.g. quantified project impact with GitHub links)",
+    "Specific strong point 2",
+    "Specific strong point 3"
+  ],
+  "missingSkills": [
+    {
+      "skill": "Docker / Containerization",
+      "importance": "High",
+      "reason": "Commonly expected for target backend/cloud software engineering roles"
+    }
+  ],
+  "sectionFeedback": [
+    {
+      "sectionName": "Contact & Personal Information",
+      "status": "Good",
+      "feedback": "Clear contact info, LinkedIn, and GitHub profile included."
+    },
+    {
+      "sectionName": "Education & Academic Details",
+      "status": "Good",
+      "feedback": "Degree, institution, and graduation timeline clearly stated."
+    },
+    {
+      "sectionName": "Technical Skills",
+      "status": "Good",
+      "feedback": "Categorized competencies clearly listed."
+    },
+    {
+      "sectionName": "Project Experience",
+      "status": "Needs Improvement",
+      "feedback": "Include measurable metrics (e.g. latency reduction, users served) in bullet points."
+    },
+    {
+      "sectionName": "Certifications & Achievements",
+      "status": "Needs Improvement",
+      "feedback": "Add recognized industry credentials or coding challenge rankings."
+    },
+    {
+      "sectionName": "ATS Formatting & Typography",
+      "status": "Good",
+      "feedback": "Clean single-column layout with standard heading tags."
+    }
+  ],
+  "formattingIssues": [
+    "Specific formatting or layout advice (e.g. avoid multi-column tables, ensure standard font usage)"
+  ],
+  "actionableImprovements": [
+    "Specific actionable recommendation 1",
+    "Specific actionable recommendation 2",
+    "Specific actionable recommendation 3"
+  ]
+}
+
+ALLOWED VALUES:
+- "atsScore": an integer between 0 and 100.
+- "category" in detectedSkills: ONLY "technical", "soft", "tool", or "domain".
+- "importance" in missingSkills: ONLY "High", "Medium", or "Low".
+- "status" in sectionFeedback: ONLY "Good", "Needs Improvement", or "Missing".
+
+Strictly raw JSON only. Do NOT include markdown code blocks, backticks, or text before/after.`;
+}
+
+function validateResumeAnalysisResult(raw: unknown): ResumeAnalysisResult {
+  if (!raw || typeof raw !== 'object') {
+    throw new AppError(502, 'AI resume analysis returned an invalid non-object response');
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  // 1. atsScore
+  let atsScore = 75;
+  if (typeof obj.atsScore === 'number' && !isNaN(obj.atsScore)) {
+    atsScore = Math.min(100, Math.max(0, Math.round(obj.atsScore)));
+  }
+
+  // 2. atsScoreDisclaimer
+  const atsScoreDisclaimer =
+    typeof obj.atsScoreDisclaimer === 'string' && obj.atsScoreDisclaimer.trim()
+      ? obj.atsScoreDisclaimer.trim()
+      : 'Estimated heuristic score based on standard ATS screening criteria. This is an advisory estimate and not a guarantee of employer ATS outcomes.';
+
+  // 3. summary
+  const summary = sanitizeSummaryText(typeof obj.summary === 'string' ? obj.summary : '');
+
+  // 4. detectedSkills
+  const detectedSkills: ResumeSkillItem[] = [];
+  if (Array.isArray(obj.detectedSkills)) {
+    for (const item of obj.detectedSkills) {
+      if (item && typeof item === 'object') {
+        const ds = item as Record<string, unknown>;
+        const skill = typeof ds.skill === 'string' ? ds.skill.trim() : '';
+        if (skill) {
+          let category: 'technical' | 'soft' | 'tool' | 'domain' = 'technical';
+          if (typeof ds.category === 'string') {
+            const cat = ds.category.trim().toLowerCase();
+            if (cat === 'soft') category = 'soft';
+            else if (cat === 'tool') category = 'tool';
+            else if (cat === 'domain') category = 'domain';
+          }
+          const context = typeof ds.context === 'string' ? ds.context.trim() : undefined;
+          detectedSkills.push({ skill, category, context });
+        }
+      } else if (typeof item === 'string' && item.trim()) {
+        detectedSkills.push({ skill: item.trim(), category: 'technical' });
+      }
+    }
+  }
+
+  // 5. strengths
+  const strengths: string[] = Array.isArray(obj.strengths)
+    ? obj.strengths.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).map(s => s.trim())
+    : ['Strong educational background and core technical foundations.'];
+
+  // 6. missingSkills
+  const missingSkills: MissingSkillItem[] = [];
+  if (Array.isArray(obj.missingSkills)) {
+    for (const item of obj.missingSkills) {
+      if (item && typeof item === 'object') {
+        const ms = item as Record<string, unknown>;
+        const skill = typeof ms.skill === 'string' ? ms.skill.trim() : '';
+        if (skill) {
+          let importance: 'High' | 'Medium' | 'Low' = 'Medium';
+          if (typeof ms.importance === 'string') {
+            const imp = ms.importance.trim().toLowerCase();
+            if (imp.startsWith('h')) importance = 'High';
+            else if (imp.startsWith('l')) importance = 'Low';
+          }
+          const reason =
+            typeof ms.reason === 'string' && ms.reason.trim()
+              ? ms.reason.trim()
+              : `Recommended competency for target technology roles.`;
+          missingSkills.push({ skill, importance, reason });
+        }
+      }
+    }
+  }
+
+  // 7. sectionFeedback
+  const sectionFeedback: SectionAnalysisItem[] = [];
+  if (Array.isArray(obj.sectionFeedback)) {
+    for (const item of obj.sectionFeedback) {
+      if (item && typeof item === 'object') {
+        const sf = item as Record<string, unknown>;
+        const sectionName = typeof sf.sectionName === 'string' ? sf.sectionName.trim() : 'General Section';
+        let status: 'Good' | 'Needs Improvement' | 'Missing' = 'Good';
+        if (typeof sf.status === 'string') {
+          const st = sf.status.trim().toLowerCase();
+          if (st.includes('need') || st.includes('improv')) status = 'Needs Improvement';
+          else if (st.includes('miss')) status = 'Missing';
+        }
+        const feedback = typeof sf.feedback === 'string' ? sf.feedback.trim() : 'Section evaluated.';
+        sectionFeedback.push({ sectionName, status, feedback });
+      }
+    }
+  }
+
+  // Fallback sections if none provided
+  if (sectionFeedback.length === 0) {
+    sectionFeedback.push(
+      { sectionName: 'Contact & Personal Details', status: 'Good', feedback: 'Contact information present.' },
+      { sectionName: 'Education Details', status: 'Good', feedback: 'Degree details present.' },
+      { sectionName: 'Technical Skills', status: 'Good', feedback: 'Skills list evaluated.' },
+      { sectionName: 'Project Experience', status: 'Needs Improvement', feedback: 'Consider adding measurable project results.' },
+      { sectionName: 'Certifications', status: 'Needs Improvement', feedback: 'Add industry credentials or online certifications.' },
+      { sectionName: 'ATS Formatting', status: 'Good', feedback: 'Readable text layout.' }
+    );
+  }
+
+  // 8. formattingIssues
+  const formattingIssues: string[] = Array.isArray(obj.formattingIssues)
+    ? obj.formattingIssues.filter((f): f is string => typeof f === 'string' && f.trim().length > 0).map(f => f.trim())
+    : [];
+
+  // 9. actionableImprovements
+  const actionableImprovements: string[] = Array.isArray(obj.actionableImprovements)
+    ? obj.actionableImprovements.filter((a): a is string => typeof a === 'string' && a.trim().length > 0).map(a => a.trim())
+    : [
+        'Add quantifiable metrics and outcomes to your project bullet points.',
+        'Include links to active GitHub repositories and live demo deployments.',
+        'Align keywords with specific job descriptions in your target industry domain.'
+      ];
+
+  return {
+    atsScore,
+    atsScoreDisclaimer,
+    summary,
+    detectedSkills,
+    strengths,
+    missingSkills,
+    sectionFeedback,
+    formattingIssues,
+    actionableImprovements,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Evaluates extracted resume text using Groq AI and returns structured ATS intelligence.
+ */
+export async function analyzeResumeText(
+  resumeText: string,
+  context?: { studentName?: string; enrolledCourse?: string; targetRole?: string }
+): Promise<ResumeAnalysisResult> {
+  const apiKey = process.env.GROQ_API_KEY || env.GROQ_API_KEY || '';
+  if (!apiKey) {
+    throw new AppError(500, 'GROQ_API_KEY is not configured on the server');
+  }
+
+  const model = process.env.GROQ_MODEL || env.GROQ_MODEL || 'openai/gpt-oss-120b';
+  const prompt = buildResumeAnalysisPrompt(resumeText, context);
+
+  let rawContent = '';
+  try {
+    let response;
+    try {
+      response = await groq.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert AI resume reviewer and ATS intelligence auditor. You evaluate resume text and return structured JSON containing ATS compatibility scores and actionable improvements.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+      });
+    } catch (apiError: any) {
+      const errorMsg = apiError?.message || apiError?.error?.message || '';
+      if (apiError?.status === 400 && errorMsg.toLowerCase().includes('response_format')) {
+        response = await groq.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are an expert AI resume reviewer and ATS intelligence auditor. You evaluate resume text and return structured JSON containing ATS compatibility scores and actionable improvements.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.3,
+        });
+      } else {
+        throw apiError;
+      }
+    }
+
+    rawContent = response.choices[0]?.message?.content?.trim() ?? '';
+  } catch (err: any) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+    const status = err?.status || err?.statusCode;
+    if (status === 429) {
+      throw new AppError(429, 'Groq AI rate limit reached. Please wait a few moments before requesting re-analysis.');
+    }
+    if (status === 401 || status === 403) {
+      throw new AppError(500, 'AI resume service authentication error. Please verify the backend API configuration.');
+    }
+    if (status >= 500) {
+      throw new AppError(503, 'Groq AI service is temporarily experiencing high load. Please retry in a few moments.');
+    }
+    const rawMsg = err?.message || 'Failed to communicate with Groq AI service for resume analysis';
+    // Redact any potential API key or sensitive token strings from error message
+    const safeMsg = String(rawMsg).replace(/gsk_[a-zA-Z0-9_-]+/g, '[REDACTED_KEY]');
+    throw new AppError(502, `AI service notice: ${safeMsg}`);
+  }
+
+  if (!rawContent) {
+    throw new AppError(502, 'AI resume analysis service returned an empty response');
+  }
+
+  const parsed = parseJsonSafely(rawContent);
+  return validateResumeAnalysisResult(parsed);
+}
+

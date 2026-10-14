@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Button, ProgressBar, Badge } from '@/components';
-import { BookOpen, Code, Terminal, MessageSquare, PlayCircle, FileText, CheckCircle2, Target, Video, Briefcase, Zap } from 'lucide-react';
-import { fetchStudentPlacementReadinessBackend } from '@/services/api/backendService';
+import {
+  BookOpen,
+  Code,
+  Terminal,
+  MessageSquare,
+  PlayCircle,
+  FileText,
+  CheckCircle2,
+  Target,
+  Video,
+  Briefcase,
+  Zap,
+  AlertCircle,
+  Sparkles
+} from 'lucide-react';
+import {
+  fetchStudentPlacementReadinessBackend,
+  fetchStudentResumeAnalysisBackend,
+  type ResumeAnalysisResult,
+} from '@/services/api/backendService';
 
 const mockSkills = [
   { name: 'JavaScript', level: 'Advanced', progress: 85, icon: Terminal, color: 'text-yellow-600', bg: 'bg-yellow-100', description: 'Master advanced concepts and asynchronous programming.', isFree: true, resourceType: 'Video Course', linkText: 'Watch Free Course', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript' },
@@ -53,15 +72,6 @@ const mockSoftSkills = [
   { title: 'HR Interview Prep', icon: Briefcase, iconColor: 'text-cyan-600', desc: 'Common HR questions and how to answer them', type: '🎥 YouTube Playlist', cta: 'Watch Playlist', url: 'https://www.youtube.com/results?search_query=hr+interview+questions+and+answers' }
 ];
 
-const resumeChecklist = [
-  { label: 'Personal Information', completed: true },
-  { label: 'Education Details', completed: true },
-  { label: 'Technical Skills', completed: true },
-  { label: 'Projects with GitHub Links', completed: true },
-  { label: 'Certifications', completed: false },
-  { label: 'Achievements & Extracurriculars', completed: false }
-];
-
 const roadmapSteps = [
   'Learn Fundamentals',
   'Build Skills',
@@ -73,8 +83,11 @@ const roadmapSteps = [
 ];
 
 export const StudentCareerPrep: React.FC = () => {
+  const navigate = useNavigate();
   const [readinessScore, setReadinessScore] = useState<number>(78);
   const [skillsProgress, setSkillsProgress] = useState<number>(85);
+  const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysisResult | null>(null);
+  const [resumeLoading, setResumeLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -94,8 +107,25 @@ export const StudentCareerPrep: React.FC = () => {
       }
     };
 
+    const loadResumeAnalysis = async () => {
+      try {
+        const res = await fetchStudentResumeAnalysisBackend();
+        if (isMounted) {
+          setResumeAnalysis(res);
+        }
+      } catch (err) {
+        console.warn('[StudentCareerPrep] Could not fetch resume analysis:', err);
+      } finally {
+        if (isMounted) setResumeLoading(false);
+      }
+    };
+
     loadReadiness();
-    const handleFocus = () => loadReadiness();
+    loadResumeAnalysis();
+    const handleFocus = () => {
+      loadReadiness();
+      loadResumeAnalysis();
+    };
     window.addEventListener('focus', handleFocus);
     return () => {
       isMounted = false;
@@ -131,9 +161,17 @@ export const StudentCareerPrep: React.FC = () => {
                 <div>
                   <div className="flex justify-between text-sm font-medium mb-1">
                     <span className="text-slate-700">Resume Readiness</span>
-                    <span className="text-slate-900 font-bold">66%</span>
+                    <span className="text-slate-900 font-bold">
+                      {resumeLoading ? 'Checking...' : resumeAnalysis ? `${resumeAnalysis.atsScore}%` : 'Not Analyzed'}
+                    </span>
                   </div>
-                  <ProgressBar progress={66} color="emerald" />
+                  <ProgressBar
+                    progress={resumeAnalysis ? resumeAnalysis.atsScore : 0}
+                    color={resumeAnalysis && resumeAnalysis.atsScore >= 75 ? 'emerald' : 'indigo'}
+                  />
+                  {!resumeLoading && !resumeAnalysis && (
+                    <span className="text-[10px] text-amber-600 block mt-1">Pending AI screening in profile</span>
+                  )}
                 </div>
                 <div>
                   <div className="flex justify-between text-sm font-medium mb-1">
@@ -359,47 +397,99 @@ export const StudentCareerPrep: React.FC = () => {
           
           {/* E. Resume Preparation */}
           <Card title="Resume Readiness">
-            <div className="mb-4">
-              <div className="flex justify-between items-end mb-2">
-                <div>
-                  <h4 className="text-xl font-bold text-slate-900">4/6</h4>
-                  <p className="text-xs text-slate-500 font-medium">Sections Completed</p>
-                </div>
-                <Badge variant={66 >= 100 ? 'emerald' : 'amber'}>
-                  {66 >= 100 ? 'Ready' : 'In Progress'}
-                </Badge>
+            {resumeLoading ? (
+              <div className="py-8 text-center space-y-2">
+                <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin mx-auto" />
+                <p className="text-xs text-slate-500">Checking saved AI resume analysis...</p>
               </div>
-              <ProgressBar progress={66} color="emerald" />
-            </div>
-            
-            <div className="space-y-2 mt-5">
-              {resumeChecklist.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                      item.completed ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                    }`}>
-                      {item.completed ? <CheckCircle2 className="w-3.5 h-3.5" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />}
+            ) : resumeAnalysis ? (
+              <>
+                <div className="mb-4">
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <h4 className="text-xl font-bold text-slate-900">
+                        {resumeAnalysis.sectionFeedback.filter((s: any) => s.status === 'Good').length}/{resumeAnalysis.sectionFeedback.length}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">Sections Strong / Complete</p>
                     </div>
-                    <span className={`text-sm ${item.completed ? 'text-slate-700' : 'text-slate-500'}`}>
-                      {item.label}
-                    </span>
+                    <Badge variant={resumeAnalysis.atsScore >= 75 ? 'emerald' : resumeAnalysis.atsScore >= 55 ? 'amber' : 'rose'}>
+                      ATS: {resumeAnalysis.atsScore}/100
+                    </Badge>
                   </div>
-                  {!item.completed && (
-                    <button className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Add</button>
-                  )}
+                  <ProgressBar
+                    progress={resumeAnalysis.atsScore}
+                    color={resumeAnalysis.atsScore >= 75 ? 'emerald' : resumeAnalysis.atsScore >= 55 ? 'amber' : 'rose'}
+                  />
+                  <p className="text-xs text-slate-600 mt-2.5 leading-relaxed line-clamp-2">
+                    {resumeAnalysis.summary}
+                  </p>
                 </div>
-              ))}
-            </div>
-            
-            <Button 
-              variant="outline" 
-              className="w-full mt-4"
-              onClick={() => window.open('https://rxresu.me/', '_blank', 'noopener,noreferrer')}
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              View Resume Builder
-            </Button>
+                
+                <div className="space-y-2 mt-4">
+                  {resumeAnalysis.sectionFeedback.map((item: any, i: number) => (
+                    <div key={i} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                            item.status === 'Good' ? 'bg-emerald-100 text-emerald-600' :
+                            item.status === 'Needs Improvement' ? 'bg-amber-100 text-amber-600' :
+                            'bg-rose-100 text-rose-600'
+                          }`}>
+                            {item.status === 'Good' ? (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            ) : (
+                              <AlertCircle className="w-3.5 h-3.5" />
+                            )}
+                          </div>
+                          <span className="text-xs font-semibold text-slate-800">
+                            {item.sectionName}
+                          </span>
+                        </div>
+                        <Badge variant={item.status === 'Good' ? 'emerald' : item.status === 'Needs Improvement' ? 'amber' : 'rose'}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      {item.feedback && (
+                        <p className="text-[11px] text-slate-500 mt-1 ml-7.5 leading-normal">
+                          {item.feedback}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-4 text-xs font-semibold"
+                  onClick={() => navigate('/student/profile')}
+                >
+                  <FileText className="w-4 h-4 mr-2 text-indigo-600" />
+                  View Full AI Audit in Profile
+                </Button>
+              </>
+            ) : (
+              /* No fabricated score or checklist when analysis is unavailable */
+              <div className="text-center py-6 px-3 space-y-3 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">No AI Analysis Found</h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                    Upload your PDF resume in your Student Profile and run the Groq AI Analyzer to calculate your ATS score, verify skills, and see section completeness.
+                  </p>
+                </div>
+                <Button 
+                  variant="primary" 
+                  size="sm"
+                  onClick={() => navigate('/student/profile')}
+                  className="mt-1"
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  Go to Profile & Analyze Resume
+                </Button>
+              </div>
+            )}
             
             <div className="mt-6 pt-5 border-t border-slate-100">
               <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-lg border border-emerald-100">

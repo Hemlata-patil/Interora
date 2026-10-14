@@ -167,6 +167,7 @@ export async function main(): Promise<SeedSummary> {
       currentSemester: '6th Semester',
       cgpa: new Prisma.Decimal('8.50'),
       skills: ['TypeScript', 'React', 'Node.js', 'PostgreSQL'],
+      resumeUrl: '/uploads/resumes/demo_student_resume.pdf',
     },
     create: {
       id: studentProfile.id,
@@ -178,6 +179,7 @@ export async function main(): Promise<SeedSummary> {
       currentSemester: '6th Semester',
       cgpa: new Prisma.Decimal('8.50'),
       skills: ['TypeScript', 'React', 'Node.js', 'PostgreSQL'],
+      resumeUrl: '/uploads/resumes/demo_student_resume.pdf',
     },
   });
   console.log('[Seed] Student sub-profile (DEMO-STU-001) linked to CSE.');

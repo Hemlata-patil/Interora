@@ -2546,6 +2546,86 @@ export const uploadStudentResumeBackend = async (
   }
 };
 
+export interface ResumeSkillItem {
+  skill: string;
+  category: 'technical' | 'soft' | 'tool' | 'domain';
+  context?: string;
+}
+
+export interface MissingSkillItem {
+  skill: string;
+  importance: 'High' | 'Medium' | 'Low';
+  reason: string;
+}
+
+export interface SectionAnalysisItem {
+  sectionName: string;
+  status: 'Good' | 'Needs Improvement' | 'Missing';
+  feedback: string;
+}
+
+export interface ResumeAnalysisResult {
+  atsScore: number;
+  atsScoreDisclaimer: string;
+  summary: string;
+  detectedSkills: ResumeSkillItem[];
+  strengths: string[];
+  missingSkills: MissingSkillItem[];
+  sectionFeedback: SectionAnalysisItem[];
+  formattingIssues: string[];
+  actionableImprovements: string[];
+  analyzedAt: string;
+}
+
+export const analyzeStudentResumeBackend = async (
+  options?: { forceReanalyze?: boolean; targetRole?: string }
+): Promise<{ success: boolean; data?: ResumeAnalysisResult; cached?: boolean; error?: string }> => {
+  try {
+    const res = await apiClient.post<any>('/ai/resume/analyze', options || {});
+    // apiClient returns ApiResponse<T> where res.data is the payload
+    const payload = (res.data?.data ?? res.data) as ResumeAnalysisResult | undefined;
+    const isCached = Boolean((res as any).cached ?? res.data?.cached ?? false);
+
+    if (!payload || typeof payload !== 'object' || typeof payload.atsScore !== 'number') {
+      return {
+        success: false,
+        error: res.message || 'No resume analysis data was returned by the server.',
+      };
+    }
+
+    return {
+      success: true,
+      data: payload,
+      cached: isCached,
+    };
+  } catch (err: any) {
+    console.error('[analyzeStudentResumeBackend] Error:', err);
+    const errorMessage =
+      err.errors && typeof err.errors === 'object'
+        ? Object.values(err.errors).flat().join(', ')
+        : (err.message || 'Failed to analyze resume with AI.');
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+};
+
+export const fetchStudentResumeAnalysisBackend = async (): Promise<ResumeAnalysisResult | null> => {
+  try {
+    const res = await apiClient.get<any>('/ai/resume/analysis');
+    const payload = (res.data?.data ?? res.data) as ResumeAnalysisResult | undefined;
+    if (!payload || typeof payload !== 'object' || typeof payload.atsScore !== 'number') {
+      return null;
+    }
+    return payload;
+  } catch (err: any) {
+    console.warn('[fetchStudentResumeAnalysisBackend] Note:', err?.message || err);
+    return null;
+  }
+};
+
+
 
 // Check-out Attendance
 export const checkoutAttendanceRecordBackend = async (
