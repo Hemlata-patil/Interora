@@ -12,3 +12,4 @@ export * from './ui/Alert';
 export * from './common/EmptyState';
 export * from './common/LoadingState';
 export * from './common/PageHeader';
+export * from './common/ProfilePictureUploader';

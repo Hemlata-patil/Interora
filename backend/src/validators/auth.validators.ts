@@ -34,6 +34,12 @@ export const registerSchema = z.object({
     })
     .optional()
     .default('student'),
+
+  phone: z.string().trim().max(30).optional().nullable(),
+  departmentCode: z.string().optional(),
+  departmentId: z.string().optional(),
+  course: z.string().optional(),
+  studentId: z.string().optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

@@ -14,13 +14,25 @@ import {
   fetchStudentApplicationsBackend,
   fetchStudentPlacementReadinessBackend,
   getCurrentUserBackend,
+  type AuthUser,
 } from '@/services/api/backendService';
+import {
+  calculateProfileCompletion,
+  type ProfileCompletionSummary,
+  type StudentProfileLike,
+} from '@/utils/profileCompletion';
+
+const LOCAL_STORAGE_KEY_PREFIX = 'interora_student_extended_profile_';
 
 export const StudentDashboard: React.FC = () => {
   const [activeInternship, setActiveInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
   const [appSummary, setAppSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
   const [readinessScore, setReadinessScore] = useState<number>(78);
   const [studentName, setStudentName] = useState<string>('Student');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [completionSummary, setCompletionSummary] = useState<ProfileCompletionSummary>(
+    calculateProfileCompletion(null)
+  );
 
   const loadData = useCallback(async () => {
     try {
@@ -31,8 +43,38 @@ export const StudentDashboard: React.FC = () => {
         fetchStudentPlacementReadinessBackend().catch(() => null),
       ]);
 
-      if (user?.fullName) {
-        setStudentName(user.fullName.split(' ')[0] || user.fullName);
+      if (user) {
+        setCurrentUser(user);
+        if (user.fullName) {
+          setStudentName(user.fullName.split(' ')[0] || user.fullName);
+        }
+
+        let extendedDetails: Partial<StudentProfileLike> = {};
+        try {
+          const raw = localStorage.getItem(`${LOCAL_STORAGE_KEY_PREFIX}${user.id}`);
+          if (raw) extendedDetails = JSON.parse(raw);
+        } catch {
+          // Ignore parse errors
+        }
+
+        const sp = user.studentProfile;
+        const profileObj: StudentProfileLike = {
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          avatarUrl: user.avatarUrl,
+          department: user.departmentName || 'Computer Science & Engineering',
+          course: sp?.course || 'B.Tech Computer Science',
+          studentId: sp?.studentId || `STU-${user.id.substring(0, 8).toUpperCase()}`,
+          currentSemester: sp?.currentSemester,
+          batchYear: sp?.batchYear,
+          skills: sp?.skills,
+          resumeUrl: sp?.resumeUrl,
+          ...extendedDetails,
+        };
+
+        const calc = calculateProfileCompletion(profileObj);
+        setCompletionSummary(calc);
       }
 
       if (active) {
@@ -179,10 +221,12 @@ export const StudentDashboard: React.FC = () => {
     {
       id: 'act_03',
       title: 'Complete Profile Details',
-      description: 'Add GitHub profile and project links to reach 100% completion',
+      description: completionSummary.isComplete
+        ? 'Your profile is 100% complete and ready for employers'
+        : `Complete ${completionSummary.missingList.length} missing required fields to reach 100% readiness`,
       dueDate: 'In 2 days',
       type: 'profile',
-      linkPath: '/student/profile',
+      linkPath: '/student/profile?edit=true',
     },
   ];
 
@@ -194,8 +238,11 @@ export const StudentDashboard: React.FC = () => {
         description="Track your active internship journey, application pipeline, and upcoming tasks."
         action={
           <Link to="/student/profile">
-            <Button variant="outline" size="sm">
-              View Profile (85% Complete)
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 shadow-2xs">
+              <span>View Profile ({completionSummary.percentage}%)</span>
+              <Badge variant={completionSummary.isComplete ? 'emerald' : 'amber'}>
+                {completionSummary.statusLabel}
+              </Badge>
             </Button>
           </Link>
         }
@@ -213,6 +260,84 @@ export const StudentDashboard: React.FC = () => {
         <Link to="/student/applications" className="block transition-transform hover:-translate-y-0.5">
           <StatCard title="Total Applications" value={appSummary.total} icon={Award} description={`${appSummary.selected} Selected • ${appSummary.underReview + appSummary.facultyApproved} Active`} />
         </Link>
+      </div>
+
+      {/* ── PROFILE COMPLETION READINESS CARD ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 text-white shadow-md border border-indigo-900/60 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
+          <div className="space-y-2 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-indigo-300" /> Real-Time Profile Readiness
+              </span>
+              <Badge variant={completionSummary.isComplete ? 'emerald' : 'amber'}>
+                {completionSummary.statusLabel}
+              </Badge>
+              <span className="text-xs text-slate-300">
+                ({completionSummary.completedCount} of {completionSummary.totalCount} required sections verified)
+              </span>
+            </div>
+
+            <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <span>{completionSummary.isComplete ? 'Profile Fully Completed' : 'Complete Your Profile for Recruiter Matching'}</span>
+            </h3>
+
+            {/* Progress Bar */}
+            <div className="space-y-1.5 pt-1">
+              <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-indigo-500 via-violet-400 to-emerald-400"
+                  style={{ width: `${completionSummary.percentage}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Section Breakdown Badges */}
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+              {completionSummary.completedList.map((sec) => (
+                <span
+                  key={sec.id}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                >
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  {sec.label}
+                </span>
+              ))}
+
+              {completionSummary.missingList.map((sec) => (
+                <span
+                  key={sec.id}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  title={sec.missingHint}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5"></span>
+                  {sec.label} (Required)
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Percentage & Continue Profile Button */}
+          <div className="flex flex-col items-center justify-center sm:items-end shrink-0 gap-3 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-6">
+            <div className="text-center md:text-right">
+              <span className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-emerald-300">
+                {completionSummary.percentage}%
+              </span>
+              <span className="block text-[11px] text-slate-300 font-medium">Verified Readiness</span>
+            </div>
+
+            <Link to="/student/profile?edit=true">
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs font-semibold text-xs"
+              >
+                <span>{completionSummary.isComplete ? 'Edit Profile' : 'Continue Profile'}</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* 2. Primary Workspace Grid */}

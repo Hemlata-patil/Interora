@@ -2547,6 +2547,50 @@ export const uploadStudentResumeBackend = async (
   }
 };
 
+export interface AvatarUploadResult {
+  success: boolean;
+  avatarUrl?: string;
+  error?: string;
+}
+
+export const uploadStudentAvatarBackend = async (
+  file: File
+): Promise<AvatarUploadResult> => {
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type.toLowerCase())) {
+    return { success: false, error: 'Only JPG, JPEG, PNG, and WebP images are allowed.' };
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, error: 'Avatar image must be smaller than 5MB.' };
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const res = await apiClient.post<{ avatarUrl: string }>('/uploads/avatar', formData);
+
+    return {
+      success: true,
+      avatarUrl: res.data?.avatarUrl,
+    };
+  } catch (err: any) {
+    console.error('[uploadStudentAvatarBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to upload avatar.' };
+  }
+};
+
+export const removeStudentAvatarBackend = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await apiClient.delete('/uploads/avatar');
+    return { success: true };
+  } catch (err: any) {
+    console.error('[removeStudentAvatarBackend] Error:', err);
+    return { success: false, error: err.message || 'Failed to remove avatar.' };
+  }
+};
+
 export interface ResumeSkillItem {
   skill: string;
   category: 'technical' | 'soft' | 'tool' | 'domain';

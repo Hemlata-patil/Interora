@@ -8,6 +8,7 @@ import { StudentLayout, FacultyLayout, CompanyLayout, AdminLayout, MentorLayout,
 
 import { StudentDashboard } from '@/features/student/StudentDashboard';
 import { StudentProfile } from '@/features/student/StudentProfile';
+import { StudentOnboarding } from '@/features/student/StudentOnboarding';
 import { StudentChat } from '@/features/student/StudentChat';
 import { StudentCareerPrep } from '@/features/student/StudentCareerPrep';
 import { MarketplacePage } from '@/features/internships/MarketplacePage';
@@ -79,6 +80,8 @@ const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  { path: '/onboarding', element: <StudentOnboarding /> },
+  { path: '/student/onboarding', element: <StudentOnboarding /> },
   { path: '/verify/:token', element: <VerifyCertificatePage /> },
 
   // Student Routes Group

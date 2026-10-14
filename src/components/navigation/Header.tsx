@@ -9,10 +9,12 @@ import { logoutUserBackend } from '@/services/api/backendService';
 
 export interface HeaderProps {
   role: UserRole;
+  avatarUrl?: string | null;
+  userName?: string;
   onMenuToggle: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
+export const Header: React.FC<HeaderProps> = ({ role, avatarUrl, userName, onMenuToggle }) => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -29,6 +31,10 @@ export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
       navigate('/company/notifications');
     }
   };
+
+  const initials = userName
+    ? userName.trim().split(/\s+/).map((n) => n[0] || '').join('').substring(0, 2).toUpperCase()
+    : role.substring(0, 2).toUpperCase();
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
@@ -60,8 +66,12 @@ export const Header: React.FC<HeaderProps> = ({ role, onMenuToggle }) => {
         <div className="h-5 w-px bg-slate-200" />
 
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-xs border border-indigo-200">
-            {role.substring(0, 2).toUpperCase()}
+          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-xs border border-indigo-200 overflow-hidden shadow-2xs">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={userName || role} className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <Button
             variant="ghost"

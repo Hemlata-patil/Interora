@@ -70,6 +70,11 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (!studentForm.phone || studentForm.phone.replace(/\D/g, '').length < 7) {
+      setErrorMsg('Please enter a valid mobile phone number (minimum 7 digits).');
+      return;
+    }
+
     if (!studentForm.department) {
       setErrorMsg('Please select a department.');
       return;
@@ -84,7 +89,8 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    navigate('/login');
+    // Direct new students to multi-step onboarding
+    navigate('/student/onboarding');
   };
 
   return (
@@ -106,13 +112,16 @@ export const RegisterPage: React.FC = () => {
           </div>
         )}
 
-        <Card title="Create Student Account">
+        <Card
+          title="Create Student Account"
+          subtitle="Essential account credentials. Complete your profile anytime during onboarding or from your dashboard."
+        >
           <form onSubmit={handleStudentRegister} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Full Name"
+                label="Full Legal Name *"
                 required
-                placeholder="e.g. Sarah Smith"
+                placeholder="e.g. Rohan Mehta"
                 value={studentForm.fullName}
                 onChange={(e) => setStudentForm({ ...studentForm, fullName: e.target.value })}
               />
@@ -131,7 +140,7 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Email Address"
+                label="Email Address *"
                 type="email"
                 required
                 placeholder="sarah@student.edu"
@@ -139,7 +148,9 @@ export const RegisterPage: React.FC = () => {
                 onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
               />
               <Input
-                label="Phone Number"
+                label="Mobile Contact Number *"
+                type="tel"
+                required
                 placeholder="+91 98765 43210"
                 value={studentForm.phone}
                 onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
@@ -148,7 +159,8 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Select
-                label="Department"
+                label="Department *"
+                required
                 value={studentForm.department}
                 disabled={loadingDepartments || departments.length === 0}
                 onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
@@ -164,7 +176,7 @@ export const RegisterPage: React.FC = () => {
                 }
               />
               <Input
-                label="Course / Program"
+                label="Course / Degree Program"
                 placeholder="e.g. B.Tech Computer Science"
                 value={studentForm.course}
                 onChange={(e) => setStudentForm({ ...studentForm, course: e.target.value })}
@@ -173,7 +185,7 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Password"
+                label="Password (min 8 chars) *"
                 type="password"
                 required
                 placeholder="••••••••"
@@ -181,7 +193,7 @@ export const RegisterPage: React.FC = () => {
                 onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
               />
               <Input
-                label="Confirm Password"
+                label="Confirm Password *"
                 type="password"
                 required
                 placeholder="••••••••"
@@ -190,8 +202,8 @@ export const RegisterPage: React.FC = () => {
               />
             </div>
 
-            <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-              {loading ? 'Creating Account...' : 'Register as Student'}
+            <Button type="submit" variant="primary" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+              {loading ? 'Creating Account...' : 'Register & Continue to Profile Onboarding →'}
             </Button>
           </form>
 

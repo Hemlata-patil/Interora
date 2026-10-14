@@ -40,6 +40,7 @@ export interface SidebarProps {
   role?: 'student' | 'faculty' | 'company' | 'mentor' | 'admin' | 'hod';
   userEmail?: string;
   userName?: string;
+  avatarUrl?: string | null;
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -48,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   role = 'student',
   userEmail = 'user@interora.app',
   userName = 'User',
+  avatarUrl,
   isOpen = true,
   onClose,
 }) => {
@@ -545,8 +547,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-slate-100 bg-slate-50/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
-              {(userName || 'U').charAt(0).toUpperCase()}
+            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs overflow-hidden">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={userName} className="w-full h-full object-cover" />
+              ) : (
+                (userName || 'U').charAt(0).toUpperCase()
+              )}
             </div>
 
             <div className="truncate">

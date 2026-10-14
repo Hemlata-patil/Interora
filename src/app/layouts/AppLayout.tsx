@@ -15,6 +15,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
         }
 
         setUserEmail(user.email);
+        setUserAvatar(user.avatarUrl || null);
         setUserName(
           user.fullName ||
             (role === 'company'
@@ -87,11 +89,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
             : role.toUpperCase())
         }
         userEmail={userEmail || `${role}@interora.app`}
+        avatarUrl={userAvatar}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header role={role} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+        <Header
+          role={role}
+          avatarUrl={userAvatar}
+          userName={userName}
+          onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
+        />
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
       </div>
     </div>

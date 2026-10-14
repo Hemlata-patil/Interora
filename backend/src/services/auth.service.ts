@@ -84,7 +84,9 @@ export interface RegisterPayload {
   role?: 'student' | 'company';
   departmentId?: string;
   departmentCode?: string;
-  phone?: string;
+  phone?: string | null;
+  studentId?: string;
+  course?: string;
 }
 
 export interface LoginPayload {
@@ -164,6 +166,7 @@ export async function register(payload: RegisterPayload): Promise<AuthResult> {
         role: role as AppRole,
         accountStatus,
         passwordHash,
+        phone: payload.phone || null,
       },
     });
 
@@ -210,9 +213,9 @@ export async function register(payload: RegisterPayload): Promise<AuthResult> {
       await tx.studentProfile.create({
         data: {
           id: newProfile.id,
-          studentId: `STU-${newProfile.id.substring(0, 8).toUpperCase()}`,
+          studentId: payload.studentId || `STU-${newProfile.id.substring(0, 8).toUpperCase()}`,
           departmentId,
-          course: 'B.Tech Computer Science',
+          course: payload.course || 'B.Tech Computer Science',
           batchYear: '2026',
           batchDivision: 'CS1',
           currentSemester: '6th Semester',
