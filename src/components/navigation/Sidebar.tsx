@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import interoraLogo from '@/assets/interora_logo.png';
 import { LogoBrand } from './LogoBrand';
+import { resolveMediaUrl } from '@/utils/mediaUrl';
 
 export interface NavItem {
   label: string;
@@ -55,6 +56,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
+
+  const resolvedAvatar = resolveMediaUrl(avatarUrl);
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -548,8 +556,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs overflow-hidden">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={userName} className="w-full h-full object-cover" />
+              {resolvedAvatar && !imgError ? (
+                <img
+                  src={resolvedAvatar}
+                  alt={userName}
+                  className="w-full h-full object-cover"
+                  onError={() => setImgError(true)}
+                />
               ) : (
                 (userName || 'U').charAt(0).toUpperCase()
               )}

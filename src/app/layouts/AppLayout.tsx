@@ -58,8 +58,22 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
 
     resolveSession();
 
+    const handleUserUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail) return;
+      if (detail.avatarUrl !== undefined) {
+        setUserAvatar(detail.avatarUrl);
+      }
+      if (detail.fullName) {
+        setUserName(detail.fullName);
+      }
+    };
+
+    window.addEventListener('interora:user-updated', handleUserUpdated);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('interora:user-updated', handleUserUpdated);
     };
   }, [role, navigate]);
 

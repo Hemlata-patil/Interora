@@ -54,6 +54,7 @@ export const StudentOnboarding: React.FC = () => {
   // Resume upload state
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeUploadMsg, setResumeUploadMsg] = useState<string | null>(null);
+  const [savedProfile, setSavedProfile] = useState<StudentProfileLike | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<StudentProfileLike>({
@@ -62,25 +63,21 @@ export const StudentOnboarding: React.FC = () => {
     phone: '',
     avatarUrl: null,
     department: '',
-    course: 'B.Tech Computer Science',
-    degree: 'B.Tech in Computer Science',
+    course: '',
+    degree: '',
     studentId: '',
     rollNo: '',
-    currentSemester: '6th Semester',
-    batchYear: '2026',
-    batchDivision: 'CS1',
-    institution: 'Indian Institute of Information Technology',
+    currentSemester: '',
+    batchYear: '',
+    batchDivision: '',
+    institution: '',
     cgpa: '',
     bio: '',
     resumeHeadline: '',
-    skills: [
-      { name: 'React' },
-      { name: 'TypeScript' },
-      { name: 'Node.js' },
-    ],
-    preferredRoles: ['Software Engineering Intern'],
-    preferredLocations: ['Pune', 'Bangalore', 'Remote'],
-    availability: 'Immediate (Summer 2026)',
+    skills: [],
+    preferredRoles: [],
+    preferredLocations: [],
+    availability: '',
     githubUrl: '',
     linkedinUrl: '',
     portfolioUrl: '',
@@ -140,29 +137,65 @@ export const StudentOnboarding: React.FC = () => {
           const initialDept =
             sp?.departmentId && deptList.length > 0
               ? deptList.find((d) => d.id === sp.departmentId)?.name || deptList[0]?.name
-              : deptList[0]?.name || 'Computer Science & Engineering';
+              : user.departmentName || deptList[0]?.name || '';
 
-          setFormData((prev) => ({
-            ...prev,
-            fullName: user.fullName || prev.fullName,
-            email: user.email || prev.email,
-            phone: user.phone || prev.phone,
-            avatarUrl: user.avatarUrl || prev.avatarUrl,
-            department: initialDept,
-            course: sp?.course || prev.course,
-            degree: sp?.course || prev.degree,
-            studentId: sp?.studentId || prev.studentId || `STU-${user.id.substring(0, 8).toUpperCase()}`,
-            rollNo: sp?.studentId || prev.rollNo || `STU-${user.id.substring(0, 8).toUpperCase()}`,
-            currentSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : prev.currentSemester,
-            batchYear: sp?.batchYear ? String(sp.batchYear) : prev.batchYear,
-            batchDivision: sp?.batchDivision || prev.batchDivision,
+          const rawId = sp?.studentId;
+          const cleanStudentId = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : '';
+
+          const savedObj: StudentProfileLike = {
+            fullName: user.fullName || null,
+            email: user.email || null,
+            phone: user.phone || null,
+            avatarUrl: user.avatarUrl || null,
+            department: initialDept || null,
+            course: sp?.course || (savedExtended.degree as string) || null,
+            degree: sp?.course || (savedExtended.degree as string) || null,
+            studentId: cleanStudentId || (savedExtended.rollNo as string) || null,
+            rollNo: cleanStudentId || (savedExtended.rollNo as string) || null,
+            currentSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : null,
+            batchYear: sp?.batchYear ? String(sp.batchYear) : null,
+            batchDivision: sp?.batchDivision || null,
             skills: Array.isArray(sp?.skills) && sp.skills.length > 0
               ? sp.skills.map((s) => ({ name: typeof s === 'string' ? s : (s as any).name || String(s) }))
-              : prev.skills,
-            resumeUrl: sp?.resumeUrl || prev.resumeUrl,
-            resumeFileName: sp?.resumeUrl ? sp.resumeUrl.split('/').pop() : prev.resumeFileName,
+              : (savedExtended.skills as any) || [],
+            preferredRoles: savedExtended.preferredRoles || [],
+            resumeUrl: sp?.resumeUrl || null,
             ...savedExtended,
-          }));
+          };
+          setSavedProfile(savedObj);
+
+          setFormData({
+            fullName: user.fullName || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            avatarUrl: user.avatarUrl || null,
+            department: initialDept || '',
+            course: sp?.course || (savedExtended.degree as string) || '',
+            degree: sp?.course || (savedExtended.degree as string) || '',
+            studentId: cleanStudentId || (savedExtended.rollNo as string) || '',
+            rollNo: cleanStudentId || (savedExtended.rollNo as string) || '',
+            currentSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : '',
+            batchYear: sp?.batchYear ? String(sp.batchYear) : '',
+            batchDivision: sp?.batchDivision || '',
+            institution: (savedExtended.institution as string) || '',
+            cgpa: sp?.cgpa ? String(sp.cgpa) : '',
+            bio: (savedExtended.bio as string) || '',
+            resumeHeadline: (savedExtended.resumeHeadline as string) || '',
+            skills: Array.isArray(sp?.skills) && sp.skills.length > 0
+              ? sp.skills.map((s) => ({ name: typeof s === 'string' ? s : (s as any).name || String(s) }))
+              : (savedExtended.skills as any) || [],
+            preferredRoles: savedExtended.preferredRoles || [],
+            preferredLocations: savedExtended.preferredLocations || [],
+            availability: (savedExtended.availability as string) || '',
+            githubUrl: (savedExtended.githubUrl as string) || '',
+            linkedinUrl: (savedExtended.linkedinUrl as string) || '',
+            portfolioUrl: (savedExtended.portfolioUrl as string) || '',
+            projects: savedExtended.projects || [],
+            certifications: savedExtended.certifications || [],
+            experiences: savedExtended.experiences || [],
+            resumeUrl: sp?.resumeUrl || null,
+            resumeFileName: sp?.resumeUrl ? sp.resumeUrl.split('/').pop() || null : null,
+          });
         }
       } catch (err) {
         console.error('[StudentOnboarding] Init error:', err);
@@ -177,8 +210,15 @@ export const StudentOnboarding: React.FC = () => {
     };
   }, []);
 
-  // Real-time Profile Completion calculation
-  const completion = calculateProfileCompletion(formData);
+  // Real-time Profile Completion calculation: distinguish draft preview from official saved status
+  const draftCompletion = calculateProfileCompletion(formData);
+  const savedCompletion = savedProfile
+    ? calculateProfileCompletion(savedProfile)
+    : calculateProfileCompletion({
+        fullName: currentUser?.fullName || null,
+        email: currentUser?.email || null,
+        phone: currentUser?.phone || null,
+      });
 
   // Skill management
   const handleAddSkill = () => {
@@ -369,6 +409,20 @@ export const StudentOnboarding: React.FC = () => {
         );
       }
 
+      // Update official savedProfile state upon verified persistence
+      setSavedProfile({ ...formData });
+
+      // Notify Header, Sidebar and layout immediately
+      window.dispatchEvent(
+        new CustomEvent('interora:user-updated', {
+          detail: {
+            avatarUrl: formData.avatarUrl,
+            fullName: formData.fullName,
+            department: formData.department,
+          },
+        })
+      );
+
       if (showNotification) {
         setSaveFeedback({
           type: 'success',
@@ -455,20 +509,29 @@ export const StudentOnboarding: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* Live Profile Readiness Pill */}
+            {/* Official Saved Readiness Pill */}
             <div className="hidden sm:flex items-center space-x-2 bg-slate-100 px-3 py-1 rounded-full text-xs">
-              <span className="font-medium text-slate-600">Profile Readiness:</span>
+              <span className="font-medium text-slate-600">Saved Readiness:</span>
               <span
                 className={`font-bold ${
-                  completion.percentage === 100 ? 'text-emerald-600' : 'text-indigo-600'
+                  savedCompletion.percentage === 100 ? 'text-emerald-600' : 'text-indigo-600'
                 }`}
               >
-                {completion.percentage}%
+                {savedCompletion.percentage}%
               </span>
-              <Badge variant={completion.isComplete ? 'emerald' : 'amber'}>
-                {completion.statusLabel}
+              <Badge variant={savedCompletion.isComplete ? 'emerald' : 'amber'}>
+                {savedCompletion.statusLabel}
               </Badge>
             </div>
+
+            {/* Draft Preview Pill when unsaved changes exist */}
+            {draftCompletion.percentage !== savedCompletion.percentage && (
+              <div className="hidden md:flex items-center space-x-1.5 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full text-xs text-amber-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Draft: <strong>{draftCompletion.percentage}%</strong></span>
+                <span className="text-[10px] text-amber-600">(Unsaved)</span>
+              </div>
+            )}
 
             <Button
               type="button"
@@ -558,6 +621,7 @@ export const StudentOnboarding: React.FC = () => {
                   fullName={formData.fullName || 'Student'}
                   onAvatarChange={(newUrl) => {
                     setFormData((prev) => ({ ...prev, avatarUrl: newUrl }));
+                    setSavedProfile((prev) => (prev ? { ...prev, avatarUrl: newUrl } : null));
                   }}
                   allowImmediateSave={true}
                 />
@@ -1028,20 +1092,27 @@ export const StudentOnboarding: React.FC = () => {
             <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-md border border-indigo-900/60 space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-indigo-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /> Onboarding Readiness Report
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-wider font-bold text-indigo-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" /> Official Saved Readiness
+                    </span>
+                    {draftCompletion.percentage !== savedCompletion.percentage && (
+                      <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                        Draft Preview: {draftCompletion.percentage}% (Unsaved)
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-lg font-bold text-white pt-1">
-                    Status: {completion.statusLabel} ({completion.percentage}%)
+                    Status: {savedCompletion.statusLabel} ({savedCompletion.percentage}%)
                   </h3>
                   <p className="text-xs text-slate-300">
-                    {completion.completedCount} of {completion.totalCount} required fields verified
+                    {savedCompletion.completedCount} of {savedCompletion.totalCount} required fields verified & saved
                   </p>
                 </div>
 
                 <div className="text-right">
                   <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-emerald-300">
-                    {completion.percentage}%
+                    {savedCompletion.percentage}%
                   </span>
                 </div>
               </div>
@@ -1050,13 +1121,13 @@ export const StudentOnboarding: React.FC = () => {
               <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-400 to-emerald-400 transition-all duration-700"
-                  style={{ width: `${completion.percentage}%` }}
+                  style={{ width: `${savedCompletion.percentage}%` }}
                 />
               </div>
 
               {/* Required Fields Breakdown */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-xs">
-                {completion.requiredCriteria.map((c) => (
+                {savedCompletion.requiredCriteria.map((c) => (
                   <div
                     key={c.id}
                     className={`p-2 rounded-lg border flex items-center justify-between ${
@@ -1074,18 +1145,18 @@ export const StudentOnboarding: React.FC = () => {
                       <span className="truncate">{c.label}</span>
                     </div>
                     <span className="text-[10px] font-semibold uppercase">
-                      {c.isValid ? 'Valid' : 'Required'}
+                      {c.isValid ? 'Saved & Verified' : 'Missing'}
                     </span>
                   </div>
                 ))}
               </div>
 
               {/* Missing Requirements Guidance */}
-              {completion.missingList.length > 0 && (
+              {savedCompletion.missingList.length > 0 && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 space-y-1">
                   <span className="font-bold block">Remaining Required Information:</span>
                   <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-300">
-                    {completion.missingList.map((m) => (
+                    {savedCompletion.missingList.map((m) => (
                       <li key={m.id}>
                         <span className="font-semibold">{m.label}:</span> {m.missingHint}
                       </li>

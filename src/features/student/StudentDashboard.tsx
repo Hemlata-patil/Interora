@@ -58,18 +58,22 @@ export const StudentDashboard: React.FC = () => {
         }
 
         const sp = user.studentProfile;
+        const rawId = sp?.studentId;
+        const cleanStudentId = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : null;
+
         const profileObj: StudentProfileLike = {
-          fullName: user.fullName,
-          email: user.email,
-          phone: user.phone,
-          avatarUrl: user.avatarUrl,
-          department: user.departmentName || 'Computer Science & Engineering',
-          course: sp?.course || 'B.Tech Computer Science',
-          studentId: sp?.studentId || `STU-${user.id.substring(0, 8).toUpperCase()}`,
-          currentSemester: sp?.currentSemester,
-          batchYear: sp?.batchYear,
-          skills: sp?.skills,
-          resumeUrl: sp?.resumeUrl,
+          fullName: user.fullName || null,
+          email: user.email || null,
+          phone: user.phone || null,
+          avatarUrl: user.avatarUrl || null,
+          department: user.departmentName || null,
+          course: sp?.course || (extendedDetails.degree as string) || null,
+          studentId: cleanStudentId || (extendedDetails.rollNo as string) || null,
+          rollNo: cleanStudentId || (extendedDetails.rollNo as string) || null,
+          currentSemester: sp?.currentSemester || null,
+          batchYear: sp?.batchYear || null,
+          skills: Array.isArray(sp?.skills) ? sp.skills : (extendedDetails.skills as any) || [],
+          resumeUrl: sp?.resumeUrl || null,
           ...extendedDetails,
         };
 
@@ -183,7 +187,11 @@ export const StudentDashboard: React.FC = () => {
     loadData();
     const handleFocus = () => loadData();
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    window.addEventListener('interora:user-updated', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('interora:user-updated', handleFocus);
+    };
   }, [loadData]);
 
   const getStatusBadge = (status: ApplicationSummaryData['recentApplications'][0]['status']) => {

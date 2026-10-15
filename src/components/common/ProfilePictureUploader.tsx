@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { Camera, Trash2, Upload, AlertCircle, Check, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, Trash2, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components';
 import {
   uploadStudentAvatarBackend,
   removeStudentAvatarBackend,
 } from '@/services/api/backendService';
+import { resolveMediaUrl } from '@/utils/mediaUrl';
 
 export interface ProfilePictureUploaderProps {
   currentAvatarUrl?: string | null;
@@ -23,12 +24,27 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [serverImgFailed, setServerImgFailed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayUrl = previewUrl || currentAvatarUrl || null;
+  useEffect(() => {
+    setServerImgFailed(false);
+  }, [currentAvatarUrl]);
+
+  // Cleanup object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const resolvedCurrentUrl = resolveMediaUrl(currentAvatarUrl);
+  const displayUrl = previewUrl || (!serverImgFailed ? resolvedCurrentUrl : null);
 
   const initials = (fullName || 'ST')
     .trim()
@@ -53,17 +69,36 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
       setErrorMessage('Please select a valid JPG, PNG, or WebP image.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       setErrorMessage('Image size exceeds 5MB. Please choose a smaller photo.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
+    }
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
     }
 
     setSelectedFile(file);
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
+    setServerImgFailed(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleImageError = () => {
+    if (previewUrl) {
+      setErrorMessage('Could not render preview for selected file. Please choose another image.');
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setSelectedFile(null);
+    } else {
+      setServerImgFailed(true);
+    }
   };
 
   const handleSavePhoto = async () => {
@@ -77,13 +112,23 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
 
     if (res.success && res.avatarUrl) {
       setSuccessMessage('Profile photo saved successfully.');
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
       setSelectedFile(null);
       setPreviewUrl(null);
+      setServerImgFailed(false);
       if (onAvatarChange) {
         onAvatarChange(res.avatarUrl);
       }
+      // Broadcast to update Header, Sidebar, Dashboard instantly
+      window.dispatchEvent(
+        new CustomEvent('interora:user-updated', {
+          detail: { avatarUrl: res.avatarUrl },
+        })
+      );
     } else {
-      setErrorMessage(res.error || 'Failed to upload profile photo.');
+      setErrorMessage(res.error || 'Failed to upload profile photo to server.');
     }
   };
 
@@ -92,7 +137,7 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
     setSuccessMessage(null);
 
     if (previewUrl && selectedFile) {
-      // Discard unsaved preview
+      // Discard unsaved local preview
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       setSelectedFile(null);
@@ -106,9 +151,15 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
 
       if (res.success) {
         setSuccessMessage('Profile photo removed.');
+        setServerImgFailed(false);
         if (onAvatarChange) {
           onAvatarChange(null);
         }
+        window.dispatchEvent(
+          new CustomEvent('interora:user-updated', {
+            detail: { avatarUrl: null },
+          })
+        );
       } else {
         setErrorMessage(res.error || 'Failed to remove photo.');
       }
@@ -128,9 +179,7 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
                 src={displayUrl}
                 alt={fullName}
                 className="w-full h-full object-cover"
-                onError={() => {
-                  setPreviewUrl(null);
-                }}
+                onError={handleImageError}
               />
             ) : (
               <span>{initials}</span>
@@ -140,7 +189,7 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold"
+              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold cursor-pointer"
             >
               <Camera className="w-4 h-4 mb-0.5" />
               <span>Change</span>
@@ -225,7 +274,7 @@ export const ProfilePictureUploader: React.FC<ProfilePictureUploaderProps> = ({
         </div>
       </div>
 
-      {/* Status Messages */}
+      {/* Visible Feedback Alerts */}
       {errorMessage && (
         <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs flex items-center gap-2">
           <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />

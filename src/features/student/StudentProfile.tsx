@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader, Card, Badge, Button, Input, Select, Alert, ProgressBar, ProfilePictureUploader } from '@/components';
 import { calculateProfileCompletion } from '@/utils/profileCompletion';
+import { resolveMediaUrl } from '@/utils/mediaUrl';
 import {
   User,
   Mail,
@@ -35,6 +36,7 @@ import {
   Calendar,
   Check,
   ShieldCheck,
+  Camera,
 } from 'lucide-react';
 
 const GithubIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -131,92 +133,67 @@ export function formatDisplayResumeName(rawUrlOrFilename?: string | null): strin
 
 const LOCAL_STORAGE_KEY_PREFIX = 'interora_student_extended_profile_';
 
-export const defaultStudentProfile: StudentProfileData = {
-  fullName: 'Rohan Mehta',
-  email: 'rohan.mehta@college.edu',
-  phone: '+91 98765 43210',
+export const emptyStudentProfile: StudentProfileData = {
+  fullName: '',
+  email: '',
+  phone: '',
   avatarUrl: '',
-  rollNo: 'CS2026-089',
-  department: 'Computer Science & Engineering',
-  institution: 'Indian Institute of Information Technology',
-  degree: 'B.Tech in Computer Science',
-  yearSemester: '3rd Year / 6th Semester',
-  batchDivision: 'CS1',
-  batchYear: '2026',
-  cgpa: '8.5 / 10.0',
-  bio: 'Passionate computer science student specializing in scalable web architectures, full stack TypeScript systems, and distributed cloud applications.',
-  resumeHeadline: 'Motivated Full Stack Developer seeking summer internship opportunities.',
-  resumeFileName: 'Resume_Verified.pdf',
-  skills: [
-    { id: 'sk_1', name: 'React', level: 'advanced' },
-    { id: 'sk_2', name: 'TypeScript', level: 'intermediate' },
-    { id: 'sk_3', name: 'Node.js', level: 'intermediate' },
-    { id: 'sk_4', name: 'Python', level: 'advanced' },
-    { id: 'sk_5', name: 'PostgreSQL', level: 'intermediate' },
-    { id: 'sk_6', name: 'Docker', level: 'beginner' },
-  ],
-  interests: ['Cloud Architecture', 'Full Stack Development', 'AI & Machine Learning'],
-  preferredRoles: ['Software Engineering Intern', 'Full Stack Developer', 'Frontend Engineer'],
-  preferredLocations: ['Pune', 'Bangalore', 'Remote'],
-  availability: 'Immediate (Summer 2026)',
-  githubUrl: 'https://github.com/student-demo',
-  linkedinUrl: 'https://linkedin.com/in/student-demo',
-  portfolioUrl: 'https://portfolio.student.dev',
-  projects: [
-    {
-      id: 'proj_1',
-      title: 'Distributed Task Queue Engine',
-      description: 'High-throughput async job orchestrator with Redis and Node.js worker pools.',
-      techStack: ['Node.js', 'Redis', 'TypeScript', 'Docker'],
-      githubUrl: 'https://github.com/student-demo/task-queue',
-      liveUrl: 'https://demo-queue.student.dev',
-    },
-    {
-      id: 'proj_2',
-      title: 'Campus Internship Portal UI',
-      description: 'Responsive enterprise career portal with real-time application tracking and ATS analysis.',
-      techStack: ['React', 'Tailwind CSS', 'Vite', 'REST API'],
-      githubUrl: 'https://github.com/student-demo/internship-portal',
-    },
-  ],
-  certifications: [
-    {
-      id: 'cert_1',
-      title: 'AWS Certified Cloud Practitioner',
-      issuer: 'Amazon Web Services',
-      issueDate: 'Jan 2026',
-      credentialUrl: 'https://aws.amazon.com/verification',
-    },
-    {
-      id: 'cert_2',
-      title: 'Meta Frontend Developer Professional Certificate',
-      issuer: 'Meta / Coursera',
-      issueDate: 'Dec 2025',
-    },
-  ],
-  experiences: [
-    {
-      id: 'exp_1',
-      role: 'Software Engineering Intern',
-      company: 'TechCorp Solutions',
-      duration: 'June 2026 - Aug 2026 (Active)',
-      description: 'Building micro-frontend dashboards and optimizing API response caching.',
-    },
-  ],
+  rollNo: '',
+  department: '',
+  institution: '',
+  degree: '',
+  yearSemester: '',
+  batchDivision: '',
+  batchYear: '',
+  cgpa: '',
+  bio: '',
+  resumeHeadline: '',
+  resumeFileName: '',
+  skills: [],
+  interests: [],
+  preferredRoles: [],
+  preferredLocations: [],
+  availability: '',
+  githubUrl: '',
+  linkedinUrl: '',
+  portfolioUrl: '',
+  projects: [],
+  certifications: [],
+  experiences: [],
 };
 
+export const defaultStudentProfile: StudentProfileData = emptyStudentProfile;
+
 export const StudentProfile: React.FC = () => {
-  const [profile, setProfile] = useState<StudentProfileData>(defaultStudentProfile);
-  const [formData, setFormData] = useState<StudentProfileData>(defaultStudentProfile);
+  const [profile, setProfile] = useState<StudentProfileData>(emptyStudentProfile);
+  const [formData, setFormData] = useState<StudentProfileData>(emptyStudentProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [imgError, setImgError] = useState(false);
   const [searchParams] = useSearchParams();
+
+  // Work Experience Builder State
+  const [newExpRole, setNewExpRole] = useState('');
+  const [newExpCompany, setNewExpCompany] = useState('');
+  const [newExpDuration, setNewExpDuration] = useState('');
+  const [newExpDesc, setNewExpDesc] = useState('');
+
+  useEffect(() => {
+    setImgError(false);
+  }, [profile.avatarUrl]);
 
   useEffect(() => {
     if (searchParams.get('edit') === 'true') {
       setIsEditing(true);
+      const section = searchParams.get('section');
+      if (section) {
+        setTimeout(() => {
+          const el = document.getElementById(`${section}-section`);
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
     }
   }, [searchParams]);
 
@@ -281,7 +258,10 @@ export const StudentProfile: React.FC = () => {
       }
 
       const sp = user.studentProfile;
-      let mappedSkills: StudentSkill[] = defaultStudentProfile.skills;
+      const rawId = sp?.studentId;
+      const cleanRollNo = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : '';
+
+      let mappedSkills: StudentSkill[] = [];
       if (Array.isArray(sp?.skills) && sp.skills.length > 0) {
         mappedSkills = sp.skills.map((s: any, idx: number) => {
           if (typeof s === 'string') {
@@ -293,34 +273,36 @@ export const StudentProfile: React.FC = () => {
             level: s.level || 'intermediate',
           };
         });
+      } else if (Array.isArray(extendedDetails.skills) && extendedDetails.skills.length > 0) {
+        mappedSkills = extendedDetails.skills;
       }
 
       const mergedProfile: StudentProfileData = {
-        fullName: user.fullName || defaultStudentProfile.fullName,
-        email: user.email || defaultStudentProfile.email,
-        phone: user.phone || defaultStudentProfile.phone,
-        avatarUrl: user.avatarUrl || defaultStudentProfile.avatarUrl,
-        rollNo: sp?.studentId || defaultStudentProfile.rollNo,
-        department: defaultStudentProfile.department,
-        institution: extendedDetails.institution || defaultStudentProfile.institution,
-        degree: sp?.course || defaultStudentProfile.degree,
-        yearSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : defaultStudentProfile.yearSemester,
-        batchDivision: sp?.batchDivision || defaultStudentProfile.batchDivision,
-        batchYear: sp?.batchYear ? String(sp.batchYear) : defaultStudentProfile.batchYear,
-        cgpa: sp?.cgpa ? `${sp.cgpa} / 10.0` : defaultStudentProfile.cgpa,
-        bio: extendedDetails.bio || defaultStudentProfile.bio,
-        resumeHeadline: extendedDetails.resumeHeadline || defaultStudentProfile.resumeHeadline,
-        resumeFileName: sp?.resumeUrl ? formatDisplayResumeName(sp.resumeUrl) : defaultStudentProfile.resumeFileName,
+        fullName: user.fullName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        avatarUrl: user.avatarUrl || '',
+        rollNo: cleanRollNo || (extendedDetails.rollNo as string) || '',
+        department: user.departmentName || (extendedDetails.department as string) || '',
+        institution: extendedDetails.institution || '',
+        degree: sp?.course || (extendedDetails.degree as string) || '',
+        yearSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : (extendedDetails.yearSemester as string) || '',
+        batchDivision: sp?.batchDivision || (extendedDetails.batchDivision as string) || '',
+        batchYear: sp?.batchYear ? String(sp.batchYear) : (extendedDetails.batchYear as string) || '',
+        cgpa: sp?.cgpa ? `${sp.cgpa} / 10.0` : (extendedDetails.cgpa as string) || '',
+        bio: extendedDetails.bio || '',
+        resumeHeadline: extendedDetails.resumeHeadline || '',
+        resumeFileName: sp?.resumeUrl ? formatDisplayResumeName(sp.resumeUrl) : (extendedDetails.resumeFileName as string) || '',
         skills: mappedSkills,
-        interests: extendedDetails.interests || defaultStudentProfile.interests,
-        preferredRoles: extendedDetails.preferredRoles || defaultStudentProfile.preferredRoles,
-        preferredLocations: extendedDetails.preferredLocations || defaultStudentProfile.preferredLocations,
-        availability: extendedDetails.availability || defaultStudentProfile.availability,
-        githubUrl: extendedDetails.githubUrl || defaultStudentProfile.githubUrl,
-        linkedinUrl: extendedDetails.linkedinUrl || defaultStudentProfile.linkedinUrl,
-        portfolioUrl: extendedDetails.portfolioUrl || defaultStudentProfile.portfolioUrl,
-        projects: extendedDetails.projects || defaultStudentProfile.projects,
-        certifications: extendedDetails.certifications || defaultStudentProfile.certifications,
+        interests: extendedDetails.interests || [],
+        preferredRoles: extendedDetails.preferredRoles || [],
+        preferredLocations: extendedDetails.preferredLocations || [],
+        availability: extendedDetails.availability || '',
+        githubUrl: extendedDetails.githubUrl || '',
+        linkedinUrl: extendedDetails.linkedinUrl || '',
+        portfolioUrl: extendedDetails.portfolioUrl || '',
+        projects: extendedDetails.projects || [],
+        certifications: extendedDetails.certifications || [],
         experiences: active
           ? [
               {
@@ -332,7 +314,7 @@ export const StudentProfile: React.FC = () => {
               },
               ...(extendedDetails.experiences || []),
             ]
-          : extendedDetails.experiences || defaultStudentProfile.experiences,
+          : extendedDetails.experiences || [],
       };
 
       setProfile(mergedProfile);
@@ -349,6 +331,11 @@ export const StudentProfile: React.FC = () => {
 
   useEffect(() => {
     loadProfile();
+    const handleUserUpdate = () => loadProfile();
+    window.addEventListener('interora:user-updated', handleUserUpdate);
+    return () => {
+      window.removeEventListener('interora:user-updated', handleUserUpdate);
+    };
   }, []);
 
   const handleStartEdit = () => {
@@ -443,6 +430,33 @@ export const StudentProfile: React.FC = () => {
     });
   };
 
+  // Experience management
+  const handleAddExp = () => {
+    if (!newExpRole.trim() || !newExpCompany.trim()) return;
+    const exp: StudentExperience = {
+      id: `exp_${Date.now()}`,
+      role: newExpRole.trim(),
+      company: newExpCompany.trim(),
+      duration: newExpDuration.trim() || 'Internship',
+      description: newExpDesc.trim() || 'Software implementation and technical delivery.',
+    };
+    setFormData({
+      ...formData,
+      experiences: [exp, ...(formData.experiences || [])],
+    });
+    setNewExpRole('');
+    setNewExpCompany('');
+    setNewExpDuration('');
+    setNewExpDesc('');
+  };
+
+  const handleRemoveExp = (id: string) => {
+    setFormData({
+      ...formData,
+      experiences: (formData.experiences || []).filter((e) => e.id !== id),
+    });
+  };
+
   // Resume Upload Handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -531,14 +545,23 @@ export const StudentProfile: React.FC = () => {
         phone: formData.phone,
         course: formData.degree,
         currentSemester: semesterNum,
+        batchDivision: formData.batchDivision,
         skills: formData.skills.map((s) => s.name),
+        avatarUrl: formData.avatarUrl,
       });
 
-      // 2. Persist Extended Fields (Projects, Certifications, Links)
+      // 2. Persist Extended Fields (Projects, Certifications, Links, Academic details)
       const user = await getCurrentUserBackend().catch(() => null);
       if (user?.id) {
         const extendedData = {
           institution: formData.institution,
+          department: formData.department,
+          rollNo: formData.rollNo,
+          degree: formData.degree,
+          yearSemester: formData.yearSemester,
+          batchYear: formData.batchYear,
+          batchDivision: formData.batchDivision,
+          cgpa: formData.cgpa,
           bio: formData.bio,
           resumeHeadline: formData.resumeHeadline,
           interests: formData.interests,
@@ -551,6 +574,7 @@ export const StudentProfile: React.FC = () => {
           projects: formData.projects,
           certifications: formData.certifications,
           experiences: formData.experiences,
+          resumeFileName: formData.resumeFileName,
         };
         localStorage.setItem(`${LOCAL_STORAGE_KEY_PREFIX}${user.id}`, JSON.stringify(extendedData));
       }
@@ -559,6 +583,11 @@ export const StudentProfile: React.FC = () => {
         setProfile(formData);
         setIsEditing(false);
         setSaveSuccess('Student profile and portfolio updated successfully.');
+        window.dispatchEvent(
+          new CustomEvent('interora:user-updated', {
+            detail: { fullName: formData.fullName, avatarUrl: formData.avatarUrl },
+          })
+        );
       } else {
         setSaveError(res.error || 'Failed to update profile.');
       }
@@ -567,7 +596,10 @@ export const StudentProfile: React.FC = () => {
     }
   };
 
-  const completion = calculateProfileCompletion(isEditing ? formData : profile);
+  const savedCompletion = calculateProfileCompletion(profile);
+  const draftCompletion = calculateProfileCompletion(formData);
+  const completion = isEditing ? draftCompletion : savedCompletion;
+  const resolvedProfileAvatar = resolveMediaUrl(profile.avatarUrl);
 
   if (loading) {
     return (
@@ -601,8 +633,13 @@ export const StudentProfile: React.FC = () => {
             {/* Avatar */}
             <div className="relative">
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-violet-800 text-white flex items-center justify-center font-bold text-3xl shadow-xl ring-4 ring-white border border-indigo-200 shrink-0 overflow-hidden">
-                {profile.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt={profile.fullName} className="w-full h-full object-cover" />
+                {resolvedProfileAvatar && !imgError ? (
+                  <img
+                    src={resolvedProfileAvatar}
+                    alt={profile.fullName || 'Student'}
+                    className="w-full h-full object-cover"
+                    onError={() => setImgError(true)}
+                  />
                 ) : (
                   (profile.fullName || 'Student')
                     .trim()
@@ -613,37 +650,52 @@ export const StudentProfile: React.FC = () => {
                     .toUpperCase() || 'ST'
                 )}
               </div>
-              <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white ring-2 ring-emerald-500/20"></span>
+              {!isEditing ? (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="absolute bottom-1 right-1 p-1.5 bg-white text-indigo-600 rounded-full shadow-md border border-slate-200 hover:bg-indigo-50 transition-colors"
+                  title="Change profile photo"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white ring-2 ring-emerald-500/20"></span>
+              )}
             </div>
 
             {/* Title & Program Info */}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
-                  {profile.fullName}
+                  {profile.fullName || 'Student Profile'}
                 </h1>
-                <Badge variant="indigo">{profile.rollNo}</Badge>
+                {profile.rollNo && <Badge variant="indigo">{profile.rollNo}</Badge>}
               </div>
 
               <p className="text-xs sm:text-sm font-semibold text-indigo-700 flex items-center gap-1.5">
                 <GraduationCap className="w-4 h-4 text-indigo-600" />
-                <span>{profile.degree}</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-600 font-normal">{profile.yearSemester}</span>
+                <span>{profile.degree || 'Degree Program Not Specified'}</span>
+                {profile.yearSemester && (
+                  <>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-600 font-normal">{profile.yearSemester}</span>
+                  </>
+                )}
               </p>
 
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
                 <span className="flex items-center gap-1">
                   <Mail className="w-3.5 h-3.5 text-slate-400" />
-                  {profile.email}
+                  {profile.email || 'No email on record'}
                 </span>
                 <span className="flex items-center gap-1">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  {profile.phone}
+                  {profile.phone || 'No phone added'}
                 </span>
                 <span className="flex items-center gap-1">
                   <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                  {profile.department}
+                  {profile.department || 'Department not specified'}
                 </span>
               </div>
             </div>
@@ -718,14 +770,25 @@ export const StudentProfile: React.FC = () => {
               ))}
 
               {completion.missingList.map((sec) => (
-                <span
+                <button
                   key={sec.id}
-                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                  title={sec.missingHint}
+                  type="button"
+                  onClick={() => {
+                    handleStartEdit();
+                    let targetId = 'personal-section';
+                    if (['degree', 'department', 'rollNo', 'cgpa'].includes(sec.id)) targetId = 'academic-section';
+                    else if (['skills', 'targetRole'].includes(sec.id)) targetId = 'skills-section';
+                    setTimeout(() => {
+                      const el = document.getElementById(targetId);
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 120);
+                  }}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition-colors cursor-pointer text-left"
+                  title={`Click to complete: ${sec.missingHint}`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5"></span>
                   {sec.label} (Required)
-                </span>
+                </button>
               ))}
             </div>
           </div>
@@ -755,6 +818,12 @@ export const StudentProfile: React.FC = () => {
       </div>
 
       {/* Notifications */}
+      {isEditing && draftCompletion.percentage !== savedCompletion.percentage && (
+        <Alert type="info" title="Draft Preview Mode">
+          You have unsaved changes. Live completion is <strong>{draftCompletion.percentage}%</strong>. Your officially saved completion is <strong>{savedCompletion.percentage}%</strong>. Click &ldquo;Save All Changes&rdquo; below to persist to your account.
+        </Alert>
+      )}
+
       {saveSuccess && (
         <Alert type="success" title="Changes Saved">
           {saveSuccess}
@@ -771,10 +840,11 @@ export const StudentProfile: React.FC = () => {
       {!isEditing ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* CARD 1: PERSONAL INFORMATION */}
-          <Card
-            title="Personal Information"
-            subtitle="Verified student contact details and official campus identification"
-          >
+          <div id="personal-section">
+            <Card
+              title="Personal Information"
+              subtitle="Verified student contact details and official campus identification"
+            >
             <div className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -797,7 +867,7 @@ export const StudentProfile: React.FC = () => {
                   <span className="font-semibold text-slate-800">
                     {(profile.preferredLocations && profile.preferredLocations.length > 0)
                       ? profile.preferredLocations.join(', ')
-                      : 'Pune, Bangalore, Remote'}
+                      : 'Not specified'}
                   </span>
                 </div>
               </div>
@@ -844,38 +914,42 @@ export const StudentProfile: React.FC = () => {
               </div>
             </div>
           </Card>
+          </div>
 
           {/* CARD 2: ACADEMIC INFORMATION */}
-          <Card
-            title="Academic Information"
-            subtitle="Department enrollment, graduation year, batch, and verified performance"
-          >
+          <div id="academic-section">
+            <Card
+              title="Academic Information"
+              subtitle="Department enrollment, graduation year, batch, and verified performance"
+            >
             <div className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <span className="text-slate-400 block text-[11px]">Degree Program</span>
-                  <span className="font-semibold text-slate-800 text-sm">{profile.degree}</span>
+                  <span className="font-semibold text-slate-800 text-sm">{profile.degree || 'Not specified'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">University / Institution</span>
-                  <span className="font-semibold text-slate-800">{profile.institution}</span>
+                  <span className="font-semibold text-slate-800">{profile.institution || 'Not specified'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">Department</span>
-                  <span className="font-semibold text-slate-800">{profile.department}</span>
+                  <span className="font-semibold text-slate-800">{profile.department || 'Not specified'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">Student Roll / ID</span>
-                  <span className="font-semibold text-slate-800">{profile.rollNo}</span>
+                  <span className="font-semibold text-slate-800">{profile.rollNo || 'Not specified'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">Academic Year & Semester</span>
-                  <span className="font-semibold text-slate-800">{profile.yearSemester}</span>
+                  <span className="font-semibold text-slate-800">{profile.yearSemester || 'Not specified'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">Batch & Division</span>
                   <span className="font-semibold text-slate-800">
-                    Class {profile.batchYear} • Division {profile.batchDivision}
+                    {profile.batchYear || profile.batchDivision
+                      ? `Class ${profile.batchYear || 'N/A'} • Division ${profile.batchDivision || 'N/A'}`
+                      : 'Not specified'}
                   </span>
                 </div>
               </div>
@@ -889,84 +963,123 @@ export const StudentProfile: React.FC = () => {
                   <p className="text-[11px] text-slate-600">Official academic standing on campus records</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-lg font-black text-indigo-700">{profile.cgpa}</span>
+                  <span className="text-lg font-black text-indigo-700">{profile.cgpa || 'Not recorded'}</span>
                 </div>
               </div>
             </div>
           </Card>
+          </div>
 
           {/* CARD 3: SKILLS & CAREER INTERESTS */}
-          <Card
-            title="Skills & Career Interests"
-            subtitle="Technical competencies, proficiency tiers, and career domain preferences"
-          >
+          <div id="skills-section">
+            <Card
+              title="Skills & Career Interests"
+              subtitle="Technical competencies, proficiency tiers, and career domain preferences"
+            >
             <div className="space-y-4 text-xs">
               {/* Technical Skills List */}
               <div>
                 <span className="text-slate-400 block text-[11px] mb-2 font-medium">Verified Skills Portfolio</span>
-                <div className="flex flex-wrap gap-2">
-                  {(profile.skills || []).map((skill) => (
-                    <div
-                      key={skill.id}
-                      className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1.5 text-slate-800 shadow-2xs"
-                    >
-                      <span>{skill.name}</span>
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase ${
-                          skill.level === 'advanced'
-                            ? 'bg-indigo-100 text-indigo-700'
-                            : skill.level === 'intermediate'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}
+                {profile.skills && profile.skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {profile.skills.map((skill) => (
+                      <div
+                        key={skill.id}
+                        className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1.5 text-slate-800 shadow-2xs"
                       >
-                        {skill.level}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                        <span>{skill.name}</span>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase ${
+                            skill.level === 'advanced'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : skill.level === 'intermediate'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {skill.level}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-slate-500 text-xs flex items-center justify-between">
+                    <span>No verified skills added yet. Add at least 2 skills to qualify for recruiter search.</span>
+                    <Button variant="ghost" size="sm" onClick={handleStartEdit} className="text-xs text-indigo-600 hover:text-indigo-800">
+                      + Add Skills
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Preferred Roles */}
               <div className="pt-2 border-t border-slate-100">
                 <span className="text-slate-400 block text-[11px] mb-1 font-medium">Target Job Roles</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {(profile.preferredRoles || []).map((role, i) => (
-                    <Badge key={i} variant="neutral">
-                      {role}
-                    </Badge>
-                  ))}
-                </div>
+                {profile.preferredRoles && profile.preferredRoles.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.preferredRoles.map((role, i) => (
+                      <Badge key={i} variant="neutral">
+                        {role}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No target roles specified yet.</p>
+                )}
               </div>
 
               {/* Career Interests & Availability */}
               <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <span className="text-slate-400 block text-[11px] mb-1 font-medium">Domain Interests</span>
-                  <div className="flex flex-wrap gap-1">
-                    {(profile.interests || []).map((int, i) => (
-                      <span key={i} className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
-                        {int}
-                      </span>
-                    ))}
-                  </div>
+                  {profile.interests && profile.interests.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.interests.map((int, i) => (
+                        <span key={i} className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                          {int}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No domain interests specified.</p>
+                  )}
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px] mb-1 font-medium">Availability</span>
-                  <span className="inline-flex items-center text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                    <Check className="w-3 h-3 mr-1" /> {profile.availability}
-                  </span>
+                  {profile.availability ? (
+                    <span className="inline-flex items-center text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      <Check className="w-3 h-3 mr-1" /> {profile.availability}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">Not specified</span>
+                  )}
                 </div>
               </div>
             </div>
           </Card>
+          </div>
 
           {/* CARD 4: PORTFOLIO & EXPERIENCE */}
-          <Card
-            title="Portfolio & Experience"
-            subtitle="Active internship engagements, developer projects, and external certifications"
-          >
+          <div id="portfolio-section">
+            <Card
+              title="Portfolio & Experience"
+              subtitle="Active internship engagements, developer projects, and external certifications"
+            >
             <div className="space-y-4 text-xs">
+              {/* Empty state when everything in Card 4 is empty */}
+              {(!profile.experiences || profile.experiences.length === 0) &&
+                (!profile.projects || profile.projects.length === 0) &&
+                (!profile.certifications || profile.certifications.length === 0) && (
+                  <div className="p-8 text-center text-slate-400 space-y-2 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                    <Briefcase className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-700">No portfolio projects, certifications, or experience added yet.</p>
+                    <p className="text-[11px] text-slate-400">Click &ldquo;Edit Profile&rdquo; to showcase your repositories, certifications, and internship experiences to recruiters.</p>
+                    <Button variant="outline" size="sm" onClick={handleStartEdit} className="mt-2 text-xs">
+                      <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Complete Portfolio
+                    </Button>
+                  </div>
+                )}
+
               {/* Active Internship Engagement */}
               {profile.experiences && profile.experiences.length > 0 && (
                 <div className="space-y-2">
@@ -1062,6 +1175,7 @@ export const StudentProfile: React.FC = () => {
               )}
             </div>
           </Card>
+          </div>
         </div>
       ) : (
         /* ── 4. PROFILE EDITING INTERFACE (ORGANIZED FORMS) ── */
@@ -1083,175 +1197,186 @@ export const StudentProfile: React.FC = () => {
           </div>
 
           {/* Section 1: Personal Information */}
-          <Card title="1. Personal Information" subtitle="Official contact details for campus TPO and company recruiters">
-            <div className="space-y-4">
-              {/* Optional Profile Picture Upload */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <ProfilePictureUploader
-                  currentAvatarUrl={formData.avatarUrl}
-                  fullName={formData.fullName}
-                  onAvatarChange={(newUrl) => {
-                    setFormData((prev) => ({ ...prev, avatarUrl: newUrl }));
-                    setProfile((prev) => ({ ...prev, avatarUrl: newUrl }));
-                  }}
-                  allowImmediateSave={true}
-                />
-              </div>
+          <div id="personal-section">
+            <Card title="1. Personal Information" subtitle="Official contact details for campus TPO and company recruiters">
+              <div className="space-y-4">
+                {/* Optional Profile Picture Upload */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                  <ProfilePictureUploader
+                    currentAvatarUrl={formData.avatarUrl}
+                    fullName={formData.fullName}
+                    onAvatarChange={(newUrl) => {
+                      setFormData((prev) => ({ ...prev, avatarUrl: newUrl }));
+                      setProfile((prev) => ({ ...prev, avatarUrl: newUrl }));
+                    }}
+                    allowImmediateSave={true}
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Input
-                  label="Full Name"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  required
-                />
-                <Input
-                  label="Official Email"
-                  value={formData.email}
-                  disabled
-                  className="bg-slate-50 text-slate-500 cursor-not-allowed"
-                />
-                <Input
-                  label="Contact Phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Input
+                    label="Full Name"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    required
+                  />
+                  <Input
+                    label="Official Email"
+                    value={formData.email}
+                    disabled
+                    className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                  />
+                  <Input
+                    label="Contact Phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
 
-              <div>
-                <Input
-                  label="Professional Bio / Elevator Pitch"
-                  value={formData.bio || ''}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  placeholder="e.g. Passionate software engineer specializing in full stack React & Node architectures..."
-                />
-              </div>
+                <div>
+                  <Input
+                    label="Professional Bio / Elevator Pitch"
+                    value={formData.bio || ''}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="e.g. Passionate software engineer specializing in full stack React & Node architectures..."
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                <Input
-                  label="GitHub Profile URL"
-                  value={formData.githubUrl || ''}
-                  onChange={(e) => setFormData({ ...formData, githubUrl: e.target.value })}
-                  placeholder="https://github.com/your-username"
-                />
-                <Input
-                  label="LinkedIn Profile URL"
-                  value={formData.linkedinUrl || ''}
-                  onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
-                  placeholder="https://linkedin.com/in/your-profile"
-                />
-                <Input
-                  label="Portfolio / Personal Site"
-                  value={formData.portfolioUrl || ''}
-                  onChange={(e) => setFormData({ ...formData, portfolioUrl: e.target.value })}
-                  placeholder="https://yourportfolio.dev"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <Input
+                    label="GitHub Profile URL"
+                    value={formData.githubUrl || ''}
+                    onChange={(e) => setFormData({ ...formData, githubUrl: e.target.value })}
+                    placeholder="https://github.com/your-username"
+                  />
+                  <Input
+                    label="LinkedIn Profile URL"
+                    value={formData.linkedinUrl || ''}
+                    onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
+                    placeholder="https://linkedin.com/in/your-profile"
+                  />
+                  <Input
+                    label="Portfolio / Personal Site"
+                    value={formData.portfolioUrl || ''}
+                    onChange={(e) => setFormData({ ...formData, portfolioUrl: e.target.value })}
+                    placeholder="https://yourportfolio.dev"
+                  />
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
 
           {/* Section 2: Academic Information */}
-          <Card title="2. Academic Information" subtitle="Degree program, institution, and official grades">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Input
-                label="Institution / University"
-                value={formData.institution}
-                onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
-              />
-              <Input
-                label="Degree Program"
-                value={formData.degree}
-                onChange={(e) => setFormData({ ...formData, degree: e.target.value })}
-              />
-              <Input
-                label="Department"
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              />
-              <Input
-                label="Current CGPA"
-                value={formData.cgpa}
-                onChange={(e) => setFormData({ ...formData, cgpa: e.target.value })}
-              />
-              <Input
-                label="Year & Semester"
-                value={formData.yearSemester}
-                onChange={(e) => setFormData({ ...formData, yearSemester: e.target.value })}
-              />
-              <Input
-                label="Batch Year"
-                value={formData.batchYear || '2026'}
-                onChange={(e) => setFormData({ ...formData, batchYear: e.target.value })}
-              />
-              <Input
-                label="Batch Division"
-                value={formData.batchDivision || 'CS1'}
-                onChange={(e) => setFormData({ ...formData, batchDivision: e.target.value })}
-              />
-              <Input
-                label="Student ID / Roll No"
-                value={formData.rollNo}
-                disabled
-                className="bg-slate-50 text-slate-500 cursor-not-allowed"
-              />
-            </div>
-          </Card>
+          <div id="academic-section">
+            <Card title="2. Academic Information" subtitle="Degree program, institution, and official grades">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Input
+                  label="Institution / University"
+                  value={formData.institution}
+                  onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+                />
+                <Input
+                  label="Degree Program"
+                  value={formData.degree}
+                  onChange={(e) => setFormData({ ...formData, degree: e.target.value })}
+                />
+                <Input
+                  label="Department"
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                />
+                <Input
+                  label="Current CGPA"
+                  value={formData.cgpa}
+                  onChange={(e) => setFormData({ ...formData, cgpa: e.target.value })}
+                />
+                <Input
+                  label="Year & Semester"
+                  value={formData.yearSemester}
+                  onChange={(e) => setFormData({ ...formData, yearSemester: e.target.value })}
+                />
+                <Input
+                  label="Batch Year"
+                  value={formData.batchYear || ''}
+                  placeholder="e.g. 2026"
+                  onChange={(e) => setFormData({ ...formData, batchYear: e.target.value })}
+                />
+                <Input
+                  label="Batch Division"
+                  value={formData.batchDivision || ''}
+                  placeholder="e.g. Div A"
+                  onChange={(e) => setFormData({ ...formData, batchDivision: e.target.value })}
+                />
+                <Input
+                  label="Student ID / Roll No"
+                  value={formData.rollNo || ''}
+                  placeholder="e.g. CS2026-089"
+                  onChange={(e) => setFormData({ ...formData, rollNo: e.target.value })}
+                  disabled={Boolean(profile.rollNo && !/^STU-[0-9a-fA-F]{8}$/i.test(profile.rollNo))}
+                  className={profile.rollNo && !/^STU-[0-9a-fA-F]{8}$/i.test(profile.rollNo) ? "bg-slate-50 text-slate-500 cursor-not-allowed" : ""}
+                />
+              </div>
+            </Card>
+          </div>
 
           {/* Section 3: Technical & Soft Skills */}
-          <Card title="3. Technical & Soft Skills" subtitle="Skills used for AI matchmaking and internship matching">
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {formData.skills.map((skill) => (
-                  <div
-                    key={skill.id}
-                    className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium flex items-center space-x-2 text-slate-800"
-                  >
-                    <span>{skill.name}</span>
-                    <Badge variant={skill.level === 'advanced' ? 'indigo' : skill.level === 'intermediate' ? 'emerald' : 'neutral'}>
-                      {skill.level}
-                    </Badge>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSkill(skill.id)}
-                      className="text-slate-400 hover:text-red-600 ml-1"
+          <div id="skills-section">
+            <Card title="3. Technical & Soft Skills" subtitle="Skills used for AI matchmaking and internship matching">
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {formData.skills.map((skill) => (
+                    <div
+                      key={skill.id}
+                      className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium flex items-center space-x-2 text-slate-800"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <span>{skill.name}</span>
+                      <Badge variant={skill.level === 'advanced' ? 'indigo' : skill.level === 'intermediate' ? 'emerald' : 'neutral'}>
+                        {skill.level}
+                      </Badge>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSkill(skill.id)}
+                        className="text-slate-400 hover:text-red-600 ml-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100">
-                <div className="flex-1">
-                  <Input
-                    placeholder="Add a new skill (e.g. Next.js, Docker, Kubernetes)"
-                    value={newSkillName}
-                    onChange={(e) => setNewSkillName(e.target.value)}
-                  />
+                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Add a new skill (e.g. Next.js, Docker, Kubernetes)"
+                      value={newSkillName}
+                      onChange={(e) => setNewSkillName(e.target.value)}
+                    />
+                  </div>
+                  <div className="w-full sm:w-44">
+                    <Select
+                      value={newSkillLevel}
+                      onChange={(e) => setNewSkillLevel(e.target.value as any)}
+                      options={[
+                        { value: 'beginner', label: 'Beginner' },
+                        { value: 'intermediate', label: 'Intermediate' },
+                        { value: 'advanced', label: 'Advanced' },
+                      ]}
+                    />
+                  </div>
+                  <Button type="button" variant="secondary" onClick={handleAddSkill}>
+                    <Plus className="w-4 h-4 mr-1" /> Add Skill
+                  </Button>
                 </div>
-                <div className="w-full sm:w-44">
-                  <Select
-                    value={newSkillLevel}
-                    onChange={(e) => setNewSkillLevel(e.target.value as any)}
-                    options={[
-                      { value: 'beginner', label: 'Beginner' },
-                      { value: 'intermediate', label: 'Intermediate' },
-                      { value: 'advanced', label: 'Advanced' },
-                    ]}
-                  />
-                </div>
-                <Button type="button" variant="secondary" onClick={handleAddSkill}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Skill
-                </Button>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
 
           {/* Section 4: Projects, Certifications & Experience */}
-          <Card
-            title="4. Projects, Certifications & Experience"
-            subtitle="Showcase technical projects and external certifications to prospective recruiters"
-          >
+          <div id="portfolio-section">
+            <Card
+              title="4. Projects, Certifications & Experience"
+              subtitle="Showcase technical projects and external certifications to prospective recruiters"
+            >
             <div className="space-y-5">
               {/* Projects List & Adder */}
               <div className="space-y-3">
@@ -1354,8 +1479,66 @@ export const StudentProfile: React.FC = () => {
                   </Button>
                 </div>
               </div>
+
+              {/* Work & Internship Experience List & Adder */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <span className="text-xs font-bold text-slate-800 block">Work & Internship Experience</span>
+                <div className="space-y-2">
+                  {(formData.experiences || []).map((exp) => (
+                    <div key={exp.id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start justify-between text-xs">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-800">{exp.role}</span>
+                          <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">{exp.duration}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 font-medium">{exp.company}</p>
+                        {exp.description && <p className="text-[10px] text-slate-500 leading-normal">{exp.description}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExp(exp.id)}
+                        className="text-slate-400 hover:text-rose-600 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 bg-white border border-dashed border-indigo-200 rounded-xl space-y-2.5">
+                  <span className="text-[11px] font-bold text-indigo-900 block">+ Add Work / Internship Experience</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Input
+                      placeholder="Role (e.g. Backend Engineering Intern)"
+                      value={newExpRole}
+                      onChange={(e) => setNewExpRole(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Company / Organization"
+                      value={newExpCompany}
+                      onChange={(e) => setNewExpCompany(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Duration (e.g. June 2026 - Aug 2026)"
+                      value={newExpDuration}
+                      onChange={(e) => setNewExpDuration(e.target.value)}
+                    />
+                  </div>
+                  <Input
+                    placeholder="Short description of responsibilities and achievements"
+                    value={newExpDesc}
+                    onChange={(e) => setNewExpDesc(e.target.value)}
+                  />
+                  <div className="flex justify-end">
+                    <Button type="button" variant="secondary" size="sm" onClick={handleAddExp}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Experience
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </Card>
+          </div>
 
           {/* Section 5: Career Goals & Interests */}
           <Card title="5. Career Goals & Interests" subtitle="Parameters used by recommendation algorithms">

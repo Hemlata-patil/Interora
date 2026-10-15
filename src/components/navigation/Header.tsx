@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { mockCompanyNotifications } from '@/features/faculty/mockData';
 import { logoutUserBackend } from '@/services/api/backendService';
 
+import { resolveMediaUrl } from '@/utils/mediaUrl';
+
 export interface HeaderProps {
   role: UserRole;
   avatarUrl?: string | null;
@@ -16,6 +18,11 @@ export interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ role, avatarUrl, userName, onMenuToggle }) => {
   const navigate = useNavigate();
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
 
   const handleLogout = async () => {
     await logoutUserBackend();
@@ -35,6 +42,8 @@ export const Header: React.FC<HeaderProps> = ({ role, avatarUrl, userName, onMen
   const initials = userName
     ? userName.trim().split(/\s+/).map((n) => n[0] || '').join('').substring(0, 2).toUpperCase()
     : role.substring(0, 2).toUpperCase();
+
+  const resolvedUrl = resolveMediaUrl(avatarUrl);
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
@@ -67,8 +76,13 @@ export const Header: React.FC<HeaderProps> = ({ role, avatarUrl, userName, onMen
 
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-xs border border-indigo-200 overflow-hidden shadow-2xs">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={userName || role} className="w-full h-full object-cover" />
+            {resolvedUrl && !imgError ? (
+              <img
+                src={resolvedUrl}
+                alt={userName || role}
+                className="w-full h-full object-cover"
+                onError={() => setImgError(true)}
+              />
             ) : (
               initials
             )}
