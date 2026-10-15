@@ -27,6 +27,7 @@ export class ApiClientError extends Error {
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
+  timeoutMs?: number;
 }
 
 const BASE_URL = '/api';
@@ -59,7 +60,7 @@ function resolveUrl(path: string, params?: Record<string, string | number | bool
  * Core HTTP request handler.
  */
 async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
-  const { params, headers, ...restOptions } = options;
+  const { params, headers, timeoutMs = 15000, signal, ...restOptions } = options;
   const url = resolveUrl(path, params);
 
   const mergedHeaders: HeadersInit = {
@@ -71,17 +72,33 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
     (mergedHeaders as Record<string, string>)['Content-Type'] = 'application/json';
   }
 
+  // Setup abort controller with timeout
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`Request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  if (signal) {
+    signal.addEventListener('abort', () => controller.abort(signal.reason));
+  }
+
   const fetchOptions: RequestInit = {
     ...restOptions,
     headers: mergedHeaders,
     credentials: 'include', // Guarantees HTTP-only session cookie is attached
+    signal: controller.signal,
   };
 
   let response: Response;
   try {
     response = await fetch(url, fetchOptions);
   } catch (networkErr: any) {
+    if (controller.signal.aborted) {
+      throw new ApiClientError(408, `Request timed out after ${timeoutMs}ms. Please check your connection.`);
+    }
     throw new ApiClientError(0, networkErr.message || 'Network request failed. Is the backend server running?');
+  } finally {
+    clearTimeout(timer);
   }
 
   // Parse response body safely

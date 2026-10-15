@@ -31,8 +31,8 @@ export const HodDashboard: React.FC = () => {
     fetchMetrics();
   }, []);
 
-  if (loading) return <div className="p-8">Loading HOD Dashboard...</div>;
-  if (error) return <div className="p-8 text-rose-600">{error}</div>;
+  if (loading && !metrics) return <div className="p-8">Loading HOD Dashboard...</div>;
+  if (error && !metrics) return <div className="p-8 text-rose-600">{error}</div>;
   if (!metrics) return <div className="p-8">No data found.</div>;
 
   return (

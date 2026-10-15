@@ -3,30 +3,51 @@ import { PageHeader, Card, Badge, Button, Input } from '@/components';
 import { GraduationCap, Mail, Building, Phone, Edit3, Save, BookOpen, Loader2, AlertCircle } from 'lucide-react';
 import {
   getCurrentUserBackend,
+  getCachedCurrentUser,
   updateFacultyProfileBackend,
   fetchFacultyAssignedStudentsBackend,
 } from '@/services/api/backendService';
 
 export const FacultyProfile: React.FC = () => {
+  const cachedUser = getCachedCurrentUser();
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedUser);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [profile, setProfile] = useState({
-    name: '',
-    facultyId: '',
-    designation: '',
-    department: '',
-    email: '',
-    phone: '',
-    officeLocation: '',
-    assignedStudentsCount: 0,
+  const [profile, setProfile] = useState(() => {
+    if (cachedUser) {
+      const fp = cachedUser.facultyProfile;
+      const deptName = typeof fp?.department === 'object' && fp?.department?.name 
+        ? fp.department.name 
+        : (typeof fp?.department === 'string' ? fp.department : 'Computer Science & Engineering');
+
+      return {
+        name: cachedUser.fullName || 'Faculty Mentor',
+        facultyId: fp?.facultyId || `FAC-${cachedUser.id.substring(0, 6).toUpperCase()}`,
+        designation: fp?.designation || 'Faculty Advisor & Mentor',
+        department: deptName,
+        email: cachedUser.email || '',
+        phone: cachedUser.phone || fp?.officePhone || '+91 98765 00000',
+        officeLocation: fp?.cabinLocation || 'Academic Block, Faculty Wing',
+        assignedStudentsCount: 0,
+      };
+    }
+    return {
+      name: '',
+      facultyId: '',
+      designation: '',
+      department: '',
+      email: '',
+      phone: '',
+      officeLocation: '',
+      assignedStudentsCount: 0,
+    };
   });
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       const [user, assignedStudents] = await Promise.all([
@@ -60,7 +81,7 @@ export const FacultyProfile: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadProfile();
+    loadProfile(Boolean(cachedUser));
   }, [loadProfile]);
 
   const handleSave = async () => {
@@ -81,7 +102,7 @@ export const FacultyProfile: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !profile.name) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-3">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />

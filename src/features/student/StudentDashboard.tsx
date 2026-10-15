@@ -14,6 +14,7 @@ import {
   fetchStudentApplicationsBackend,
   fetchStudentPlacementReadinessBackend,
   getCurrentUserBackend,
+  getCachedCurrentUser,
   type AuthUser,
 } from '@/services/api/backendService';
 import {
@@ -25,14 +26,49 @@ import {
 const LOCAL_STORAGE_KEY_PREFIX = 'interora_student_extended_profile_';
 
 export const StudentDashboard: React.FC = () => {
+  const cachedUser = getCachedCurrentUser();
   const [activeInternship, setActiveInternship] = useState<ActiveInternshipData>(initialActiveInternshipData);
   const [appSummary, setAppSummary] = useState<ApplicationSummaryData>(initialApplicationSummaryData);
   const [readinessScore, setReadinessScore] = useState<number>(78);
-  const [studentName, setStudentName] = useState<string>('Student');
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [completionSummary, setCompletionSummary] = useState<ProfileCompletionSummary>(
-    calculateProfileCompletion(null)
-  );
+  const [studentName, setStudentName] = useState<string>(() => {
+    if (cachedUser?.fullName) return cachedUser.fullName.split(' ')[0] || cachedUser.fullName;
+    return 'Student';
+  });
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(cachedUser);
+  const [completionSummary, setCompletionSummary] = useState<ProfileCompletionSummary>(() => {
+    if (cachedUser) {
+      let extendedDetails: Partial<StudentProfileLike> = {};
+      try {
+        const raw = localStorage.getItem(`${LOCAL_STORAGE_KEY_PREFIX}${cachedUser.id}`);
+        if (raw) extendedDetails = JSON.parse(raw);
+      } catch {
+        // Ignore parse errors
+      }
+
+      const sp = cachedUser.studentProfile;
+      const rawId = sp?.studentId;
+      const cleanStudentId = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : null;
+
+      const profileObj: StudentProfileLike = {
+        fullName: cachedUser.fullName || null,
+        email: cachedUser.email || null,
+        phone: cachedUser.phone || null,
+        avatarUrl: cachedUser.avatarUrl || null,
+        department: cachedUser.departmentName || null,
+        course: sp?.course || (extendedDetails.degree as string) || null,
+        studentId: cleanStudentId || (extendedDetails.rollNo as string) || null,
+        rollNo: cleanStudentId || (extendedDetails.rollNo as string) || null,
+        currentSemester: sp?.currentSemester || null,
+        batchYear: sp?.batchYear || null,
+        skills: Array.isArray(sp?.skills) ? sp.skills : (extendedDetails.skills as any) || [],
+        resumeUrl: sp?.resumeUrl || null,
+        ...extendedDetails,
+      };
+
+      return calculateProfileCompletion(profileObj);
+    }
+    return calculateProfileCompletion(null);
+  });
 
   const loadData = useCallback(async () => {
     try {

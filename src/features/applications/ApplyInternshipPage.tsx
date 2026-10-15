@@ -76,7 +76,7 @@ export const ApplyInternshipPage: React.FC = () => {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  if (loading) {
+  if (loading && !internship) {
     return (
       <div className="space-y-6 max-w-3xl mx-auto">
         <PageHeader title="Loading Opportunity..." description="Preparing application form..." />

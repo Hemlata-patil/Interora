@@ -162,7 +162,7 @@ export const CertificatesPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
+  if (loading && !certificate) {
     return (
       <div className="space-y-6">
         <PageHeader

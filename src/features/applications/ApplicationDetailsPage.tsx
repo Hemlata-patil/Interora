@@ -58,7 +58,7 @@ export const ApplicationDetailsPage: React.FC = () => {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  if (loading) {
+  if (loading && !application) {
     return (
       <div className="space-y-6">
         <PageHeader title="Loading Application..." description="Retrieving application records..." />

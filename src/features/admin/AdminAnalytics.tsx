@@ -75,7 +75,7 @@ export const AdminAnalytics: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !metrics) {
     return (
       <div className="flex items-center justify-center p-24 text-slate-400 text-sm">
         <Loader2 className="w-6 h-6 mr-2 animate-spin text-indigo-600" />

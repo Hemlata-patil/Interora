@@ -106,7 +106,7 @@ export const MilestonesPage: React.FC = () => {
   const currentMilestone = overallMetrics.currentMilestone;
   const upcomingMilestones = useMemo(() => milestones.filter((m) => m.status === 'upcoming'), [milestones]);
 
-  if (loading) {
+  if (loading && !activeInternship && milestones.length === 0) {
     return (
       <div className="space-y-6">
         <PageHeader

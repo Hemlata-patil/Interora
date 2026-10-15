@@ -56,6 +56,7 @@ const LinkedinIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' 
 );
 import {
   getCurrentUserBackend,
+  getCachedCurrentUser,
   uploadStudentResumeBackend,
   updateStudentProfileBackend,
   analyzeStudentResumeBackend,
@@ -164,13 +165,91 @@ export const emptyStudentProfile: StudentProfileData = {
 
 export const defaultStudentProfile: StudentProfileData = emptyStudentProfile;
 
+export function buildStudentProfileFromUser(
+  user: any,
+  active?: ActiveStudentInternshipRecord | null
+): StudentProfileData {
+  if (!user) return emptyStudentProfile;
+
+  let extendedDetails: Partial<StudentProfileData> = {};
+  try {
+    const saved = localStorage.getItem(`${LOCAL_STORAGE_KEY_PREFIX}${user.id}`);
+    if (saved) {
+      extendedDetails = JSON.parse(saved);
+    }
+  } catch {
+    // Ignore
+  }
+
+  const sp = user.studentProfile;
+  const rawId = sp?.studentId;
+  const cleanRollNo = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : '';
+
+  let mappedSkills: StudentSkill[] = [];
+  if (Array.isArray(sp?.skills) && sp.skills.length > 0) {
+    mappedSkills = sp.skills.map((s: any, idx: number) => {
+      if (typeof s === 'string') {
+        return { id: `sk_${idx}`, name: s, level: 'intermediate' as const };
+      }
+      return {
+        id: s.id || `sk_${idx}`,
+        name: s.name || String(s),
+        level: s.level || 'intermediate',
+      };
+    });
+  } else if (Array.isArray(extendedDetails.skills) && extendedDetails.skills.length > 0) {
+    mappedSkills = extendedDetails.skills;
+  }
+
+  return {
+    fullName: user.fullName || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    avatarUrl: user.avatarUrl || '',
+    rollNo: cleanRollNo || (extendedDetails.rollNo as string) || '',
+    department: user.departmentName || (extendedDetails.department as string) || '',
+    institution: extendedDetails.institution || '',
+    degree: sp?.course || (extendedDetails.degree as string) || '',
+    yearSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : (extendedDetails.yearSemester as string) || '',
+    batchDivision: sp?.batchDivision || (extendedDetails.batchDivision as string) || '',
+    batchYear: sp?.batchYear ? String(sp.batchYear) : (extendedDetails.batchYear as string) || '',
+    cgpa: sp?.cgpa ? `${sp.cgpa} / 10.0` : (extendedDetails.cgpa as string) || '',
+    bio: extendedDetails.bio || '',
+    resumeHeadline: extendedDetails.resumeHeadline || '',
+    resumeFileName: sp?.resumeUrl ? formatDisplayResumeName(sp.resumeUrl) : (extendedDetails.resumeFileName as string) || '',
+    skills: mappedSkills,
+    interests: extendedDetails.interests || [],
+    preferredRoles: extendedDetails.preferredRoles || [],
+    preferredLocations: extendedDetails.preferredLocations || [],
+    availability: extendedDetails.availability || '',
+    githubUrl: extendedDetails.githubUrl || '',
+    linkedinUrl: extendedDetails.linkedinUrl || '',
+    portfolioUrl: extendedDetails.portfolioUrl || '',
+    projects: extendedDetails.projects || [],
+    certifications: extendedDetails.certifications || [],
+    experiences: active
+      ? [
+          {
+            id: active.assignmentId,
+            role: active.title || 'Intern',
+            company: active.companyName || 'Host Company',
+            duration: `${active.duration || '3 Months'} (Active)`,
+            description: `Supervised by ${active.mentorName || 'Company Mentor'} (${active.workMode || 'Remote'}).`,
+          },
+          ...(extendedDetails.experiences || []),
+        ]
+      : extendedDetails.experiences || [],
+  };
+}
+
 export const StudentProfile: React.FC = () => {
-  const [profile, setProfile] = useState<StudentProfileData>(emptyStudentProfile);
-  const [formData, setFormData] = useState<StudentProfileData>(emptyStudentProfile);
+  const cachedUser = getCachedCurrentUser();
+  const [profile, setProfile] = useState<StudentProfileData>(() => buildStudentProfileFromUser(cachedUser));
+  const [formData, setFormData] = useState<StudentProfileData>(() => buildStudentProfileFromUser(cachedUser));
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedUser);
   const [imgError, setImgError] = useState(false);
   const [searchParams] = useSearchParams();
 
@@ -227,8 +306,8 @@ export const StudentProfile: React.FC = () => {
   const [newCertIssuer, setNewCertIssuer] = useState('');
   const [newCertDate, setNewCertDate] = useState('');
 
-  const loadProfile = async () => {
-    setLoading(true);
+  const loadProfile = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [user, active, analysis] = await Promise.all([
         getCurrentUserBackend().catch(() => null),
@@ -236,87 +315,18 @@ export const StudentProfile: React.FC = () => {
         fetchStudentResumeAnalysisBackend().catch(() => null),
       ]);
 
-      setActiveInternship(active);
+      if (active) {
+        setActiveInternship(active);
+      }
       if (analysis) {
         setResumeAnalysis(analysis);
       }
 
       if (!user) {
-        setLoading(false);
         return;
       }
 
-      // Load extended local portfolio details if available
-      let extendedDetails: Partial<StudentProfileData> = {};
-      try {
-        const saved = localStorage.getItem(`${LOCAL_STORAGE_KEY_PREFIX}${user.id}`);
-        if (saved) {
-          extendedDetails = JSON.parse(saved);
-        }
-      } catch {
-        // Ignore
-      }
-
-      const sp = user.studentProfile;
-      const rawId = sp?.studentId;
-      const cleanRollNo = rawId && !/^STU-[0-9a-fA-F]{8}$/i.test(rawId) ? rawId : '';
-
-      let mappedSkills: StudentSkill[] = [];
-      if (Array.isArray(sp?.skills) && sp.skills.length > 0) {
-        mappedSkills = sp.skills.map((s: any, idx: number) => {
-          if (typeof s === 'string') {
-            return { id: `sk_${idx}`, name: s, level: 'intermediate' as const };
-          }
-          return {
-            id: s.id || `sk_${idx}`,
-            name: s.name || String(s),
-            level: s.level || 'intermediate',
-          };
-        });
-      } else if (Array.isArray(extendedDetails.skills) && extendedDetails.skills.length > 0) {
-        mappedSkills = extendedDetails.skills;
-      }
-
-      const mergedProfile: StudentProfileData = {
-        fullName: user.fullName || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        avatarUrl: user.avatarUrl || '',
-        rollNo: cleanRollNo || (extendedDetails.rollNo as string) || '',
-        department: user.departmentName || (extendedDetails.department as string) || '',
-        institution: extendedDetails.institution || '',
-        degree: sp?.course || (extendedDetails.degree as string) || '',
-        yearSemester: sp?.currentSemester ? `Semester ${sp.currentSemester}` : (extendedDetails.yearSemester as string) || '',
-        batchDivision: sp?.batchDivision || (extendedDetails.batchDivision as string) || '',
-        batchYear: sp?.batchYear ? String(sp.batchYear) : (extendedDetails.batchYear as string) || '',
-        cgpa: sp?.cgpa ? `${sp.cgpa} / 10.0` : (extendedDetails.cgpa as string) || '',
-        bio: extendedDetails.bio || '',
-        resumeHeadline: extendedDetails.resumeHeadline || '',
-        resumeFileName: sp?.resumeUrl ? formatDisplayResumeName(sp.resumeUrl) : (extendedDetails.resumeFileName as string) || '',
-        skills: mappedSkills,
-        interests: extendedDetails.interests || [],
-        preferredRoles: extendedDetails.preferredRoles || [],
-        preferredLocations: extendedDetails.preferredLocations || [],
-        availability: extendedDetails.availability || '',
-        githubUrl: extendedDetails.githubUrl || '',
-        linkedinUrl: extendedDetails.linkedinUrl || '',
-        portfolioUrl: extendedDetails.portfolioUrl || '',
-        projects: extendedDetails.projects || [],
-        certifications: extendedDetails.certifications || [],
-        experiences: active
-          ? [
-              {
-                id: active.assignmentId,
-                role: active.title || 'Intern',
-                company: active.companyName || 'Host Company',
-                duration: `${active.duration || '3 Months'} (Active)`,
-                description: `Supervised by ${active.mentorName || 'Company Mentor'} (${active.workMode || 'Remote'}).`,
-              },
-              ...(extendedDetails.experiences || []),
-            ]
-          : extendedDetails.experiences || [],
-      };
-
+      const mergedProfile = buildStudentProfileFromUser(user, active);
       setProfile(mergedProfile);
       setFormData(mergedProfile);
       if (mergedProfile.preferredRoles && mergedProfile.preferredRoles.length > 0) {
@@ -330,8 +340,8 @@ export const StudentProfile: React.FC = () => {
   };
 
   useEffect(() => {
-    loadProfile();
-    const handleUserUpdate = () => loadProfile();
+    loadProfile(Boolean(cachedUser));
+    const handleUserUpdate = () => loadProfile(true);
     window.addEventListener('interora:user-updated', handleUserUpdate);
     return () => {
       window.removeEventListener('interora:user-updated', handleUserUpdate);
@@ -601,7 +611,7 @@ export const StudentProfile: React.FC = () => {
   const completion = isEditing ? draftCompletion : savedCompletion;
   const resolvedProfileAvatar = resolveMediaUrl(profile.avatarUrl);
 
-  if (loading) {
+  if (loading && !profile.fullName) {
     return (
       <div className="min-h-[400px] flex items-center justify-center">
         <div className="flex flex-col items-center space-y-3">

@@ -3,25 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { Header } from '@/components/navigation/Header';
 import type { UserRole } from '@/types';
-import { getCurrentUserBackend } from '@/services/api/backendService';
+import { getCurrentUserBackend, getCachedCurrentUser } from '@/services/api/backendService';
+import { AlertCircle, RotateCw, LogIn } from 'lucide-react';
+import { Button } from '@/components';
 
 export interface AppLayoutProps {
   role: UserRole;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
   const navigate = useNavigate();
+  const cachedUser = getCachedCurrentUser();
+  const hasValidCachedSession = Boolean(cachedUser && cachedUser.role === role);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState<string>(cachedUser?.email || '');
+  const [userName, setUserName] = useState<string>(
+    cachedUser?.fullName ||
+      (role === 'company'
+        ? 'Company Account'
+        : role === 'student'
+        ? 'Student Account'
+        : role.toUpperCase())
+  );
+  const [userAvatar, setUserAvatar] = useState<string | null>(cachedUser?.avatarUrl || null);
+  const [loading, setLoading] = useState(!hasValidCachedSession);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     const resolveSession = async () => {
+      setSessionError(null);
       try {
         const user = await getCurrentUserBackend();
         if (!isMounted) return;
@@ -50,9 +64,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
               : role.toUpperCase())
         );
         setLoading(false);
-      } catch (err) {
+      } catch (err: any) {
         if (!isMounted) return;
-        navigate('/login', { replace: true });
+        if (!hasValidCachedSession) {
+          setSessionError(err?.message || 'Unable to connect to the session server.');
+          setLoading(false);
+        }
       }
     };
 
@@ -75,7 +92,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
       isMounted = false;
       window.removeEventListener('interora:user-updated', handleUserUpdated);
     };
-  }, [role, navigate]);
+  }, [role, navigate, hasValidCachedSession]);
 
   if (loading) {
     return (
@@ -85,6 +102,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ role, children }) => {
           <span className="text-xs text-slate-500 font-medium tracking-wide">
             Verifying session...
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl p-6 border border-slate-200 shadow-sm text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Session Verification Error</h3>
+            <p className="text-xs text-slate-500 mt-1">{sessionError}</p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              <RotateCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => navigate('/login', { replace: true })}>
+              <LogIn className="w-3.5 h-3.5 mr-1.5" /> Go to Login
+            </Button>
+          </div>
         </div>
       </div>
     );

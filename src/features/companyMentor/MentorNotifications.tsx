@@ -78,7 +78,7 @@ export const MentorNotifications: React.FC = () => {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  if (loading) {
+  if (loading && notifications.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />

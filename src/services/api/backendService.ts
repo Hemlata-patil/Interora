@@ -209,13 +209,98 @@ export interface AuthUser {
   departmentName?: string | null;
 }
 
-export const getCurrentUserBackend = async (): Promise<AuthUser | null> => {
+// In-memory + sessionStorage Session Cache for Instant Navigation
+let _cachedCurrentUser: AuthUser | null = null;
+let _currentUserPromise: Promise<AuthUser | null> | null = null;
+let _lastUserFetchTimestamp = 0;
+const USER_CACHE_TTL_MS = 60000; // 60 seconds
+
+export const getCachedCurrentUser = (): AuthUser | null => {
+  if (_cachedCurrentUser) return _cachedCurrentUser;
   try {
-    const res = await apiClient.get<AuthUser>('/auth/me');
-    return res.data || null;
+    const raw = sessionStorage.getItem('interora_auth_user_cache');
+    if (raw) {
+      _cachedCurrentUser = JSON.parse(raw);
+      return _cachedCurrentUser;
+    }
   } catch {
-    return null;
+    // Ignore parse errors
   }
+  return null;
+};
+
+export const setCachedCurrentUser = (user: AuthUser | null): void => {
+  _cachedCurrentUser = user;
+  _lastUserFetchTimestamp = user ? Date.now() : 0;
+  try {
+    if (user) {
+      sessionStorage.setItem('interora_auth_user_cache', JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem('interora_auth_user_cache');
+    }
+  } catch {
+    // Ignore
+  }
+};
+
+export const invalidateCurrentUserCache = (): void => {
+  _cachedCurrentUser = null;
+  _lastUserFetchTimestamp = 0;
+  _currentUserPromise = null;
+  try {
+    sessionStorage.removeItem('interora_auth_user_cache');
+  } catch {
+    // Ignore
+  }
+};
+
+// Listen to interora:user-updated window events to keep cache fresh
+if (typeof window !== 'undefined') {
+  window.addEventListener('interora:user-updated', (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (!detail) return;
+    const current = getCachedCurrentUser();
+    if (current) {
+      const updated = {
+        ...current,
+        ...(detail.avatarUrl !== undefined ? { avatarUrl: detail.avatarUrl } : {}),
+        ...(detail.fullName ? { fullName: detail.fullName } : {}),
+      };
+      setCachedCurrentUser(updated);
+    }
+  });
+}
+
+export const getCurrentUserBackend = async (forceRefresh = false): Promise<AuthUser | null> => {
+  const now = Date.now();
+  // Return active in-memory / sessionStorage cache if fresh
+  if (!forceRefresh) {
+    const cached = getCachedCurrentUser();
+    if (cached && now - _lastUserFetchTimestamp < USER_CACHE_TTL_MS) {
+      return cached;
+    }
+  }
+
+  // Deduplicate concurrent requests across mounting components
+  if (_currentUserPromise) {
+    return _currentUserPromise;
+  }
+
+  _currentUserPromise = (async () => {
+    try {
+      const res = await apiClient.get<AuthUser>('/auth/me', { timeoutMs: 10000 });
+      const user = res.data || null;
+      setCachedCurrentUser(user);
+      return user;
+    } catch {
+      setCachedCurrentUser(null);
+      return null;
+    } finally {
+      _currentUserPromise = null;
+    }
+  })();
+
+  return _currentUserPromise;
 };
 
 export interface UpdateStudentProfileInput {
@@ -235,6 +320,9 @@ export const updateStudentProfileBackend = async (
 ): Promise<{ success: boolean; data?: AuthUser; error?: string }> => {
   try {
     const res = await apiClient.patch<AuthUser>('/auth/me', input);
+    if (res.data) {
+      setCachedCurrentUser(res.data);
+    }
     return { success: true, data: res.data };
   } catch (err: any) {
     const errorMsg =
@@ -245,6 +333,7 @@ export const updateStudentProfileBackend = async (
 
 // 3.2 User Logout (Express Backend)
 export const logoutUserBackend = async (): Promise<{ success: boolean; error?: string }> => {
+  invalidateCurrentUserCache();
   try {
     await apiClient.post('/auth/logout');
     return { success: true };
@@ -569,6 +658,7 @@ export const createStudentApplicationBackend = async (
       internshipId,
       coverLetter: coverLetter || undefined,
     });
+    invalidateStudentApplicationsCache();
     return { success: true };
   } catch (err: any) {
     console.error('[createStudentApplicationBackend] Error:', err);
@@ -579,29 +669,54 @@ export const createStudentApplicationBackend = async (
   }
 };
 
+let _cachedStudentApplications: { data: StudentApplicationRecord[]; expiresAt: number } | null = null;
+let _studentApplicationsPromise: Promise<StudentApplicationRecord[]> | null = null;
+
+export const invalidateStudentApplicationsCache = () => {
+  _cachedStudentApplications = null;
+};
 
 // Fetch Student Applications (Express Backend: GET /api/applications/my)
-export const fetchStudentApplicationsBackend = async (): Promise<StudentApplicationRecord[]> => {
-  try {
-    const res = await apiClient.get<any[]>('/applications/my');
-    if (!res.data || !Array.isArray(res.data)) return [];
-
-    return res.data.map((item) => ({
-      id: item.id,
-      internshipId: item.internshipId,
-      studentId: item.studentId,
-      status: mapBackendApplicationStatusToUi(item.status),
-      coverLetter: item.coverLetter || undefined,
-      appliedAt: item.appliedAt,
-      internshipTitle: item.internship?.title || 'Internship Position',
-      companyName: item.internship?.company?.companyName || 'Corporate Partner',
-      facultyRating: item.facultyRating ?? undefined,
-      allocatorMatchScore: item.allocatorMatchScore ?? undefined,
-    }));
-  } catch (err: any) {
-    console.error('[fetchStudentApplicationsBackend] Error:', err);
-    return [];
+export const fetchStudentApplicationsBackend = async (forceRefresh = false): Promise<StudentApplicationRecord[]> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedStudentApplications && _cachedStudentApplications.expiresAt > now) {
+    return _cachedStudentApplications.data;
   }
+  if (_studentApplicationsPromise) {
+    return _studentApplicationsPromise;
+  }
+
+  _studentApplicationsPromise = (async () => {
+    try {
+      const res = await apiClient.get<any[]>('/applications/my');
+      if (!res.data || !Array.isArray(res.data)) {
+        _cachedStudentApplications = { data: [], expiresAt: Date.now() + 45_000 };
+        return [];
+      }
+
+      const mapped: StudentApplicationRecord[] = res.data.map((item) => ({
+        id: item.id,
+        internshipId: item.internshipId,
+        studentId: item.studentId,
+        status: mapBackendApplicationStatusToUi(item.status),
+        coverLetter: item.coverLetter || undefined,
+        appliedAt: item.appliedAt,
+        internshipTitle: item.internship?.title || 'Internship Position',
+        companyName: item.internship?.company?.companyName || 'Corporate Partner',
+        facultyRating: item.facultyRating ?? undefined,
+        allocatorMatchScore: item.allocatorMatchScore ?? undefined,
+      }));
+      _cachedStudentApplications = { data: mapped, expiresAt: Date.now() + 45_000 };
+      return mapped;
+    } catch (err: any) {
+      console.error('[fetchStudentApplicationsBackend] Error:', err);
+      return [];
+    } finally {
+      _studentApplicationsPromise = null;
+    }
+  })();
+
+  return _studentApplicationsPromise;
 };
 
 // Fetch Single Application Details (Express Backend: GET /api/applications/:id)
@@ -678,6 +793,7 @@ export const withdrawStudentApplicationBackend = async (
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     await apiClient.patch(`/applications/${applicationId}/withdraw`);
+    invalidateStudentApplicationsCache();
     return { success: true };
   } catch (err: any) {
     console.error('[withdrawStudentApplicationBackend] Error:', err);
@@ -1178,69 +1294,138 @@ export const createStudentTaskBackend = async (
 
 
 // Milestones Services (Express Backend)
-export const fetchStudentMilestonesBackend = async (): Promise<StudentMilestoneRecord[]> => {
-  try {
-    const res = await apiClient.get<any>('/milestones');
-    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-    return items.map((m: any) => ({
-      id: m.id,
-      studentId: m.assignment?.studentId || '',
-      internshipId: m.assignment?.internshipId || '',
-      title: m.title,
-      description: m.description || '',
-      status: m.status,
-      dueDate: m.targetDate ? new Date(m.targetDate).toISOString().slice(0, 10) : undefined,
-      completedAt: m.verifiedAt ? new Date(m.verifiedAt).toISOString() : undefined,
-    }));
-  } catch (err: any) {
-    console.error('[fetchStudentMilestonesBackend] Express error:', err);
-    return [];
+let _cachedMilestones: { data: StudentMilestoneRecord[]; expiresAt: number } | null = null;
+let _milestonesPromise: Promise<StudentMilestoneRecord[]> | null = null;
+
+export const invalidateStudentMilestonesCache = () => {
+  _cachedMilestones = null;
+};
+
+export const fetchStudentMilestonesBackend = async (forceRefresh = false): Promise<StudentMilestoneRecord[]> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedMilestones && _cachedMilestones.expiresAt > now) {
+    return _cachedMilestones.data;
   }
+  if (_milestonesPromise) {
+    return _milestonesPromise;
+  }
+
+  _milestonesPromise = (async () => {
+    try {
+      const res = await apiClient.get<any>('/milestones');
+      const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const mapped = items.map((m: any) => ({
+        id: m.id,
+        studentId: m.assignment?.studentId || '',
+        internshipId: m.assignment?.internshipId || '',
+        title: m.title,
+        description: m.description || '',
+        status: m.status,
+        dueDate: m.targetDate ? new Date(m.targetDate).toISOString().slice(0, 10) : undefined,
+        completedAt: m.verifiedAt ? new Date(m.verifiedAt).toISOString() : undefined,
+      }));
+      _cachedMilestones = { data: mapped, expiresAt: Date.now() + 60_000 };
+      return mapped;
+    } catch (err: any) {
+      console.error('[fetchStudentMilestonesBackend] Express error:', err);
+      return [];
+    } finally {
+      _milestonesPromise = null;
+    }
+  })();
+
+  return _milestonesPromise;
 };
 
 // Student Evaluations Services (Express Backend)
-export const fetchStudentEvaluationsBackend = async (): Promise<StudentEvaluationRecord[]> => {
-  try {
-    const res = await apiClient.get<any>('/evaluations');
-    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-    return items.map((e: any) => ({
-      id: e.id,
-      studentId: e.assignment?.studentId || '',
-      internshipId: e.assignment?.internshipId || '',
-      evaluatorId: e.evaluatorId || '',
-      rating: Number(e.overallRating || 0),
-      feedback: e.comments || e.strengths || '',
-      createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
-    }));
-  } catch (err: any) {
-    console.error('[fetchStudentEvaluationsBackend] Express error:', err);
-    return [];
+let _cachedEvaluations: { data: StudentEvaluationRecord[]; expiresAt: number } | null = null;
+let _evaluationsPromise: Promise<StudentEvaluationRecord[]> | null = null;
+
+export const invalidateStudentEvaluationsCache = () => {
+  _cachedEvaluations = null;
+};
+
+export const fetchStudentEvaluationsBackend = async (forceRefresh = false): Promise<StudentEvaluationRecord[]> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedEvaluations && _cachedEvaluations.expiresAt > now) {
+    return _cachedEvaluations.data;
   }
+  if (_evaluationsPromise) {
+    return _evaluationsPromise;
+  }
+
+  _evaluationsPromise = (async () => {
+    try {
+      const res = await apiClient.get<any>('/evaluations');
+      const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const mapped = items.map((e: any) => ({
+        id: e.id,
+        studentId: e.assignment?.studentId || '',
+        internshipId: e.assignment?.internshipId || '',
+        evaluatorId: e.evaluatorId || '',
+        rating: Number(e.overallRating || 0),
+        feedback: e.comments || e.strengths || '',
+        createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
+      }));
+      _cachedEvaluations = { data: mapped, expiresAt: Date.now() + 60_000 };
+      return mapped;
+    } catch (err: any) {
+      console.error('[fetchStudentEvaluationsBackend] Express error:', err);
+      return [];
+    } finally {
+      _evaluationsPromise = null;
+    }
+  })();
+
+  return _evaluationsPromise;
 };
 
 // Student Certificates Services (Express Backend)
-export const fetchStudentCertificatesBackend = async (): Promise<StudentCertificateRecord[]> => {
-  try {
-    const res = await apiClient.get<any>('/certificates');
-    const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-    return items.map((c: any) => ({
-      id: c.id,
-      studentId: c.studentId,
-      internshipId: c.internshipId || c.assignment?.internship?.id || '',
-      certificateNumber: c.certificateNumber,
-      certificateUrl: `/student/certificates`,
-      issuedAt: c.issueDate ? new Date(c.issueDate).toISOString() : (c.createdAt ? new Date(c.createdAt).toISOString() : ''),
-      status: c.status,
-      signatoryName: c.signatoryName,
-      signatoryTitle: c.signatoryTitle,
-      assignment: c.assignment,
-      student: c.student,
-      company: c.company,
-    }));
-  } catch (err: any) {
-    console.error('[fetchStudentCertificatesBackend] Express error:', err);
-    return [];
+let _cachedCertificates: { data: StudentCertificateRecord[]; expiresAt: number } | null = null;
+let _certificatesPromise: Promise<StudentCertificateRecord[]> | null = null;
+
+export const invalidateStudentCertificatesCache = () => {
+  _cachedCertificates = null;
+};
+
+export const fetchStudentCertificatesBackend = async (forceRefresh = false): Promise<StudentCertificateRecord[]> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedCertificates && _cachedCertificates.expiresAt > now) {
+    return _cachedCertificates.data;
   }
+  if (_certificatesPromise) {
+    return _certificatesPromise;
+  }
+
+  _certificatesPromise = (async () => {
+    try {
+      const res = await apiClient.get<any>('/certificates');
+      const items: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const mapped = items.map((c: any) => ({
+        id: c.id,
+        studentId: c.studentId,
+        internshipId: c.internshipId || c.assignment?.internship?.id || '',
+        certificateNumber: c.certificateNumber,
+        certificateUrl: `/student/certificates`,
+        issuedAt: c.issueDate ? new Date(c.issueDate).toISOString() : (c.createdAt ? new Date(c.createdAt).toISOString() : ''),
+        status: c.status,
+        signatoryName: c.signatoryName,
+        signatoryTitle: c.signatoryTitle,
+        assignment: c.assignment,
+        student: c.student,
+        company: c.company,
+      }));
+      _cachedCertificates = { data: mapped, expiresAt: Date.now() + 60_000 };
+      return mapped;
+    } catch (err: any) {
+      console.error('[fetchStudentCertificatesBackend] Express error:', err);
+      return [];
+    } finally {
+      _certificatesPromise = null;
+    }
+  })();
+
+  return _certificatesPromise;
 };
 
 export const verifyCertificateBackend = async (
@@ -1423,81 +1608,107 @@ export interface ActiveInternshipMetrics {
   attendanceHealthStatus: 'Excellent' | 'Good' | 'Needs Attention';
 }
 
+let _cachedActiveInternship: { data: ActiveStudentInternshipRecord | null; expiresAt: number } | null = null;
+let _activeInternshipPromise: Promise<ActiveStudentInternshipRecord | null> | null = null;
+
+export const invalidateActiveInternshipCache = () => {
+  _cachedActiveInternship = null;
+};
+
 // Migrated: Supabase student_applications query replaced with GET /api/assignments
 // Backend enforces student scoping via JWT — no manual student ID passed.
-export const fetchActiveStudentInternshipBackend = async (): Promise<ActiveStudentInternshipRecord | null> => {
-  try {
-    const res = await apiClient.get<any>('/assignments');
-    // Backend wraps in { success, data } for student role
-    const assignments: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-
-    if (!assignments || assignments.length === 0) {
-      console.log('[ActiveInternship] No assignments found for authenticated student.');
-      return null;
-    }
-
-    // Prefer active, then upcoming assignment
-    const active =
-      assignments.find((a: any) => a.status === 'active') ||
-      assignments.find((a: any) => a.status === 'upcoming') ||
-      assignments[0];
-
-    if (!active) return null;
-
-    const internship = active.internship || {};
-    const company = active.company || {};
-    const application = active.application || {};
-
-    // Resolve mentor: prefer industryMentor (company-side), fallback to facultyMentor
-    const industryMentor = active.industryMentor;
-    const facultyMentor = active.facultyMentor;
-
-    let mentorName = 'Assigned Mentor';
-    let mentorRole = 'Industry Mentor';
-    let mentorEmail = 'mentor@interora.app';
-
-    if (industryMentor?.profile) {
-      mentorName = industryMentor.profile.fullName || mentorName;
-      mentorRole = industryMentor.designation || 'Industry Mentor';
-      mentorEmail = industryMentor.profile.email || mentorEmail;
-    } else if (facultyMentor?.profile) {
-      mentorName = facultyMentor.profile.fullName || mentorName;
-      mentorRole = facultyMentor.designation || 'Faculty Mentor';
-      mentorEmail = facultyMentor.profile.email || mentorEmail;
-    }
-
-    const mentorUserId = active.facultyMentorId || active.industryMentorId || facultyMentor?.id || industryMentor?.id;
-
-    const result: ActiveStudentInternshipRecord = {
-      assignmentId: active.id,
-      applicationId: active.applicationId,
-      internshipId: active.internshipId || internship.id || '',
-      title: internship.title || 'Active Internship Role',
-      companyId: active.companyId || company.id || '',
-      companyName: company.companyName || 'Host Company',
-      industryDomain: internship.industryDomain || company.industryDomain || 'Technology',
-      location: internship.location || 'Remote / On-site',
-      workMode: internship.workMode || 'remote',
-      internshipType: internship.internshipType || 'full_time',
-      duration: internship.duration || '3 Months',
-      stipend: internship.stipend ? String(internship.stipend) : 'Stipend Provided',
-      description: '',
-      appliedAt: application.appliedAt || active.createdAt,
-      startDate: active.startDate ? new Date(active.startDate).toISOString().slice(0, 10) : null,
-      endDate: active.endDate ? new Date(active.endDate).toISOString().slice(0, 10) : null,
-      assignmentStatus: active.status || 'active',
-      mentorName,
-      mentorRole,
-      mentorEmail,
-      mentorUserId: mentorUserId || undefined,
-    };
-
-    console.log('[ActiveInternship] Assignment resolved via Express:', result.assignmentId);
-    return result;
-  } catch (err: any) {
-    console.error('[ActiveInternship] Express fetch error:', err);
-    return null;
+export const fetchActiveStudentInternshipBackend = async (forceRefresh = false): Promise<ActiveStudentInternshipRecord | null> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedActiveInternship && _cachedActiveInternship.expiresAt > now) {
+    return _cachedActiveInternship.data;
   }
+  if (_activeInternshipPromise) {
+    return _activeInternshipPromise;
+  }
+
+  _activeInternshipPromise = (async () => {
+    try {
+      const res = await apiClient.get<any>('/assignments');
+      // Backend wraps in { success, data } for student role
+      const assignments: any[] = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+
+      if (!assignments || assignments.length === 0) {
+        console.log('[ActiveInternship] No assignments found for authenticated student.');
+        _cachedActiveInternship = { data: null, expiresAt: Date.now() + 60_000 };
+        return null;
+      }
+
+      // Prefer active, then upcoming assignment
+      const active =
+        assignments.find((a: any) => a.status === 'active') ||
+        assignments.find((a: any) => a.status === 'upcoming') ||
+        assignments[0];
+
+      if (!active) {
+        _cachedActiveInternship = { data: null, expiresAt: Date.now() + 60_000 };
+        return null;
+      }
+
+      const internship = active.internship || {};
+      const company = active.company || {};
+      const application = active.application || {};
+
+      // Resolve mentor: prefer industryMentor (company-side), fallback to facultyMentor
+      const industryMentor = active.industryMentor;
+      const facultyMentor = active.facultyMentor;
+
+      let mentorName = 'Assigned Mentor';
+      let mentorRole = 'Industry Mentor';
+      let mentorEmail = 'mentor@interora.app';
+
+      if (industryMentor?.profile) {
+        mentorName = industryMentor.profile.fullName || mentorName;
+        mentorRole = industryMentor.designation || 'Industry Mentor';
+        mentorEmail = industryMentor.profile.email || mentorEmail;
+      } else if (facultyMentor?.profile) {
+        mentorName = facultyMentor.profile.fullName || mentorName;
+        mentorRole = facultyMentor.designation || 'Faculty Mentor';
+        mentorEmail = facultyMentor.profile.email || mentorEmail;
+      }
+
+      const mentorUserId = active.facultyMentorId || active.industryMentorId || facultyMentor?.id || industryMentor?.id;
+
+      const result: ActiveStudentInternshipRecord = {
+        assignmentId: active.id,
+        applicationId: active.applicationId,
+        internshipId: active.internshipId || internship.id || '',
+        title: internship.title || 'Active Internship Role',
+        companyId: active.companyId || company.id || '',
+        companyName: company.companyName || 'Host Company',
+        industryDomain: internship.industryDomain || company.industryDomain || 'Technology',
+        location: internship.location || 'Remote / On-site',
+        workMode: internship.workMode || 'remote',
+        internshipType: internship.internshipType || 'full_time',
+        duration: internship.duration || '3 Months',
+        stipend: internship.stipend ? String(internship.stipend) : 'Stipend Provided',
+        description: '',
+        appliedAt: application.appliedAt || active.createdAt,
+        startDate: active.startDate ? new Date(active.startDate).toISOString().slice(0, 10) : null,
+        endDate: active.endDate ? new Date(active.endDate).toISOString().slice(0, 10) : null,
+        assignmentStatus: active.status || 'active',
+        mentorName,
+        mentorRole,
+        mentorEmail,
+        mentorUserId: mentorUserId || undefined,
+      };
+
+      console.log('[ActiveInternship] Assignment resolved via Express:', result.assignmentId);
+      _cachedActiveInternship = { data: result, expiresAt: Date.now() + 60_000 };
+      return result;
+    } catch (err: any) {
+      console.error('[ActiveInternship] Express fetch error:', err);
+      return null;
+    } finally {
+      _activeInternshipPromise = null;
+    }
+  })();
+
+  return _activeInternshipPromise;
 };
 
 /**
@@ -2535,6 +2746,7 @@ export const uploadStudentResumeBackend = async (
     formData.append('resume', file);
 
     const res = await apiClient.post<{ resumeUrl: string; fileName: string }>('/uploads/resume', formData);
+    invalidateStudentResumeAnalysisCache();
 
     return {
       success: true,
@@ -2638,6 +2850,8 @@ export const analyzeStudentResumeBackend = async (
       };
     }
 
+    _cachedResumeAnalysis = { data: payload, expiresAt: Date.now() + 60_000 };
+
     return {
       success: true,
       data: payload,
@@ -2656,18 +2870,41 @@ export const analyzeStudentResumeBackend = async (
   }
 };
 
-export const fetchStudentResumeAnalysisBackend = async (): Promise<ResumeAnalysisResult | null> => {
-  try {
-    const res = await apiClient.get<any>('/ai/resume/analysis');
-    const payload = (res.data?.data ?? res.data) as ResumeAnalysisResult | undefined;
-    if (!payload || typeof payload !== 'object' || typeof payload.atsScore !== 'number') {
-      return null;
-    }
-    return payload;
-  } catch (err: any) {
-    console.warn('[fetchStudentResumeAnalysisBackend] Note:', err?.message || err);
-    return null;
+let _cachedResumeAnalysis: { data: ResumeAnalysisResult | null; expiresAt: number } | null = null;
+let _resumeAnalysisPromise: Promise<ResumeAnalysisResult | null> | null = null;
+
+export const invalidateStudentResumeAnalysisCache = () => {
+  _cachedResumeAnalysis = null;
+};
+
+export const fetchStudentResumeAnalysisBackend = async (forceRefresh = false): Promise<ResumeAnalysisResult | null> => {
+  const now = Date.now();
+  if (!forceRefresh && _cachedResumeAnalysis && _cachedResumeAnalysis.expiresAt > now) {
+    return _cachedResumeAnalysis.data;
   }
+  if (_resumeAnalysisPromise) {
+    return _resumeAnalysisPromise;
+  }
+
+  _resumeAnalysisPromise = (async () => {
+    try {
+      const res = await apiClient.get<any>('/ai/resume/analysis');
+      const payload = (res.data?.data ?? res.data) as ResumeAnalysisResult | undefined;
+      if (!payload || typeof payload !== 'object' || typeof payload.atsScore !== 'number') {
+        _cachedResumeAnalysis = { data: null, expiresAt: Date.now() + 30_000 };
+        return null;
+      }
+      _cachedResumeAnalysis = { data: payload, expiresAt: Date.now() + 60_000 };
+      return payload;
+    } catch (err: any) {
+      console.warn('[fetchStudentResumeAnalysisBackend] Note:', err?.message || err);
+      return null;
+    } finally {
+      _resumeAnalysisPromise = null;
+    }
+  })();
+
+  return _resumeAnalysisPromise;
 };
 
 

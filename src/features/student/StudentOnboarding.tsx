@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import {
   getCurrentUserBackend,
+  getCachedCurrentUser,
   updateStudentProfileBackend,
   uploadStudentResumeBackend,
   fetchDepartmentsBackend,
@@ -43,11 +44,12 @@ import {
 const LOCAL_STORAGE_KEY_PREFIX = 'interora_student_extended_profile_';
 
 export const StudentOnboarding: React.FC = () => {
+  const cachedUser = getCachedCurrentUser();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(cachedUser);
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedUser);
   const [saving, setSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -108,7 +110,7 @@ export const StudentOnboarding: React.FC = () => {
     let isMounted = true;
 
     const init = async () => {
-      setLoading(true);
+      if (!cachedUser) setLoading(true);
       try {
         const [user, deptList] = await Promise.all([
           getCurrentUserBackend().catch(() => null),
@@ -481,7 +483,7 @@ export const StudentOnboarding: React.FC = () => {
     { number: 5, title: 'Resume & Review', icon: FileText },
   ];
 
-  if (loading) {
+  if (loading && !formData.fullName) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="flex flex-col items-center space-y-3">

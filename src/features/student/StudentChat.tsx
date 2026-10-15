@@ -259,7 +259,7 @@ export const StudentChat: React.FC = () => {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
-            {loading ? (
+            {loading && messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
                 <RotateCw className="w-6 h-6 animate-spin mb-2 text-indigo-600" />
                 <p>Loading conversation...</p>

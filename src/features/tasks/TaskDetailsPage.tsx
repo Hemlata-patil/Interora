@@ -47,7 +47,7 @@ export const TaskDetailsPage: React.FC = () => {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  if (loading) {
+  if (loading && !task) {
     return (
       <div className="space-y-6">
         <PageHeader title="Loading Task Details..." description="Retrieving assigned task details..." />

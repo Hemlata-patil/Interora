@@ -84,297 +84,122 @@ const router = createBrowserRouter([
   { path: '/student/onboarding', element: <StudentOnboarding /> },
   { path: '/verify/:token', element: <VerifyCertificatePage /> },
 
-  // Student Routes Group
+  // Student Routes Group (Persistent Layout Route)
   {
     path: '/student',
-    element: <StudentLayout><StudentDashboard /></StudentLayout>,
-  },
-  {
-    path: '/student/dashboard',
-    element: <StudentLayout><StudentDashboard /></StudentLayout>,
-  },
-  {
-    path: '/student/internships',
-    element: <StudentLayout><MarketplacePage /></StudentLayout>,
-  },
-  {
-    path: '/student/internships/:id',
-    element: <StudentLayout><InternshipDetailsPage /></StudentLayout>,
-  },
-  {
-    path: '/student/internships/:id/apply',
-    element: <StudentLayout><ApplyInternshipPage /></StudentLayout>,
-  },
-  {
-    path: '/student/internship',
-    element: <StudentLayout><ActiveInternshipPage /></StudentLayout>,
-  },
-  {
-    path: '/student/applications',
-    element: <StudentLayout><ApplicationsPage /></StudentLayout>,
-  },
-  {
-    path: '/student/chat',
-    element: <StudentLayout><StudentChat /></StudentLayout>,
-  },
-  {
-    path: '/student/career-prep',
-    element: <StudentLayout><StudentCareerPrep /></StudentLayout>,
+    element: <StudentLayout />,
+    children: [
+      { index: true, element: <StudentDashboard /> },
+      { path: 'dashboard', element: <StudentDashboard /> },
+      { path: 'internships', element: <MarketplacePage /> },
+      { path: 'internships/:id', element: <InternshipDetailsPage /> },
+      { path: 'internships/:id/apply', element: <ApplyInternshipPage /> },
+      { path: 'internship', element: <ActiveInternshipPage /> },
+      { path: 'applications', element: <ApplicationsPage /> },
+      { path: 'applications/:id', element: <ApplicationDetailsPage /> },
+      { path: 'chat', element: <StudentChat /> },
+      { path: 'career-prep', element: <StudentCareerPrep /> },
+      { path: 'attendance', element: <AttendancePage /> },
+      { path: 'tasks', element: <TasksPage /> },
+      { path: 'tasks/:id', element: <TaskDetailsPage /> },
+      { path: 'work-logs', element: <WorkLogsPage /> },
+      { path: 'milestones', element: <MilestonesPage /> },
+      { path: 'certificates', element: <CertificatesPage /> },
+      { path: 'certificate', element: <CertificatesPage /> },
+      { path: 'ai-career', element: <AICareerPage /> },
+      { path: 'profile', element: <StudentProfile /> },
+    ],
   },
 
-  {
-    path: '/student/applications/:id',
-    element: <StudentLayout><ApplicationDetailsPage /></StudentLayout>,
-  },
-  {
-    path: '/student/attendance',
-    element: <StudentLayout><AttendancePage /></StudentLayout>,
-  },
-  {
-    path: '/student/tasks',
-    element: <StudentLayout><TasksPage /></StudentLayout>,
-  },
-  {
-    path: '/student/tasks/:id',
-    element: <StudentLayout><TaskDetailsPage /></StudentLayout>,
-  },
-  {
-    path: '/student/work-logs',
-    element: <StudentLayout><WorkLogsPage /></StudentLayout>,
-  },
-  {
-    path: '/student/milestones',
-    element: <StudentLayout><MilestonesPage /></StudentLayout>,
-  },
-  {
-    path: '/student/certificates',
-    element: <StudentLayout><CertificatesPage /></StudentLayout>,
-  },
-  {
-    path: '/student/ai-career',
-    element: <StudentLayout><AICareerPage /></StudentLayout>,
-  },
-  {
-    path: '/student/certificate',
-    element: <StudentLayout><CertificatesPage /></StudentLayout>,
-  },
-  {
-    path: '/student/profile',
-    element: <StudentLayout><StudentProfile /></StudentLayout>,
-  },
-
-  // Faculty Routes Group
+  // Faculty Routes Group (Persistent Layout Route)
   {
     path: '/faculty',
-    element: <FacultyLayout><FacultyDashboard /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/approvals',
-    element: <FacultyLayout><ApplicationApprovals /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/students',
-    element: <FacultyLayout><AssignedStudents /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/insights',
-    element: <FacultyLayout><InternshipInsights /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/attendance',
-    element: <FacultyLayout><AttendanceMonitoring /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/cross-verification',
-    element: <FacultyLayout><CrossVerification /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/guidance',
-    element: <FacultyLayout><StudentGuidance /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/evaluations',
-    element: <FacultyLayout><StudentEvaluations /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/placement-analytics',
-    element: <FacultyLayout><PlacementAnalytics /></FacultyLayout>,
-  },
-  {
-    path: '/faculty/profile',
-    element: <FacultyLayout><FacultyProfile /></FacultyLayout>,
+    element: <FacultyLayout />,
+    children: [
+      { index: true, element: <FacultyDashboard /> },
+      { path: 'approvals', element: <ApplicationApprovals /> },
+      { path: 'students', element: <AssignedStudents /> },
+      { path: 'insights', element: <InternshipInsights /> },
+      { path: 'attendance', element: <AttendanceMonitoring /> },
+      { path: 'cross-verification', element: <CrossVerification /> },
+      { path: 'guidance', element: <StudentGuidance /> },
+      { path: 'evaluations', element: <StudentEvaluations /> },
+      { path: 'placement-analytics', element: <PlacementAnalytics /> },
+      { path: 'profile', element: <FacultyProfile /> },
+    ],
   },
 
-  // Company Routes Group
+  // Company Routes Group (Persistent Layout Route)
   {
     path: '/company',
-    element: <CompanyLayout><CompanyDashboard /></CompanyLayout>,
-  },
-  {
-    path: '/company/profile',
-    element: <CompanyLayout><CompanyProfile /></CompanyLayout>,
-  },
-  {
-    path: '/company/listings',
-    element: <CompanyLayout><InternshipManagement /></CompanyLayout>,
-  },
-  {
-    path: '/company/applicants',
-    element: <CompanyLayout><ApplicantManagement /></CompanyLayout>,
-  },
-  {
-    path: '/company/interns',
-    element: <CompanyLayout><MyInterns /></CompanyLayout>,
-  },
-  {
-    path: '/company/my-interns/:internId',
-    element: <CompanyLayout><InternDetails /></CompanyLayout>,
-  },
-  {
-    path: '/company/tasks',
-    element: <CompanyLayout><CompanyTasks /></CompanyLayout>,
-  },
-  {
-    path: '/company/my-interns/:internId/tasks',
-    element: <CompanyLayout><CompanyTasks /></CompanyLayout>,
-  },
-  {
-    path: '/company/milestones',
-    element: <CompanyLayout><CompanyMilestones /></CompanyLayout>,
-  },
-  {
-    path: '/company/my-interns/:internId/milestones',
-    element: <CompanyLayout><CompanyMilestones /></CompanyLayout>,
-  },
-  {
-    path: '/company/evaluations',
-    element: <CompanyLayout><CompanyEvaluations /></CompanyLayout>,
-  },
-  {
-    path: '/company/my-interns/:internId/evaluations',
-    element: <CompanyLayout><CompanyEvaluations /></CompanyLayout>,
-  },
-  {
-    path: '/company/ppo',
-    element: <CompanyLayout><CompanyPPO /></CompanyLayout>,
-  },
-  {
-    path: '/company/certificates',
-    element: <CompanyLayout><CompanyCertificates /></CompanyLayout>,
-  },
-  {
-    path: '/company/notifications',
-    element: <CompanyLayout><CompanyNotifications /></CompanyLayout>,
-  },
-  {
-    path: '/company/mentors',
-    element: <CompanyLayout><MentorManagement /></CompanyLayout>,
-  },
-  {
-    path: '/company/attendance',
-    element: <CompanyLayout><CompanyAttendance /></CompanyLayout>,
-  },
-  {
-    path: '/company/reports',
-    element: <CompanyLayout><CompanyReports /></CompanyLayout>,
+    element: <CompanyLayout />,
+    children: [
+      { index: true, element: <CompanyDashboard /> },
+      { path: 'profile', element: <CompanyProfile /> },
+      { path: 'listings', element: <InternshipManagement /> },
+      { path: 'applicants', element: <ApplicantManagement /> },
+      { path: 'interns', element: <MyInterns /> },
+      { path: 'my-interns/:internId', element: <InternDetails /> },
+      { path: 'tasks', element: <CompanyTasks /> },
+      { path: 'my-interns/:internId/tasks', element: <CompanyTasks /> },
+      { path: 'milestones', element: <CompanyMilestones /> },
+      { path: 'my-interns/:internId/milestones', element: <CompanyMilestones /> },
+      { path: 'evaluations', element: <CompanyEvaluations /> },
+      { path: 'my-interns/:internId/evaluations', element: <CompanyEvaluations /> },
+      { path: 'ppo', element: <CompanyPPO /> },
+      { path: 'certificates', element: <CompanyCertificates /> },
+      { path: 'notifications', element: <CompanyNotifications /> },
+      { path: 'mentors', element: <MentorManagement /> },
+      { path: 'attendance', element: <CompanyAttendance /> },
+      { path: 'reports', element: <CompanyReports /> },
+    ],
   },
 
-  // Mentor Routes Group
+  // Mentor Routes Group (Persistent Layout Route)
   {
     path: '/mentor',
-    element: <MentorLayout><MentorDashboard /></MentorLayout>,
-  },
-  {
-    path: '/mentor/interns',
-    element: <MentorLayout><MentorMyInterns /></MentorLayout>,
-  },
-  {
-    path: '/mentor/tasks',
-    element: <MentorLayout><MentorTasks /></MentorLayout>,
-  },
-  {
-    path: '/mentor/milestones',
-    element: <MentorLayout><MentorMilestones /></MentorLayout>,
-  },
-  {
-    path: '/mentor/evaluations',
-    element: <MentorLayout><MentorEvaluations /></MentorLayout>,
-  },
-  {
-    path: '/mentor/notifications',
-    element: <MentorLayout><MentorNotifications /></MentorLayout>,
+    element: <MentorLayout />,
+    children: [
+      { index: true, element: <MentorDashboard /> },
+      { path: 'interns', element: <MentorMyInterns /> },
+      { path: 'tasks', element: <MentorTasks /> },
+      { path: 'milestones', element: <MentorMilestones /> },
+      { path: 'evaluations', element: <MentorEvaluations /> },
+      { path: 'notifications', element: <MentorNotifications /> },
+    ],
   },
 
-  // Admin Routes Group
+  // Admin Routes Group (Persistent Layout Route)
   {
     path: '/admin',
-    element: <AdminLayout><AdminDashboard /></AdminLayout>,
-  },
-  {
-    path: '/admin/applications',
-    element: <AdminLayout><AdminApplications /></AdminLayout>,
-  },
-  {
-    path: '/admin/ppos',
-    element: <AdminLayout><AdminPPOs /></AdminLayout>,
-  },
-  {
-    path: '/admin/users',
-    element: <AdminLayout><AdminUsers /></AdminLayout>,
-  },
-  {
-    path: '/admin/internships',
-    element: <AdminLayout><AdminInternships /></AdminLayout>,
-  },
-  {
-    path: '/admin/companies',
-    element: <AdminLayout><AdminCompanies /></AdminLayout>,
-  },
-  {
-    path: '/admin/hods',
-    element: <AdminLayout><AdminHODs /></AdminLayout>,
-  },
-  {
-    path: '/admin/certificates',
-    element: <AdminLayout><AdminCertificates /></AdminLayout>,
-  },
-  {
-    path: '/admin/analytics',
-    element: <AdminLayout><AdminAnalytics /></AdminLayout>,
-  },
-  {
-    path: '/admin/profile',
-    element: <AdminLayout><AdminProfile /></AdminLayout>,
+    element: <AdminLayout />,
+    children: [
+      { index: true, element: <AdminDashboard /> },
+      { path: 'applications', element: <AdminApplications /> },
+      { path: 'ppos', element: <AdminPPOs /> },
+      { path: 'users', element: <AdminUsers /> },
+      { path: 'internships', element: <AdminInternships /> },
+      { path: 'companies', element: <AdminCompanies /> },
+      { path: 'hods', element: <AdminHODs /> },
+      { path: 'certificates', element: <AdminCertificates /> },
+      { path: 'analytics', element: <AdminAnalytics /> },
+      { path: 'profile', element: <AdminProfile /> },
+    ],
   },
 
-  // HOD Routes Group
+  // HOD Routes Group (Persistent Layout Route)
   {
     path: '/hod',
-    element: <HodLayout><HodDashboard /></HodLayout>,
-  },
-  {
-    path: '/hod/faculty',
-    element: <HodLayout><HodFaculty /></HodLayout>,
-  },
-  {
-    path: '/hod/students',
-    element: <HodLayout><HodStudents /></HodLayout>,
-  },
-  {
-    path: '/hod/assignments',
-    element: <HodLayout><HodAssignments /></HodLayout>,
-  },
-  {
-    path: '/hod/progress',
-    element: <HodLayout><HodProgress /></HodLayout>,
-  },
-  {
-    path: '/hod/internships',
-    element: <HodLayout><HodInternships /></HodLayout>,
-  },
-  {
-    path: '/hod/profile',
-    element: <HodLayout><HodProfile /></HodLayout>,
+    element: <HodLayout />,
+    children: [
+      { index: true, element: <HodDashboard /> },
+      { path: 'faculty', element: <HodFaculty /> },
+      { path: 'students', element: <HodStudents /> },
+      { path: 'assignments', element: <HodAssignments /> },
+      { path: 'progress', element: <HodProgress /> },
+      { path: 'internships', element: <HodInternships /> },
+      { path: 'profile', element: <HodProfile /> },
+    ],
   },
 
   // Fallback Route

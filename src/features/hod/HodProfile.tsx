@@ -1,27 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { getCurrentUserBackend } from '@/services/api/backendService';
+import { getCurrentUserBackend, getCachedCurrentUser } from '@/services/api/backendService';
 import { apiClient } from '@/services/api/apiClient';
 
 export const HodProfile: React.FC = () => {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedUser = getCachedCurrentUser();
+  const [user, setUser] = useState<any>(cachedUser);
+  const [loading, setLoading] = useState(!cachedUser);
   
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState('');
+  const [editName, setEditName] = useState(cachedUser?.fullName || '');
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    fetchUser();
+    fetchUser(Boolean(cachedUser));
   }, []);
 
-  const fetchUser = async () => {
+  const fetchUser = async (silent = false) => {
+    if (!silent) setLoading(true);
     const authUser = await getCurrentUserBackend();
     if (authUser) {
       setUser(authUser);
-      setEditName(authUser.fullName || '');
+      if (!isEditing) {
+        setEditName(authUser.fullName || '');
+      }
     }
     setLoading(false);
   };
@@ -33,7 +37,7 @@ export const HodProfile: React.FC = () => {
     
     try {
       await apiClient.patch('/auth/me', { fullName: editName });
-      await fetchUser(); // reload the user with the new name
+      await fetchUser(true); // reload the user with the new name silently
       setIsEditing(false);
       setSaveSuccess(true);
       
@@ -46,7 +50,7 @@ export const HodProfile: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-8">Loading Profile...</div>;
+  if (loading && !user) return <div className="p-8">Loading Profile...</div>;
   if (!user) return <div className="p-8">No profile found.</div>;
 
   return (

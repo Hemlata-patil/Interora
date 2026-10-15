@@ -108,7 +108,7 @@ export const ActiveInternshipPage: React.FC = () => {
   }, []);
 
   // ── Loading State ──────────────────────────────────────────────────────────
-  if (loading) {
+  if (loading && !activeData) {
     return (
       <div className="space-y-6">
         <PageHeader
